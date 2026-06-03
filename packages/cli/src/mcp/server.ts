@@ -26,6 +26,7 @@ import {
   detectBundleIdentity,
   startBundleIdentityWatcher,
 } from './bundle-identity.ts';
+import { type HostLivenessWatchHandle, startHostLivenessWatch } from './host-liveness.ts';
 import { attachLifecycleLogging } from './lifecycle-logging.ts';
 import { parseSpawnTimeoutEnv, resolveMcpHttpUrl, resolveMcpKeepaliveWsUrl } from './shim.ts';
 
@@ -202,11 +203,13 @@ export async function startGlobalMcpServer(
   const transport = new StdioServerTransport();
   let closed = false;
   let bundleWatcher: BundleIdentityWatcherHandle | undefined;
+  let hostLiveness: HostLivenessWatchHandle | undefined;
 
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
     bundleWatcher?.stop();
+    hostLiveness?.stop();
     for (const handle of keepalivesByProject.values()) {
       try {
         handle.close();
@@ -245,6 +248,24 @@ export async function startGlobalMcpServer(
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
+
+  process.stdin.on('end', () => {
+    stderr.write('[mcp] stdin end — host disconnected, shutting down\n');
+    shutdown();
+  });
+  process.stdin.on('error', (err) => {
+    stderr.write(
+      `[mcp] stdin error (${err instanceof Error ? err.message : String(err)}) — host disconnected, shutting down\n`,
+    );
+    shutdown();
+  });
+  hostLiveness = startHostLivenessWatch({
+    getPpid: () => process.ppid,
+    onHostGone: (reason) => {
+      stderr.write(`[mcp] ${reason} — shutting down\n`);
+      shutdown();
+    },
+  });
 
   attachLifecycleLogging({
     log: (m) => stderr.write(`${m}\n`),
