@@ -88,6 +88,7 @@ interface DocumentContextValue {
   openTargetTransition: (target: ResolvedNavigationTarget, options?: OpenTargetOptions) => void;
   clearTarget: () => void;
   closeDocument: (docName: string) => void;
+  closeActiveTabOrWindow: () => boolean;
   closeTab: (tabId: string) => void;
   pinTab: (tabId: string) => void;
   unpinTab: (tabId: string) => void;
@@ -883,6 +884,119 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     openTargetWithOptions(target, options);
   };
 
+  const closeTabById = (tabId: string) => {
+    if (pinnedTabIdsRef.current.includes(tabId)) return;
+    markTabSessionClosedDuringRestore();
+    let nextActiveTabId: string | null = null;
+    const closingDocName = docNameForTabId(tabId);
+    if (collabUrl !== null) {
+      const p = getPool(collabUrl);
+      if (closingDocName && !hasOpenDocTab(openTabsRef.current, closingDocName, new Set([tabId]))) {
+        p.close(closingDocName);
+      }
+    }
+    const currentActiveTabId =
+      activeTabId ?? activeTabIdForTarget(activeTarget, snapshot.activeDocName);
+    updateOpenTabs((current) => {
+      nextActiveTabId = nextActiveTabAfterClose(current, currentActiveTabId, tabId);
+      return removeOpenTab(current, tabId);
+    });
+    if (currentActiveTabId !== tabId) return;
+    if (nextActiveTabId) {
+      commitActiveTabId(nextActiveTabId);
+      window.location.hash = hashFromTabId(nextActiveTabId);
+      return;
+    }
+    if (collabUrl !== null) {
+      const p = getPool(collabUrl);
+      p.clearActive();
+    }
+    setActiveTarget(null);
+    commitActiveTabId(null);
+    window.location.hash = '';
+  };
+
+  const closeNewTabById = (tabId: string) => {
+    markTabSessionClosedDuringRestore();
+    const currentNewTabIds = newTabIdsRef.current;
+    if (!currentNewTabIds.includes(tabId)) return;
+    const nextNewTabIds = currentNewTabIds.filter((id) => id !== tabId);
+    commitNewTabIds(nextNewTabIds);
+    if (activeNewTabIdRef.current !== tabId) return;
+
+    const closedIndex = currentNewTabIds.indexOf(tabId);
+    const nextNewTabId = nextNewTabIds[closedIndex] ?? nextNewTabIds[closedIndex - 1] ?? null;
+    if (nextNewTabId) {
+      commitActiveNewTabId(nextNewTabId);
+      if (collabUrl !== null) {
+        const p = getPool(collabUrl);
+        p.clearActive();
+      }
+      setActiveTarget(null);
+      commitActiveTabId(null);
+      if (window.location.hash !== '') {
+        window.location.hash = '';
+      }
+      return;
+    }
+
+    commitActiveNewTabId(null);
+    const nextActiveTabId = openTabsRef.current[openTabsRef.current.length - 1] ?? null;
+    if (nextActiveTabId) {
+      commitActiveTabId(nextActiveTabId);
+      window.location.hash = hashFromTabId(nextActiveTabId);
+      return;
+    }
+    if (collabUrl !== null) {
+      const p = getPool(collabUrl);
+      p.clearActive();
+    }
+    setActiveTarget(null);
+    commitActiveTabId(null);
+    window.location.hash = '';
+  };
+
+  const closeActiveTabOrWindow = (): boolean => {
+    const activeNewTab = activeNewTabIdRef.current;
+    if (activeNewTab) {
+      closeNewTabById(activeNewTab);
+      return true;
+    }
+
+    const pinnedTabSet = new Set(pinnedTabIdsRef.current);
+    const openTabSet = new Set(openTabsRef.current.filter((id) => !pinnedTabSet.has(id)));
+    const activeOpenTab =
+      activeTabIdRef.current && openTabSet.has(activeTabIdRef.current)
+        ? activeTabIdRef.current
+        : null;
+    const targetTabId = activeOpenTab ?? visibleTabIdsRef.current.find((id) => openTabSet.has(id));
+    if (targetTabId) {
+      closeTabById(targetTabId);
+      return true;
+    }
+
+    const newTabSet = new Set(newTabIdsRef.current);
+    const targetNewTabId = visibleTabIdsRef.current.find((id) => newTabSet.has(id));
+    if (targetNewTabId) {
+      closeNewTabById(targetNewTabId);
+      return true;
+    }
+
+    return false;
+  };
+
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+    return bridge.onMenuAction((action) => {
+      if (action !== 'close-active-tab-or-window') return;
+      if (!closeActiveTabOrWindow()) window.close();
+    });
+  }, [
+    // biome-ignore lint/correctness/useExhaustiveDependencies: closeActiveTabOrWindow is render-bound; re-subscribing keeps the desktop menu handler fresh for current tab state.
+    closeActiveTabOrWindow,
+  ]);
+
   const value: DocumentContextValue = {
     principal,
     activeTarget,
@@ -929,40 +1043,8 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         return docNameForNavigationTarget(current) === docName ? null : current;
       });
     },
-    closeTab: (tabId: string) => {
-      if (pinnedTabIdsRef.current.includes(tabId)) return;
-      markTabSessionClosedDuringRestore();
-      let nextActiveTabId: string | null = null;
-      const closingDocName = docNameForTabId(tabId);
-      if (collabUrl !== null) {
-        const p = getPool(collabUrl);
-        if (
-          closingDocName &&
-          !hasOpenDocTab(openTabsRef.current, closingDocName, new Set([tabId]))
-        ) {
-          p.close(closingDocName);
-        }
-      }
-      const currentActiveTabId =
-        activeTabId ?? activeTabIdForTarget(activeTarget, snapshot.activeDocName);
-      updateOpenTabs((current) => {
-        nextActiveTabId = nextActiveTabAfterClose(current, currentActiveTabId, tabId);
-        return removeOpenTab(current, tabId);
-      });
-      if (currentActiveTabId !== tabId) return;
-      if (nextActiveTabId) {
-        commitActiveTabId(nextActiveTabId);
-        window.location.hash = hashFromTabId(nextActiveTabId);
-        return;
-      }
-      if (collabUrl !== null) {
-        const p = getPool(collabUrl);
-        p.clearActive();
-      }
-      setActiveTarget(null);
-      commitActiveTabId(null);
-      window.location.hash = '';
-    },
+    closeActiveTabOrWindow,
+    closeTab: closeTabById,
     pinTab: (tabId: string) => {
       const nextPinnedTabIds = addPinnedTab(pinnedTabIdsRef.current, tabId, openTabsRef.current);
       if (sameTabIds(pinnedTabIdsRef.current, nextPinnedTabIds)) return;
@@ -1084,45 +1166,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
         window.location.hash = '';
       }
     },
-    closeNewTab: (tabId: string) => {
-      markTabSessionClosedDuringRestore();
-      const currentNewTabIds = newTabIdsRef.current;
-      if (!currentNewTabIds.includes(tabId)) return;
-      const nextNewTabIds = currentNewTabIds.filter((id) => id !== tabId);
-      commitNewTabIds(nextNewTabIds);
-      if (activeNewTabIdRef.current !== tabId) return;
-
-      const closedIndex = currentNewTabIds.indexOf(tabId);
-      const nextNewTabId = nextNewTabIds[closedIndex] ?? nextNewTabIds[closedIndex - 1] ?? null;
-      if (nextNewTabId) {
-        commitActiveNewTabId(nextNewTabId);
-        if (collabUrl !== null) {
-          const p = getPool(collabUrl);
-          p.clearActive();
-        }
-        setActiveTarget(null);
-        commitActiveTabId(null);
-        if (window.location.hash !== '') {
-          window.location.hash = '';
-        }
-        return;
-      }
-
-      commitActiveNewTabId(null);
-      const nextActiveTabId = openTabsRef.current[openTabsRef.current.length - 1] ?? null;
-      if (nextActiveTabId) {
-        commitActiveTabId(nextActiveTabId);
-        window.location.hash = hashFromTabId(nextActiveTabId);
-        return;
-      }
-      if (collabUrl !== null) {
-        const p = getPool(collabUrl);
-        p.clearActive();
-      }
-      setActiveTarget(null);
-      commitActiveTabId(null);
-      window.location.hash = '';
-    },
+    closeNewTab: closeNewTabById,
     closeTabs: (tabIds: readonly string[], options: CloseTabsOptions = {}) => {
       const requestedTabIds = tabIds.filter((tabId) => tabId.length > 0);
       const closingTabIds = new Set(

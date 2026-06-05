@@ -107,6 +107,7 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
   useEffect(() => {
     return bridge.onMenuAction((action) => {
       if (action === 'new-project') setCreateDialogOpen(true);
+      if (action === 'close-active-tab-or-window') window.close();
     });
   }, [bridge]);
 

@@ -329,13 +329,19 @@ describe('buildMenuTemplate', () => {
     });
   });
 
-  test('macOS-branch behavior for the current test host', () => {
+  test('File close item follows the current test host branch', () => {
     const template = buildMenuTemplate(makeDeps());
     const file = findByLabel(template, 'File');
     const fileSub = file?.submenu as MenuItemConstructorOptions[] | undefined;
     const last = fileSub?.[fileSub.length - 1];
     expect(last).toBeDefined();
-    expect(['close', 'quit']).toContain(last?.role);
+    if (process.platform === 'darwin') {
+      expect(last?.label).toBe('Close Tab');
+      expect(last?.accelerator).toBe('CmdOrCtrl+W');
+      expect(last?.role).toBeUndefined();
+    } else {
+      expect(last?.role).toBe('quit');
+    }
 
     const windowMenu = findByLabel(template, 'Window');
     const windowSub = windowMenu?.submenu as MenuItemConstructorOptions[] | undefined;
@@ -347,6 +353,16 @@ describe('buildMenuTemplate', () => {
     const isOtherBranch = hasClose && !hasZoom;
     expect(isMacBranch || isOtherBranch).toBe(true);
     expect(roles).toContain('minimize');
+  });
+
+  test('Close Tab click dispatches deps.onCloseActiveTabOrWindow on macOS', () => {
+    if (process.platform !== 'darwin') return;
+    const onCloseActiveTabOrWindow = mock(() => {});
+    const template = buildMenuTemplate(makeDeps({ onCloseActiveTabOrWindow }));
+    const closeTab = findByLabel(template, 'Close Tab');
+    expect(closeTab?.enabled).toBe(true);
+    (closeTab?.click as (() => void) | undefined)?.();
+    expect(onCloseActiveTabOrWindow).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -475,6 +491,9 @@ describe('buildMenuTemplate — File menu state-aware items (US-020 / FR16 + FR1
     expect(findByLabel(template, 'Open in Terminal')?.enabled).toBe(false);
     expect(findByLabel(template, 'Open with AI')?.enabled).toBe(false);
     expect(findByLabel(template, 'Copy Path')?.enabled).toBe(false);
+    if (process.platform === 'darwin') {
+      expect(findByLabel(template, 'Close Tab')?.enabled).toBe(false);
+    }
   });
 
   test('Copy Path submenu renders Full Path + Relative Path (FR9 parity with sidebar)', () => {

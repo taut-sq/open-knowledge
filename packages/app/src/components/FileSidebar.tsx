@@ -415,6 +415,7 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
         case 'version-history':
         case 'focus-search':
         case 'focus-command-palette':
+        case 'close-active-tab-or-window':
         case 'toggle-doc-panel':
           return;
       }

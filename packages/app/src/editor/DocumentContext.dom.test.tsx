@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { type ReactNode, useLayoutEffect, useState } from 'react';
+import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import { docTabId, localTabSessionStorageKey } from './editor-tabs';
 
 mock.module('@/lib/use-collab-url', () => ({
@@ -32,6 +33,75 @@ function seedTabSession() {
   );
 }
 
+function seedActiveOtherTabSession() {
+  window.localStorage.setItem(
+    localTabSessionStorageKey(window.location.origin),
+    JSON.stringify({
+      openTabs: [PINNED_TAB_ID, OTHER_TAB_ID],
+      pinnedTabIds: [],
+      activeDocName: 'Other.md',
+      activeTabId: OTHER_TAB_ID,
+      updatedAt: new Date('2026-05-13T00:00:00.000Z').toISOString(),
+    }),
+  );
+}
+
+function seedOnlyPinnedTabSession() {
+  window.localStorage.setItem(
+    localTabSessionStorageKey(window.location.origin),
+    JSON.stringify({
+      openTabs: [PINNED_TAB_ID],
+      pinnedTabIds: [PINNED_TAB_ID],
+      activeDocName: 'Pinned.md',
+      activeTabId: PINNED_TAB_ID,
+      updatedAt: new Date('2026-05-13T00:00:00.000Z').toISOString(),
+    }),
+  );
+}
+
+type MenuActionLike = 'close-active-tab-or-window' | 'new-doc';
+
+interface EditorBridgeStub {
+  bridge: OkDesktopBridge;
+  fire(action: MenuActionLike): void;
+}
+
+function makeEditorBridgeStub(): EditorBridgeStub {
+  let captured: ((action: MenuActionLike) => void) | null = null;
+  const bridge = {
+    config: {
+      mode: 'editor',
+      collabUrl: '',
+      apiOrigin: '',
+      projectPath: '',
+      projectName: 'Test Project',
+    },
+    onMenuAction: (cb: (action: MenuActionLike) => void) => {
+      captured = cb;
+      return () => {
+        captured = null;
+      };
+    },
+    project: {
+      getSessionState: async () => ({
+        openTabs: [],
+        pinnedTabIds: [],
+        activeDocName: null,
+        activeTabId: null,
+        updatedAt: null,
+      }),
+      setSessionState: async () => undefined,
+    },
+  } as unknown as OkDesktopBridge;
+
+  return {
+    bridge,
+    fire: (action) => {
+      act(() => captured?.(action));
+    },
+  };
+}
+
 function Harness() {
   const ctx = useDocumentContext();
   return (
@@ -48,6 +118,36 @@ function Harness() {
   );
 }
 
+function CloseActiveHarness() {
+  const ctx = useDocumentContext();
+  const [handled, setHandled] = useState<string>('');
+  return (
+    <>
+      <span data-testid="open-tabs">{ctx.openTabs.join('|')}</span>
+      <span data-testid="active-tab">{ctx.activeTabId ?? ''}</span>
+      <span data-testid="new-tabs">{ctx.newTabIds.join('|')}</span>
+      <span data-testid="active-new-tab">{ctx.activeNewTabId ?? ''}</span>
+      <span data-testid="close-handled">{handled}</span>
+      <button type="button" onClick={() => ctx.openNewTab()}>
+        Open new
+      </button>
+      <button type="button" onClick={() => setHandled(String(ctx.closeActiveTabOrWindow()))}>
+        Close active
+      </button>
+    </>
+  );
+}
+
+function BridgeCloseActiveHarness({ bridge }: { bridge: OkDesktopBridge }) {
+  useLayoutEffect(() => {
+    window.okDesktop = bridge;
+    return () => {
+      delete window.okDesktop;
+    };
+  }, [bridge]);
+  return <CloseActiveHarness />;
+}
+
 function ProviderHarness({ children }: { children: ReactNode }) {
   return <DocumentProvider>{children}</DocumentProvider>;
 }
@@ -55,6 +155,7 @@ function ProviderHarness({ children }: { children: ReactNode }) {
 describe('DocumentContext tab close force contract', () => {
   afterEach(() => {
     cleanup();
+    delete window.okDesktop;
     window.localStorage.clear();
     window.location.hash = '';
   });
@@ -76,6 +177,105 @@ describe('DocumentContext tab close force contract', () => {
 
     expect(screen.getByTestId('open-tabs').textContent).toBe(OTHER_TAB_ID);
     expect(screen.getByTestId('pinned-tabs').textContent).toBe('');
+  });
+
+  test('closeActiveTabOrWindow closes one active tab and reports the menu action handled', async () => {
+    seedActiveOtherTabSession();
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(`${PINNED_TAB_ID}|${OTHER_TAB_ID}`);
+    expect(screen.getByTestId('active-tab').textContent).toBe(OTHER_TAB_ID);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('close-handled').textContent).toBe('true');
+    expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
+    expect(screen.getByTestId('active-tab').textContent).toBe(PINNED_TAB_ID);
+  });
+
+  test('closeActiveTabOrWindow skips active pinned tab and closes the next visible unpinned tab', async () => {
+    seedTabSession();
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(`${PINNED_TAB_ID}|${OTHER_TAB_ID}`);
+    expect(screen.getByTestId('active-tab').textContent).toBe(PINNED_TAB_ID);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('close-handled').textContent).toBe('true');
+    expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
+    expect(screen.getByTestId('active-tab').textContent).toBe(PINNED_TAB_ID);
+  });
+
+  test('closeActiveTabOrWindow reports unhandled when only pinned tabs remain', async () => {
+    seedOnlyPinnedTabSession();
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('close-handled').textContent).toBe('false');
+    expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
+    expect(screen.getByTestId('active-tab').textContent).toBe(PINNED_TAB_ID);
+  });
+
+  test('closeActiveTabOrWindow closes an active new tab before falling back to the window', async () => {
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Open new' }));
+
+    expect(screen.getByTestId('new-tabs').textContent).toBe('new-tab:1');
+    expect(screen.getByTestId('active-new-tab').textContent).toBe('new-tab:1');
+
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('close-handled').textContent).toBe('true');
+    expect(screen.getByTestId('new-tabs').textContent).toBe('');
+    expect(screen.getByTestId('active-new-tab').textContent).toBe('');
+  });
+
+  test('closeActiveTabOrWindow reports unhandled when no visible tabs remain', async () => {
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('close-handled').textContent).toBe('false');
+    expect(screen.getByTestId('open-tabs').textContent).toBe('');
+    expect(screen.getByTestId('active-tab').textContent).toBe('');
+  });
+
+  test('desktop close-active-tab-or-window action closes tabs before closing the editor window', async () => {
+    seedActiveOtherTabSession();
+    const closeSpy = spyOn(window, 'close').mockImplementation(() => {});
+    const stub = makeEditorBridgeStub();
+
+    render(<BridgeCloseActiveHarness bridge={stub.bridge} />, { wrapper: ProviderHarness });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(`${PINNED_TAB_ID}|${OTHER_TAB_ID}`);
+
+    stub.fire('close-active-tab-or-window');
+
+    expect(closeSpy).toHaveBeenCalledTimes(0);
+    expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
+
+    cleanup();
+    delete window.okDesktop;
+    window.localStorage.clear();
+
+    const emptyStub = makeEditorBridgeStub();
+    render(<BridgeCloseActiveHarness bridge={emptyStub.bridge} />, { wrapper: ProviderHarness });
+    await new Promise((r) => setTimeout(r, 0));
+
+    emptyStub.fire('close-active-tab-or-window');
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('open-tabs').textContent).toBe('');
+    closeSpy.mockRestore();
   });
 });
 

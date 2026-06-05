@@ -21,6 +21,7 @@ type OkMenuAction =
   | 'new-project'
   | 'rename'
   | 'delete'
+  | 'close-active-tab-or-window'
   | 'toggle-sidebar'
   | 'toggle-source'
   | 'save-version'

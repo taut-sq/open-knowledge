@@ -1071,6 +1071,7 @@ async function runApplicationMenuRefresh(): Promise<void> {
     onRename: () => sendMenuActionToFocused('rename'),
     onDuplicate: () => sendMenuActionToFocused('duplicate'),
     onMoveToTrash: () => sendMenuActionToFocused('move-to-trash'),
+    onCloseActiveTabOrWindow: () => sendMenuActionToFocused('close-active-tab-or-window'),
     onRevealInFinder: () => sendMenuActionToFocused('reveal-in-finder'),
     onOpenInTerminal: () => sendMenuActionToFocused('open-in-terminal'),
     onSendToAi: () => sendMenuActionToFocused('send-to-ai'),

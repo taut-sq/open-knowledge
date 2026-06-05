@@ -33,7 +33,7 @@ if (globalWithDomShims.ResizeObserver === undefined) {
 
 const ASYNC_TIMEOUT_MS = 2000;
 
-type MenuActionLike = 'new-project' | 'new-doc' | 'toggle-sidebar';
+type MenuActionLike = 'new-project' | 'new-doc' | 'toggle-sidebar' | 'close-active-tab-or-window';
 
 interface NavigatorBridgeStub {
   bridge: OkDesktopBridge;
@@ -146,5 +146,18 @@ describe('NavigatorApp new-project menu-action subscription', () => {
 
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByTestId('create-project-dialog') !== null).toBe(false);
+  });
+
+  test('close-active-tab-or-window menu action closes the navigator window', async () => {
+    const closeSpy = spyOn(window, 'close').mockImplementation(() => {});
+    const stub = makeNavigatorBridge();
+    render(<NavigatorApp bridge={stub.bridge} />);
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    stub.fire('close-active-tab-or-window');
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    closeSpy.mockRestore();
   });
 });

@@ -29,6 +29,7 @@ export interface MenuDeps {
   onRename?(): void;
   onDuplicate?(): void;
   onMoveToTrash?(): void;
+  onCloseActiveTabOrWindow?(): void;
   onRevealInFinder?(): void;
   onOpenInTerminal?(): void;
   onSendToAi?(): void;
@@ -238,7 +239,14 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
               { type: 'separator' as const },
             ] satisfies MenuItemConstructorOptions[])
           : []),
-        isMac ? { role: 'close' } : { role: 'quit' },
+        isMac
+          ? {
+              label: 'Close Tab',
+              accelerator: 'CmdOrCtrl+W',
+              enabled: deps.onCloseActiveTabOrWindow !== undefined,
+              click: () => deps.onCloseActiveTabOrWindow?.(),
+            }
+          : { role: 'quit' },
       ],
     },
 
