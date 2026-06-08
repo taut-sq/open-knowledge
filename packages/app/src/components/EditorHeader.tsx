@@ -12,6 +12,7 @@ import {
   buildFolderShareInput,
   type ShareTargetInput,
 } from '@/lib/share/run-share-action';
+import { useSingleFileMode } from '@/lib/single-file-mode';
 import { useWorkspace } from '@/lib/use-workspace';
 import { cn } from '@/lib/utils';
 import { PresenceBar } from '@/presence/PresenceBar';
@@ -50,6 +51,7 @@ export function EditorHeader({
   const { t } = useLingui();
   const { activeDocName, activeTarget } = useDocumentContext();
   const { state: sidebarState } = useSidebar();
+  const singleFile = useSingleFileMode();
   const sidebarShortcut = formatShortcut('toggle-files-sidebar');
   const searchShortcut = formatShortcut('command-palette');
   const workspace = useWorkspace();
@@ -103,48 +105,58 @@ export function EditorHeader({
         element — the right zone's blanket opt-out is intentionally
         scoped to its zone.
       */}
+      {/* The left zone (files toggle, search, tab strip) is project chrome —
+          empty in single-file mode. The flex-1 container stays so the right
+          zone keeps its position and the window-drag spacer is preserved. */}
       <div className="flex min-w-0 flex-1 items-center gap-1 px-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <SidebarTrigger
-              className={cn(
-                '-ml-1 shrink-0 text-muted-foreground',
-                isElectronHost && '[-webkit-app-region:no-drag]',
-              )}
-            />
-          </TooltipTrigger>
-          <TooltipContent>
-            {sidebarState === 'expanded' ? (
-              <Trans>Hide Files ({sidebarShortcut})</Trans>
-            ) : (
-              <Trans>Show Files ({sidebarShortcut})</Trans>
-            )}
-          </TooltipContent>
-        </Tooltip>
-        {isCollapsed && onOpenSearch && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={onOpenSearch}
-                aria-label={t`Search (${searchShortcut})`}
-                data-telemetry-event="ok.editor_header.search.click"
-                className={cn(
-                  'shrink-0 text-muted-foreground',
-                  isElectronHost && '[-webkit-app-region:no-drag]',
+        {!singleFile && (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarTrigger
+                  className={cn(
+                    '-ml-1 shrink-0 text-muted-foreground',
+                    isElectronHost && '[-webkit-app-region:no-drag]',
+                  )}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                {sidebarState === 'expanded' ? (
+                  <Trans>Hide Files ({sidebarShortcut})</Trans>
+                ) : (
+                  <Trans>Show Files ({sidebarShortcut})</Trans>
                 )}
-              >
-                <Search aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <Trans>Search ({searchShortcut})</Trans>
-            </TooltipContent>
-          </Tooltip>
+              </TooltipContent>
+            </Tooltip>
+            {isCollapsed && onOpenSearch && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={onOpenSearch}
+                    aria-label={t`Search (${searchShortcut})`}
+                    data-telemetry-event="ok.editor_header.search.click"
+                    className={cn(
+                      'shrink-0 text-muted-foreground',
+                      isElectronHost && '[-webkit-app-region:no-drag]',
+                    )}
+                  >
+                    <Search aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <Trans>Search ({searchShortcut})</Trans>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <Separator
+              orientation="vertical"
+              className="mr-1 h-4 shrink-0 data-vertical:self-center"
+            />
+            <EditorTabs />
+          </>
         )}
-        <Separator orientation="vertical" className="mr-1 h-4 shrink-0 data-vertical:self-center" />
-        <EditorTabs />
       </div>
 
       <div
@@ -153,18 +165,28 @@ export function EditorHeader({
           isElectronHost && '[&>*]:[-webkit-app-region:no-drag]',
         )}
       >
-        <OpenInAgentMenu
-          input={menuHandoffInput}
-          open={openInAgentMenuOpen}
-          onOpenChange={onOpenInAgentMenuOpenChange}
-        />
-        <ShareButton input={shareInput} onClickWhenNoRemote={() => setPublishOpen(true)} />
-        <PublishToGitHubDialog open={publishOpen} onOpenChange={setPublishOpen} />
+        {/* Agent handoff + share are project surfaces: single-file `ok <file>`
+            runs agents/MCP off and on a throwaway server, so "open with AI" is
+            inert and a share link would point at a session that's gone on close.
+            Hidden here (mirrors the sidebar/Settings gates) rather than rendered
+            disabled. */}
+        {!singleFile && (
+          <>
+            <OpenInAgentMenu
+              input={menuHandoffInput}
+              open={openInAgentMenuOpen}
+              onOpenChange={onOpenInAgentMenuOpenChange}
+            />
+            <ShareButton input={shareInput} onClickWhenNoRemote={() => setPublishOpen(true)} />
+            <PublishToGitHubDialog open={publishOpen} onOpenChange={setPublishOpen} />
+          </>
+        )}
         <SyncStatusBadge onSignIn={onSignIn} onSetIdentity={onSetIdentity} />
         <PresenceBar />
         <Separator orientation="vertical" className="h-4 shrink-0 data-vertical:self-center" />
         <BetaBadge />
-        <SettingsButton />
+        {/* Settings is unavailable in single-file mode (config editing is inert). */}
+        {!singleFile && <SettingsButton />}
         <HelpPopover />
       </div>
     </header>

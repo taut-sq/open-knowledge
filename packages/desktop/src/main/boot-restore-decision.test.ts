@@ -13,6 +13,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: '/projects/last',
       optionHeld: false,
       pathExists: existsIn(['/projects/last']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({ clearSnapshot: true, action: 'navigator' });
   });
@@ -23,6 +24,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: '/projects/last',
       optionHeld: true,
       pathExists: existsIn(['/projects/a', '/projects/b', '/projects/last']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({ clearSnapshot: true, action: 'navigator' });
   });
@@ -33,6 +35,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: null,
       optionHeld: false,
       pathExists: existsIn(['/projects/a', '/projects/b', '/projects/c']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({
       clearSnapshot: true,
@@ -47,6 +50,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: null,
       optionHeld: false,
       pathExists: existsIn(['/projects/a', '/projects/c']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({
       clearSnapshot: true,
@@ -61,6 +65,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: '/projects/last',
       optionHeld: false,
       pathExists: existsIn(['/projects/last']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({ clearSnapshot: true, action: 'navigator' });
   });
@@ -71,6 +76,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: '/projects/last',
       optionHeld: false,
       pathExists: existsIn(['/projects/last']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({
       clearSnapshot: false,
@@ -85,6 +91,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: null,
       optionHeld: false,
       pathExists: existsIn([]),
+      urlLaunch: false,
     });
     expect(decision).toEqual({ clearSnapshot: false, action: 'navigator' });
   });
@@ -95,6 +102,7 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: '/projects/gone',
       optionHeld: false,
       pathExists: existsIn([]),
+      urlLaunch: false,
     });
     expect(decision).toEqual({ clearSnapshot: false, action: 'navigator' });
   });
@@ -105,7 +113,45 @@ describe('bootRestoreDecision', () => {
       lastOpenedProject: '/projects/last',
       optionHeld: true,
       pathExists: existsIn(['/projects/last']),
+      urlLaunch: false,
     });
     expect(decision).toEqual({ clearSnapshot: false, action: 'navigator' });
+  });
+
+  test('urlLaunch suppresses lastOpened restore (action none)', () => {
+    const decision = bootRestoreDecision({
+      pendingRestore: null,
+      lastOpenedProject: '/projects/last',
+      optionHeld: false,
+      pathExists: existsIn(['/projects/last']),
+      urlLaunch: true,
+    });
+    expect(decision).toEqual({ clearSnapshot: false, action: 'none' });
+  });
+
+  test('urlLaunch suppresses the Navigator when there is nothing to restore', () => {
+    const decision = bootRestoreDecision({
+      pendingRestore: null,
+      lastOpenedProject: null,
+      optionHeld: false,
+      pathExists: existsIn([]),
+      urlLaunch: true,
+    });
+    expect(decision).toEqual({ clearSnapshot: false, action: 'none' });
+  });
+
+  test('urlLaunch does NOT override an update-relaunch restore (snapshot wins)', () => {
+    const decision = bootRestoreDecision({
+      pendingRestore: ['/projects/a', '/projects/b'],
+      lastOpenedProject: '/projects/last',
+      optionHeld: false,
+      pathExists: existsIn(['/projects/a', '/projects/b']),
+      urlLaunch: true,
+    });
+    expect(decision).toEqual({
+      clearSnapshot: true,
+      action: 'restore',
+      projects: ['/projects/a', '/projects/b'],
+    });
   });
 });

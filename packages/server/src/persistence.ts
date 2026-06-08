@@ -203,6 +203,7 @@ export interface PersistenceOptions {
   configHomedirOverride?: string;
   onConfigRejected?: (docName: string, error: ConfigValidationError) => void;
   mdManager?: MarkdownManager;
+  ephemeral?: boolean;
 }
 
 export function captureDocSnapshotForPersistence(document: Y.Doc): {
@@ -317,6 +318,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
   const onAgentCommit = options?.onAgentCommit;
   const onDiskFlush = options?.onDiskFlush;
   const mgr = options?.mdManager ?? mdManager;
+  const ephemeral = options?.ephemeral ?? false;
 
   const configLkgCache = new Map<string, string>();
   const configPersistenceCtx: ConfigPersistenceCtx = {
@@ -325,6 +327,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
     lkgCache: configLkgCache,
     homedirOverride: options?.configHomedirOverride,
     onConfigRejected: options?.onConfigRejected,
+    ephemeral,
   };
 
   const tripwireResetFailedDocs = new Set<string>();
@@ -627,6 +630,28 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
     if (commitInFlight) await commitInFlight;
   }
 
+  function canonicalizeForEphemeralBaseline(rawBytes: string, documentName: string): string | null {
+    try {
+      const { frontmatter, body } = stripFrontmatter(rawBytes);
+      const parseOpts = options?.resolveEmbed
+        ? {
+            resolveEmbed: options.resolveEmbed,
+            resolveSize: options?.resolveSize,
+            sourcePath: documentName,
+          }
+        : undefined;
+      const json = mgr.parseWithFallback(body, parseOpts);
+      const canonicalBody = mgr.serialize(json);
+      return normalizeBridge(prependFrontmatter(frontmatter, canonicalBody));
+    } catch (err) {
+      log.debug(
+        { err, documentName },
+        '[g8] ephemeral canonical baseline failed; falling through to write',
+      );
+      return null;
+    }
+  }
+
   function reconcileFragmentNow(document: Y.Doc, body: string, documentName: string): void {
     try {
       const xmlFragment = document.getXmlFragment('default');
@@ -768,8 +793,15 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         }
 
         const currentBase = getReconciledBase(documentName);
-        const markdownSemanticallyUnchanged =
-          currentBase !== undefined && normalizeBridge(markdown) === normalizeBridge(currentBase);
+        const normalizedMarkdown = normalizeBridge(markdown);
+        let markdownSemanticallyUnchanged =
+          currentBase !== undefined && normalizedMarkdown === normalizeBridge(currentBase);
+        if (!markdownSemanticallyUnchanged && ephemeral && currentBase !== undefined) {
+          const canonicalBase = canonicalizeForEphemeralBaseline(currentBase, documentName);
+          if (canonicalBase !== null && normalizedMarkdown === canonicalBase) {
+            markdownSemanticallyUnchanged = true;
+          }
+        }
         if (markdownSemanticallyUnchanged) {
           if (contributorCount() > 0) scheduleGitCommit();
           persistenceDeferCounts.delete(documentName);

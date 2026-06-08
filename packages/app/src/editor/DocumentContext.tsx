@@ -1224,11 +1224,14 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     },
     syncOpenTabsWithKnownTargets: ({ pages, folderPaths, assetPaths }) => {
       const keepMissingDocName = activeTarget?.kind === 'missing' ? activeTarget.target : null;
+      const keepHashDocName =
+        typeof window !== 'undefined' ? docNameFromHash(window.location.hash) : null;
       const nextOpenTabs = filterOpenTabsForKnownTargets(openTabs, {
         pages,
         folderPaths,
         assetPaths,
         keepMissingDocName,
+        keepHashDocName,
       });
       if (nextOpenTabs.length === openTabs.length) return;
 

@@ -27,6 +27,7 @@ import {
   shouldInstallColdMountInstrumentation,
 } from '@/lib/perf/cold-mount-instrumentation';
 import { installShareReceivedListener } from '@/lib/share/receive-store';
+import { seedInitialDocHashFromWindow } from '@/lib/single-file-initial-doc';
 import { installUpdateNoticesBridge } from '@/lib/update-notices-store';
 import { App } from './App';
 import '@fontsource-variable/inter';
@@ -73,6 +74,8 @@ if (typeof window !== 'undefined') {
 if (typeof window !== 'undefined') {
   installShareReceivedListener({ bridge: window.okDesktop });
 }
+
+seedInitialDocHashFromWindow();
 
 const queryClient = new QueryClient({
   defaultOptions: {

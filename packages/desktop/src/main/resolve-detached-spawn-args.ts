@@ -12,6 +12,8 @@ export interface ResolveDetachedSpawnArgsInput {
   readonly contentDir: string;
   readonly spawnErrorLogFd: number;
   readonly env: Readonly<Record<string, string | undefined>>;
+  readonly singleFile?: string;
+  readonly projectDir?: string;
 }
 
 export interface ResolvedDetachedSpawnArgs {
@@ -62,6 +64,8 @@ export function resolveDetachedSpawnArgs(
     contentDir,
     spawnErrorLogFd,
     env,
+    singleFile,
+    projectDir,
   } = input;
 
   const file =
@@ -69,12 +73,16 @@ export function resolveDetachedSpawnArgs(
       ? resolveHelperBundleBinary(parentExecPath)
       : parentExecPath;
 
+  const projectRoot = projectDir ?? contentDir;
   const args = [
     bundleCliMjsPath,
     'start',
     '--serve-content-assets',
     '--react-shell-dist-dir',
     reactShellDistDir,
+    ...(singleFile !== undefined
+      ? ['--single-file', singleFile, '--project-dir', projectRoot]
+      : []),
   ];
 
   const opts: SpawnOptions = {
@@ -86,7 +94,7 @@ export function resolveDetachedSpawnArgs(
     },
     detached: true,
     stdio: ['ignore', 'ignore', spawnErrorLogFd],
-    cwd: contentDir,
+    cwd: projectRoot,
   };
 
   return { file, args, opts };

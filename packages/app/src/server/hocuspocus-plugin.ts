@@ -59,6 +59,12 @@ mkdirSync(CONTENT_DIR, { recursive: true });
 const isTestIsolated = Boolean(process.env.OK_TEST_CONTENT_DIR);
 const gitEnabledForTest = isTestIsolated && process.env.OK_TEST_GIT_ENABLED === '1';
 
+const SINGLE_DOC_REL_PATH = process.env.OK_TEST_SINGLE_DOC_REL_PATH || undefined;
+const isEphemeralTest = isTestIsolated && SINGLE_DOC_REL_PATH !== undefined;
+const TEST_PROJECT_DIR = process.env.OK_TEST_PROJECT_DIR
+  ? realpathSync(process.env.OK_TEST_PROJECT_DIR)
+  : undefined;
+
 const KEEPALIVE_GRACE_MS = 10_000;
 const MAX_COLLAB_MESSAGE_BYTES = 1024 * 1024;
 
@@ -84,11 +90,12 @@ export function hocuspocusPlugin(): Plugin {
 
       const currentSrv = createServer({
         contentDir: CONTENT_DIR,
-        projectDir: isTestIsolated ? CONTENT_DIR : PROJECT_ROOT,
+        projectDir: TEST_PROJECT_DIR ?? (isTestIsolated ? CONTENT_DIR : PROJECT_ROOT),
         contentRoot: isTestIsolated ? '' : CONTENT_ROOT,
-        gitEnabled: !isTestIsolated || gitEnabledForTest,
+        gitEnabled: isEphemeralTest ? false : !isTestIsolated || gitEnabledForTest,
         enableTestRoutes: true,
         quiet: true,
+        ...(isEphemeralTest ? { ephemeral: true, singleDocRelPath: SINGLE_DOC_REL_PATH } : {}),
       });
 
       latestLockDir = currentSrv.lockDir;
@@ -306,7 +313,7 @@ export function hocuspocusPlugin(): Plugin {
           if (url === '/api/config') {
             const addr = server.httpServer?.address();
             const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
-            const response = computeDevApiConfigResponse(req.method, port);
+            const response = computeDevApiConfigResponse(req.method, port, isEphemeralTest);
             if (response) {
               for (const [name, value] of Object.entries(response.headers)) {
                 res.setHeader(name, value);

@@ -30,7 +30,7 @@ import { AgentPresenceBroadcaster } from './agent-presence.ts';
 import { AgentSessionManager } from './agent-sessions.ts';
 import { createApiExtension, isSafeDocName } from './api-extension.ts';
 import { assetReferencesChanged } from './asset-references.ts';
-import { seedBasenameIndex } from './asset-walk.ts';
+import { seedBasenameIndex, seedSingleDirBasenameIndex } from './asset-walk.ts';
 import { HocuspocusAuthRejection, parseHocuspocusAuthToken } from './auth-token-schema.ts';
 import { BacklinkIndex } from './backlink-index.ts';
 import { shellEscape } from './bash/shell-escape.ts';
@@ -151,6 +151,8 @@ export interface ServerOptions {
   detectGh?: DetectGhFn;
   tokenStore?: ProbeTokenStore | null;
   checkPushPermissionFn?: (opts: CheckPushPermissionOptions) => Promise<PushPermission>;
+  singleDocRelPath?: string;
+  ephemeral?: boolean;
 }
 
 export interface ServerInstance {
@@ -201,6 +203,8 @@ export function createServer(options: ServerOptions): ServerInstance {
     destroyTimeoutMs = 10_000,
     localOpCliArgs,
     skipStateManifestCheck = false,
+    singleDocRelPath,
+    ephemeral = false,
   } = options;
 
   const log = getLogger('server');
@@ -347,6 +351,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     contentFilter = createContentFilter({
       projectDir,
       contentDir,
+      singleDocRelPath,
       onAfterRebuild: () => {
         void backlinkIndex.rebuildFromDisk(getActiveBranch()).catch((err) => {
           getLogger('server-factory').warn(
@@ -401,6 +406,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       commitDebounceMs,
       wipRef,
       shadowRef,
+      ephemeral,
       contentRoot,
       backlinkIndex,
       configHomedirOverride,
@@ -619,6 +625,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       ready,
       recentlyRemovedDocs,
       serializeDoc,
+      ephemeral,
       onReferencedAssetsCacheInvalidator: (invalidate) => {
         invalidateReferencedAssetsCache = invalidate;
       },
@@ -1575,7 +1582,9 @@ export function createServer(options: ServerOptions): ServerInstance {
       degraded.push('cc1-push');
     }
 
-    for (const configDocName of CONFIG_DOC_NAMES) {
+    const configDocNamesToBind = ephemeral ? [] : CONFIG_DOC_NAMES;
+
+    for (const configDocName of configDocNamesToBind) {
       try {
         const connection = await hocuspocus.openDirectConnection(configDocName);
         configDocConnections.set(configDocName, connection);
@@ -1593,7 +1602,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       [CONFIG_DOC_NAME_PROJECT_LOCAL, resolveConfigPath('project-local', projectDir)],
       [CONFIG_DOC_NAME_USER, resolveConfigPath('user', projectDir, configHomedirOverride)],
     ]);
-    for (const configDocName of CONFIG_DOC_NAMES) {
+    for (const configDocName of configDocNamesToBind) {
       const absPath = configPathByDoc.get(configDocName);
       if (!absPath) continue;
       try {
@@ -1660,67 +1669,68 @@ export function createServer(options: ServerOptions): ServerInstance {
         : [okignorePath, gitignorePath];
       const ignoreLog = log;
       ignoreLog.info(
-        { okignorePath, gitignorePath, gitInfoExcludePath },
+        { okignorePath, gitignorePath, gitInfoExcludePath, ephemeral },
         '[ignore-watcher] starting multi-path watcher for .okignore + .gitignore (+ .git/info/exclude when present)',
       );
-      const ignoreCleanup = await startMultiPathConfigFileWatcher(
-        ignorePaths,
-        (changedPath, content) => {
-          void (async () => {
-            if (changedPath === okignorePath) {
-              try {
-                const document = hocuspocus.documents.get(CONFIG_DOC_NAME_OKIGNORE) ?? null;
-                const outcome = applyExternalConfigChange(
-                  document,
-                  CONFIG_DOC_NAME_OKIGNORE,
-                  content,
-                  persistence.configPersistenceCtx,
-                );
-                ignoreLog.info(
-                  { docName: CONFIG_DOC_NAME_OKIGNORE, outcome },
-                  '[ignore-watcher] applyExternalConfigChange outcome',
-                );
-              } catch (err) {
-                ignoreLog.error(
-                  { err, changedPath: relative(projectDir, changedPath) },
-                  '[ignore-watcher] applyExternalConfigChange failed; rebuild proceeds independently',
-                );
+      const ignoreCleanup = ephemeral
+        ? null
+        : await startMultiPathConfigFileWatcher(ignorePaths, (changedPath, content) => {
+            void (async () => {
+              if (changedPath === okignorePath) {
+                try {
+                  const document = hocuspocus.documents.get(CONFIG_DOC_NAME_OKIGNORE) ?? null;
+                  const outcome = applyExternalConfigChange(
+                    document,
+                    CONFIG_DOC_NAME_OKIGNORE,
+                    content,
+                    persistence.configPersistenceCtx,
+                  );
+                  ignoreLog.info(
+                    { docName: CONFIG_DOC_NAME_OKIGNORE, outcome },
+                    '[ignore-watcher] applyExternalConfigChange outcome',
+                  );
+                } catch (err) {
+                  ignoreLog.error(
+                    { err, changedPath: relative(projectDir, changedPath) },
+                    '[ignore-watcher] applyExternalConfigChange failed; rebuild proceeds independently',
+                  );
+                }
               }
-            }
 
-            const result = await contentFilter.rebuildIgnorePatterns();
-            if (result.ok) {
-              ignoreLog.info(
-                {
-                  changedPath: relative(projectDir, changedPath),
-                  patternCount: result.patternCount,
-                  nestedFileCount: result.nestedFileCount,
-                  durationMs: result.durationMs,
-                },
-                '[ignore-watcher] rebuild succeeded — broadcasting files channel',
+              const result = await contentFilter.rebuildIgnorePatterns();
+              if (result.ok) {
+                ignoreLog.info(
+                  {
+                    changedPath: relative(projectDir, changedPath),
+                    patternCount: result.patternCount,
+                    nestedFileCount: result.nestedFileCount,
+                    durationMs: result.durationMs,
+                  },
+                  '[ignore-watcher] rebuild succeeded — broadcasting files channel',
+                );
+                cc1Broadcaster?.signal('files');
+              } else {
+                const projectRelPath = relative(projectDir, changedPath) || '.';
+                ignoreLog.warn(
+                  { changedPath: projectRelPath, error: result.error.message },
+                  '[ignore-watcher] rebuild failed — emitting config-ignore-nested-error',
+                );
+                cc1Broadcaster?.emitConfigIgnoreNestedError(projectRelPath, result.error.message);
+              }
+            })().catch((err) => {
+              ignoreLog.error(
+                { err, changedPath: relative(projectDir, changedPath) || '.' },
+                '[ignore-watcher] handler threw',
               );
-              cc1Broadcaster?.signal('files');
-            } else {
-              const projectRelPath = relative(projectDir, changedPath) || '.';
-              ignoreLog.warn(
-                { changedPath: projectRelPath, error: result.error.message },
-                '[ignore-watcher] rebuild failed — emitting config-ignore-nested-error',
-              );
-              cc1Broadcaster?.emitConfigIgnoreNestedError(projectRelPath, result.error.message);
-            }
-          })().catch((err) => {
-            ignoreLog.error(
-              { err, changedPath: relative(projectDir, changedPath) || '.' },
-              '[ignore-watcher] handler threw',
-            );
+            });
           });
-        },
-      );
-      configFileWatcherCleanups.push({ docName: '__ignore-files__', cleanup: ignoreCleanup });
-      ignoreLog.info(
-        { okignorePath, gitignorePath },
-        '[ignore-watcher] multi-path watcher started',
-      );
+      if (ignoreCleanup) {
+        configFileWatcherCleanups.push({ docName: '__ignore-files__', cleanup: ignoreCleanup });
+        ignoreLog.info(
+          { okignorePath, gitignorePath },
+          '[ignore-watcher] multi-path watcher started',
+        );
+      }
     } catch (err) {
       log.warn(
         { err, projectDir, contentDir },
@@ -1761,18 +1771,32 @@ export function createServer(options: ServerOptions): ServerInstance {
       tagIndex.init();
       let seedSkipCount = 0;
       try {
-        seedBasenameIndex({
-          contentDir,
-          contentFilter,
-          basenameIndex,
-          onSkip: (reason, code, path) => {
-            seedSkipCount++;
-            log.warn(
-              { reason, code, path },
-              `[basename-index] skipped entry during seed (${reason}${code ? ` ${code}` : ''})`,
-            );
-          },
-        });
+        if (singleDocRelPath !== undefined) {
+          seedSingleDirBasenameIndex({
+            contentDir,
+            basenameIndex,
+            onSkip: (reason, code, path) => {
+              seedSkipCount++;
+              log.warn(
+                { reason, code, path },
+                `[basename-index] skipped entry during single-file seed (${reason}${code ? ` ${code}` : ''})`,
+              );
+            },
+          });
+        } else {
+          seedBasenameIndex({
+            contentDir,
+            contentFilter,
+            basenameIndex,
+            onSkip: (reason, code, path) => {
+              seedSkipCount++;
+              log.warn(
+                { reason, code, path },
+                `[basename-index] skipped entry during seed (${reason}${code ? ` ${code}` : ''})`,
+              );
+            },
+          });
+        }
         if (seedSkipCount > 0) {
           log.warn(
             { count: seedSkipCount },

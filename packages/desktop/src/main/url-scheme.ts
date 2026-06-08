@@ -206,6 +206,43 @@ export function parseOpenKnowledgeUrl(input: string): ParsedOpenKnowledgeUrl | n
   };
 }
 
+interface ParsedOpenKnowledgeFileUrl {
+  readonly host: 'open';
+  readonly file: string;
+}
+
+export function parseOpenKnowledgeFileUrl(input: string): ParsedOpenKnowledgeFileUrl | null {
+  if (typeof input !== 'string' || input.length === 0) return null;
+  if (input.includes('\x00') || /%00/i.test(input)) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'openknowledge:') return null;
+  if (parsed.hostname !== 'open') return null;
+
+  const rawFile = parsed.searchParams.get('file');
+  if (!rawFile) return null;
+
+  let file: string;
+  try {
+    file = decodeURIComponent(rawFile);
+  } catch {
+    return null;
+  }
+
+  if (file.includes('\x00')) return null;
+  if (file.length === 0) return null;
+
+  if (!isAbsolute(file)) return null;
+  if (file.split(/[/\\]/).includes('..')) return null;
+
+  return { host: 'open', file: resolve(file) };
+}
+
 const SCREEN_TARGETS = ['settings', 'install-claude'] as const;
 export type ScreenTarget = (typeof SCREEN_TARGETS)[number];
 
@@ -275,6 +312,7 @@ interface ProtocolHandlerDeps {
       pendingShareBranchSwitch?: ShareDeepLinkBranchSwitchPayload;
     },
   ): Promise<BrowserWindowHandle | null>;
+  openEphemeralFile?(filePath: string): Promise<void>;
   sendDeepLink(
     win: BrowserWindowHandle,
     payload: {
@@ -307,13 +345,19 @@ interface ProtocolHandlerDeps {
 // biome-ignore lint/suspicious/noEmptyInterface: intentional — opaque handle.
 interface BrowserWindowHandle {}
 
+interface ProtocolHandlerControl {
+  singleFileLaunch(): boolean;
+  drainQueuedUrls(): void;
+}
+
 const QUEUE_FLUSH_MAX_ATTEMPTS = 10;
 const QUEUE_FLUSH_INTERVAL_MS = 500;
 
-export function registerProtocolHandler(deps: ProtocolHandlerDeps): void {
+export function registerProtocolHandler(deps: ProtocolHandlerDeps): ProtocolHandlerControl {
   const schedule = deps.setTimeout ?? ((cb, ms) => setTimeout(cb, ms));
   const urlQueue: string[] = [];
   let flushed = false;
+  let singleFileLaunch = false;
 
   if (!deps.app.isPackaged) {
     try {
@@ -563,6 +607,24 @@ export function registerProtocolHandler(deps: ProtocolHandlerDeps): void {
       routeScreen(url, screen.name);
       return;
     }
+    const fileOpen = parseOpenKnowledgeFileUrl(url);
+    if (fileOpen !== null) {
+      const open = deps.openEphemeralFile;
+      if (!open) {
+        deps.log?.warn(
+          { url },
+          '[url-scheme] openEphemeralFile dep missing — single-file open dropped',
+        );
+        return;
+      }
+      void open(fileOpen.file).catch((err) => {
+        deps.log?.warn(
+          { err: (err as Error).message, file: fileOpen.file },
+          '[url-scheme] openEphemeralFile failed',
+        );
+      });
+      return;
+    }
     const parsed = parseOpenKnowledgeUrl(url);
     if (!parsed) {
       deps.log?.warn({ url }, '[url-scheme] dropped malformed URL');
@@ -583,7 +645,18 @@ export function registerProtocolHandler(deps: ProtocolHandlerDeps): void {
       });
   };
 
+  const drainAll = (): void => {
+    flushed = true;
+    while (urlQueue.length > 0) {
+      const next = urlQueue.shift();
+      if (next) routeUrl(next);
+    }
+  };
+
   const enqueueOrRoute = (url: string): void => {
+    if (parseOpenKnowledgeFileUrl(url) !== null) {
+      singleFileLaunch = true;
+    }
     if (flushed) {
       routeUrl(url);
     } else {
@@ -631,23 +704,20 @@ export function registerProtocolHandler(deps: ProtocolHandlerDeps): void {
   void deps.app.whenReady().then(() => {
     const tryFlush = (attempt: number): void => {
       if (urlQueue.length === 0 || deps.getAnyReadyWindow()) {
-        flushed = true;
-        while (urlQueue.length > 0) {
-          const next = urlQueue.shift();
-          if (next) routeUrl(next);
-        }
+        drainAll();
         return;
       }
       if (attempt >= QUEUE_FLUSH_MAX_ATTEMPTS) {
-        flushed = true;
-        while (urlQueue.length > 0) {
-          const next = urlQueue.shift();
-          if (next) routeUrl(next);
-        }
+        drainAll();
         return;
       }
       schedule(() => tryFlush(attempt + 1), QUEUE_FLUSH_INTERVAL_MS);
     };
     tryFlush(0);
   });
+
+  return {
+    singleFileLaunch: () => singleFileLaunch,
+    drainQueuedUrls: () => drainAll(),
+  };
 }

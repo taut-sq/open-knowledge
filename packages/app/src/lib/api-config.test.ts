@@ -37,11 +37,12 @@ describe('fetchApiConfig', () => {
         previewUrl: 'http://localhost:3000/',
         port: 3000,
         paneTarget: null,
+        singleFile: false,
       },
     });
   });
 
-  it('normalizes missing fields to null / 0', async () => {
+  it('normalizes missing fields to null / 0 / false', async () => {
     stubFetch(
       async () =>
         new Response(JSON.stringify({ collabUrl: null, previewUrl: null, port: 0 }), {
@@ -51,7 +52,22 @@ describe('fetchApiConfig', () => {
     const result = await fetchApiConfig();
     expect(result).toEqual({
       status: 'ok',
-      config: { collabUrl: null, previewUrl: null, port: 0, paneTarget: null },
+      config: { collabUrl: null, previewUrl: null, port: 0, paneTarget: null, singleFile: false },
+    });
+  });
+
+  it('parses the single-file flag from an ephemeral server', async () => {
+    stubFetch(
+      async () =>
+        new Response(
+          JSON.stringify({ collabUrl: null, previewUrl: null, port: 0, singleFile: true }),
+          { status: 200 },
+        ),
+    );
+    const result = await fetchApiConfig();
+    expect(result).toEqual({
+      status: 'ok',
+      config: { collabUrl: null, previewUrl: null, port: 0, paneTarget: null, singleFile: true },
     });
   });
 
@@ -76,6 +92,7 @@ describe('fetchApiConfig', () => {
         previewUrl: null,
         port: 0,
         paneTarget: '#/specs/foo/',
+        singleFile: false,
       },
     });
   });
@@ -122,7 +139,7 @@ describe('fetchApiConfig', () => {
     const result = await fetchApiConfig();
     expect(result).toEqual({
       status: 'ok',
-      config: { collabUrl: null, previewUrl: null, port: 0, paneTarget: null },
+      config: { collabUrl: null, previewUrl: null, port: 0, paneTarget: null, singleFile: false },
     });
   });
 

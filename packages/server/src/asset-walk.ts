@@ -1,7 +1,11 @@
 import type { Dirent } from 'node:fs';
 import { lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { type BasenameIndex, LINKABLE_ASSET_EXTENSIONS } from '@inkeep/open-knowledge-core';
+import {
+  ASSET_EXTENSIONS,
+  type BasenameIndex,
+  LINKABLE_ASSET_EXTENSIONS,
+} from '@inkeep/open-knowledge-core';
 import type { ContentFilter } from './content-filter.ts';
 import { isSupportedAssetFile } from './doc-extensions.ts';
 
@@ -27,6 +31,26 @@ function isWithinDir(candidate: string, dir: string): boolean {
 function errnoCode(err: unknown): string | undefined {
   const code = (err as NodeJS.ErrnoException | null)?.code;
   return typeof code === 'string' ? code : undefined;
+}
+
+export function seedSingleDirBasenameIndex(opts: {
+  contentDir: string;
+  basenameIndex: BasenameIndex;
+  onSkip?(reason: SeedSkipReason, code: string | undefined, path: string): void;
+}): void {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(opts.contentDir, { withFileTypes: true }) as Dirent[];
+  } catch (err) {
+    const code = errnoCode(err);
+    if (code !== 'ENOENT') opts.onSkip?.('read-failed', code, opts.contentDir);
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!isSupportedAssetFile(entry.name, ASSET_EXTENSIONS)) continue;
+    opts.basenameIndex.add(entry.name);
+  }
 }
 
 export function seedBasenameIndex(opts: SeedOptions): void {

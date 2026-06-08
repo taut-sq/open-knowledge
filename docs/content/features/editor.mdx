@@ -4,6 +4,19 @@ description: The Open Knowledge editor. WYSIWYG markdown, source toggle, content
 ---
 The editor is where you read, write, and collaborate on your docs, and where AI agents land when they edit. WYSIWYG by default with a source-mode toggle, a frontmatter properties pane, real-time CRDT collaboration, and a file sidebar that organizes the project.
 
+## Open a single file
+
+Want the editor on one loose markdown file without setting up a project? Run `ok <file>`:
+
+```bash
+ok notes.md            # open a single file in the editor
+ok ./specs/foo/SPEC.md # a file inside a project opens that project, focused on the doc
+```
+
+When the file is inside an existing Open Knowledge project, this opens that project focused on the doc. When it's a loose file, it opens an **ephemeral single-file session**: a throwaway editor scoped to just that one file, with no project scaffolding, no agents, and no git. Your edits save straight back to the original file, and **nothing is written into the file's directory** — all session state lives in a temporary directory that's removed when you close the window. Opening a file you don't edit leaves it byte-for-byte unchanged.
+
+It opens in the desktop app when it's installed, and falls back to your browser otherwise (press Ctrl-C in the terminal to end a browser session). Single-file sessions show just the file and the editor — no sidebar, tabs, or project switcher. Discover it any time with `ok --help`.
+
 ## Document body
 
 Open any doc from the sidebar. The body renders as WYSIWYG markdown with familiar conventions: bold / italic / headings / lists / tables / code fences / links / images. Toggle to source mode from the editor controls to edit the raw markdown directly; both views are bound to the same CRDT document, so they stay in sync across users and AI agents.

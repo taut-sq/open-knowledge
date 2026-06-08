@@ -27,6 +27,7 @@ import { fetchApiConfig } from '@/lib/api-config';
 import { ConfigProvider } from '@/lib/config-provider';
 import { assetPathFromHash, docNameFromHash, isContentRootHash } from '@/lib/doc-hash';
 import { mark, ProfilerBoundary } from '@/lib/perf';
+import { SingleFileModeProvider, useSingleFileMode } from '@/lib/single-file-mode';
 import { isSettingsShortcut, SETTINGS_OPEN_HASH } from '@/lib/use-settings-route';
 
 const INSTALL_DIALOG_HASH = '#install-claude-desktop';
@@ -292,65 +293,80 @@ function NewItemShortcutHandler() {
 }
 
 export function App() {
-  const desktopBridge = typeof window !== 'undefined' ? (window.okDesktop ?? null) : null;
-  const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-
   return (
     <ProfilerBoundary name="app">
       <DocumentProvider>
         <ConfigProvider>
-          <ConnectingBanner />
-          <PageListProvider>
-            <SystemDocSubscriber />
-            <NavigationHandler />
-            <PaneTargetLanding />
-            <ActiveTargetBridgePush />
-            <NewItemShortcutHandler />
-            <SettingsShortcutHandler />
-            {SHOW_INSTALL_SKILL && <InstallInClaudeDesktopTrigger />}
-            {/* File → Create New Project… opens CreateProjectDialog here.
-                Desktop-only — the `new-project` menu action never fires in
-                the web host, so the dialog stays unmounted there. */}
-            {desktopBridge ? <CreateProjectMenuTrigger bridge={desktopBridge} /> : null}
-            {/* First-launch consent dialog — host-agnostic. Self-gates on
-                the shared `mcpConsentStore` snapshot; renders nothing until
-                main fires `ok:mcp-wiring:show`. Mounted identically in
-                NavigatorApp. */}
-            <McpConsentDialog />
-            {/* Project-scoped branch-switch surface. Self-gates on the
-                shared shareReceiveStore — mounts only when main routes a
-                'project-branch-switch' payload to this editor window.
-                Clone / locate / consent surfaces live on the Navigator,
-                never in an editor (see NavigatorApp). */}
-            {desktopBridge ? <ShareBranchSwitchDialog bridge={desktopBridge} /> : null}
-            <CommandPalette
-              bridge={desktopBridge}
-              open={commandPaletteOpen}
-              onOpenChange={setCommandPaletteOpen}
-            />
-            {/* Electron BrowserWindow renders with `titleBarStyle: 'hiddenInset'` +
-                `transparent: true` + `vibrancy: 'sidebar'`, so the renderer owns
-                window-drag affordance. Existing chrome rows (EditorHeader,
-                SidebarHeader, EditorTabs) cover y=8..y=56; this 8px strip covers
-                the y=0..y=8 vibrancy band above them. */}
-            {isElectronHost && (
-              <div
-                aria-hidden="true"
-                data-testid="editor-window-chrome-drag-strip"
-                data-electron-drag=""
-                className="pointer-events-none fixed inset-x-0 top-0 z-50 h-2 [-webkit-app-region:drag]"
-              />
-            )}
-            <SidebarProvider className="h-screen overflow-hidden">
-              <FileSidebar onOpenSearch={() => setCommandPaletteOpen(true)} />
-              <SidebarInset className="overflow-hidden h-[calc(100vh-var(--layout-inset-offset))]">
-                <EditorPane onOpenSearch={() => setCommandPaletteOpen(true)} />
-              </SidebarInset>
-            </SidebarProvider>
-          </PageListProvider>
+          <SingleFileModeProvider>
+            <AppBody />
+          </SingleFileModeProvider>
         </ConfigProvider>
       </DocumentProvider>
     </ProfilerBoundary>
+  );
+}
+
+function AppBody() {
+  const desktopBridge = typeof window !== 'undefined' ? (window.okDesktop ?? null) : null;
+  const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const singleFile = useSingleFileMode();
+
+  return (
+    <>
+      <ConnectingBanner />
+      <PageListProvider>
+        <SystemDocSubscriber />
+        <NavigationHandler />
+        <PaneTargetLanding />
+        <ActiveTargetBridgePush />
+        <NewItemShortcutHandler />
+        {/* Settings is unavailable in single-file mode (config editing is
+            inert), so the Cmd-, route handler isn't mounted. */}
+        {!singleFile && <SettingsShortcutHandler />}
+        {SHOW_INSTALL_SKILL && <InstallInClaudeDesktopTrigger />}
+        {/* File → Create New Project… opens CreateProjectDialog here.
+            Desktop-only — the `new-project` menu action never fires in
+            the web host, so the dialog stays unmounted there. */}
+        {desktopBridge ? <CreateProjectMenuTrigger bridge={desktopBridge} /> : null}
+        {/* First-launch consent dialog — host-agnostic. Self-gates on
+            the shared `mcpConsentStore` snapshot; renders nothing until
+            main fires `ok:mcp-wiring:show`. Mounted identically in
+            NavigatorApp. */}
+        <McpConsentDialog />
+        {/* Project-scoped branch-switch surface. Self-gates on the
+            shared shareReceiveStore — mounts only when main routes a
+            'project-branch-switch' payload to this editor window.
+            Clone / locate / consent surfaces live on the Navigator,
+            never in an editor (see NavigatorApp). */}
+        {desktopBridge ? <ShareBranchSwitchDialog bridge={desktopBridge} /> : null}
+        <CommandPalette
+          bridge={desktopBridge}
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+        />
+        {/* Electron BrowserWindow renders with `titleBarStyle: 'hiddenInset'` +
+            `transparent: true` + `vibrancy: 'sidebar'`, so the renderer owns
+            window-drag affordance. Existing chrome rows (EditorHeader,
+            SidebarHeader, EditorTabs) cover y=8..y=56; this 8px strip covers
+            the y=0..y=8 vibrancy band above them. */}
+        {isElectronHost && (
+          <div
+            aria-hidden="true"
+            data-testid="editor-window-chrome-drag-strip"
+            data-electron-drag=""
+            className="pointer-events-none fixed inset-x-0 top-0 z-50 h-2 [-webkit-app-region:drag]"
+          />
+        )}
+        <SidebarProvider className="h-screen overflow-hidden">
+          {/* No-project single-file mode drops the file sidebar (file tree +
+              project switcher); the editor inset takes the full width. */}
+          {!singleFile && <FileSidebar onOpenSearch={() => setCommandPaletteOpen(true)} />}
+          <SidebarInset className="overflow-hidden h-[calc(100vh-var(--layout-inset-offset))]">
+            <EditorPane onOpenSearch={() => setCommandPaletteOpen(true)} />
+          </SidebarInset>
+        </SidebarProvider>
+      </PageListProvider>
+    </>
   );
 }

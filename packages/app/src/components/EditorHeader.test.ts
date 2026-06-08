@@ -115,9 +115,15 @@ describe('EditorHeader — sparkle icon 3-scope dispatch (US-011 source-level)',
     expect(SRC).toMatch(/return\s+buildHandoffInput\s*\(\s*\{\s*docName:\s*activeDocName/);
   });
 
-  test('OpenInAgentMenu renders UNCONDITIONALLY — the activeDocName gate is removed', () => {
+  test('OpenInAgentMenu has no activeDocName gate (renders across all scopes in project mode)', () => {
     expect(SRC).not.toMatch(/activeDocName\s*&&\s*<OpenInAgentMenu/);
     expect(SRC).toMatch(/<OpenInAgentMenu[\s\S]*?input=\{menuHandoffInput\}/);
+  });
+
+  test('agent handoff + share surfaces are gated out of single-file mode', () => {
+    expect(SRC).toMatch(
+      /\{!singleFile\s*&&\s*\([\s\S]*?<OpenInAgentMenu[\s\S]*?<ShareButton[\s\S]*?<PublishToGitHubDialog[\s\S]*?\)\}/,
+    );
   });
 
   test('builds a shareInput: ShareTargetInput | null via an IIFE mirroring handoffInput (US-012)', () => {

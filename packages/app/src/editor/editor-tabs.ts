@@ -18,6 +18,7 @@ interface KnownTabTargets {
   folderPaths: ReadonlySet<string>;
   assetPaths: ReadonlySet<string>;
   keepMissingDocName?: string | null;
+  keepHashDocName?: string | null;
 }
 
 const LOCAL_TAB_SESSION_PREFIX = 'ok-editor-tabs-v1:';
@@ -361,13 +362,23 @@ export function reconcileVisibleTabOrder(
 
 export function filterOpenTabsForKnownTargets(
   tabs: readonly string[],
-  { pages, folderPaths, assetPaths, keepMissingDocName = null }: KnownTabTargets,
+  {
+    pages,
+    folderPaths,
+    assetPaths,
+    keepMissingDocName = null,
+    keepHashDocName = null,
+  }: KnownTabTargets,
 ): string[] {
   return normalizeOpenTabs(tabs, Number.MAX_SAFE_INTEGER).filter((tabId) => {
     const tab = parseEditorTabId(tabId);
     if (tab.kind === 'folder') return folderPaths.has(tab.folderPath);
     if (tab.kind === 'asset') return assetPaths.has(tab.assetPath);
-    return pages.has(tab.docName) || tab.docName === keepMissingDocName;
+    return (
+      pages.has(tab.docName) ||
+      tab.docName === keepMissingDocName ||
+      tab.docName === keepHashDocName
+    );
   });
 }
 

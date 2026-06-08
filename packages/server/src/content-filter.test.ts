@@ -1221,4 +1221,99 @@ describe('ContentFilter', () => {
       }
     });
   });
+
+  describe('singleDocRelPath (single-file scope, D3)', () => {
+    test('isExcluded admits only the target doc; every sibling excluded', () => {
+      writeFileSync(join(projectDir, 'notes.md'), '# notes');
+      writeFileSync(join(projectDir, 'other.md'), '# other');
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+
+      expect(filter.isExcluded('notes.md')).toBe(false);
+      expect(filter.isExcluded('other.md')).toBe(true);
+      expect(filter.isExcluded('sub/deep.md')).toBe(true);
+    });
+
+    test('isDirExcluded prunes every directory for a bare-basename target', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isDirExcluded('sub')).toBe(true);
+      expect(filter.isDirExcluded('sub/nested')).toBe(true);
+    });
+
+    test('isDirExcluded descends only the ancestor chain of a nested target', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'a/b/doc.md',
+      });
+      expect(filter.isDirExcluded('a')).toBe(false);
+      expect(filter.isDirExcluded('a/b')).toBe(false);
+      expect(filter.isDirExcluded('a/other')).toBe(true);
+      expect(filter.isDirExcluded('other')).toBe(true);
+      expect(filter.isExcluded('a/b/doc.md')).toBe(false);
+      expect(filter.isExcluded('a/b/sibling.md')).toBe(true);
+    });
+
+    test('isPathIgnored is UNAFFECTED — referenced sibling assets still serve (STOP_IF)', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isPathIgnored('sibling.png')).toBe(false);
+      expect(filter.isPathIgnored('notes.md')).toBe(false);
+      expect(filter.isPathIgnored('.git/config')).toBe(true);
+      expect(filter.isPathIgnored('__system__.md')).toBe(true);
+    });
+
+    test('scope holds even under bypassFilters (single-file sidebar is hidden, but defense-in-depth)', () => {
+      const filter = createContentFilter({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isExcluded('other.md', { bypassFilters: true })).toBe(true);
+      expect(filter.isExcluded('notes.md', { bypassFilters: true })).toBe(false);
+      expect(filter.isDirExcluded('sub', { bypassFilters: true })).toBe(true);
+    });
+
+    test('split projectDir/contentDir (ephemeral shape) scopes correctly', async () => {
+      const realParent = await mkdtemp(join(tmpdir(), 'content-filter-real-'));
+      try {
+        writeFileSync(join(realParent, 'notes.md'), '# notes');
+        writeFileSync(join(realParent, 'secret.md'), '# secret');
+        const filter = createContentFilter({
+          projectDir,
+          contentDir: realParent,
+          singleDocRelPath: 'notes.md',
+        });
+        expect(filter.isExcluded('notes.md')).toBe(false);
+        expect(filter.isExcluded('secret.md')).toBe(true);
+        expect(filter.isPathIgnored('sibling.png')).toBe(false);
+      } finally {
+        await rm(realParent, { recursive: true, force: true });
+      }
+    });
+
+    test('async factory mirrors the sync single-file scope', async () => {
+      writeFileSync(join(projectDir, 'notes.md'), '# notes');
+      writeFileSync(join(projectDir, 'other.md'), '# other');
+      const filter = await createContentFilterAsync({
+        projectDir,
+        contentDir: projectDir,
+        singleDocRelPath: 'notes.md',
+      });
+      expect(filter.isExcluded('notes.md')).toBe(false);
+      expect(filter.isExcluded('other.md')).toBe(true);
+      expect(filter.isDirExcluded('sub')).toBe(true);
+      expect(filter.isPathIgnored('sibling.png')).toBe(false);
+    });
+  });
 });

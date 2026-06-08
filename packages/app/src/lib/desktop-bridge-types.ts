@@ -113,6 +113,8 @@ export interface OkDesktopConfig {
   readonly projectPath: string;
   readonly projectName: string;
   readonly mode: OkDesktopMode;
+  readonly singleFile: boolean;
+  readonly initialDoc: string | null;
 }
 
 type OkMenuAction =

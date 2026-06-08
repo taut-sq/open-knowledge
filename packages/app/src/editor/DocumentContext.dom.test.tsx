@@ -439,6 +439,64 @@ describe('DocumentContext reorderTabs — order + drag-mutable pin', () => {
   });
 });
 
+const COLD_START_DOC = docTabId('event_watcher');
+
+function seedColdStartSession() {
+  window.localStorage.setItem(
+    localTabSessionStorageKey(window.location.origin),
+    JSON.stringify({
+      openTabs: [COLD_START_DOC],
+      pinnedTabIds: [],
+      activeDocName: 'event_watcher',
+      activeTabId: COLD_START_DOC,
+      updatedAt: new Date('2026-06-07T00:00:00.000Z').toISOString(),
+    }),
+  );
+}
+
+function ColdStartSyncHarness() {
+  const ctx = useDocumentContext();
+  return (
+    <>
+      <span data-testid="open-tabs">{ctx.openTabs.join('|')}</span>
+      <button
+        type="button"
+        onClick={() =>
+          ctx.syncOpenTabsWithKnownTargets({
+            pages: new Set(),
+            folderPaths: new Set(),
+            assetPaths: new Set(),
+          })
+        }
+      >
+        Sync empty pages
+      </button>
+    </>
+  );
+}
+
+describe('DocumentContext syncOpenTabsWithKnownTargets — cold-start hash preservation', () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+    window.location.hash = '';
+  });
+
+  test('a sync against transiently-empty pages keeps the hash-targeted doc (no empty-state splash)', async () => {
+    seedColdStartSession();
+    window.location.hash = '#/event_watcher';
+    render(<ColdStartSyncHarness />, { wrapper: ProviderHarness });
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(COLD_START_DOC);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Sync empty pages' }));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(COLD_START_DOC);
+    expect(window.location.hash).toBe('#/event_watcher');
+  });
+});
+
 const RENAME_FOO = docTabId('foo.md');
 const RENAME_BAR = docTabId('bar.md');
 const RENAME_BAZZ = docTabId('bazz.md');

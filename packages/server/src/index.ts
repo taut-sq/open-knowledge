@@ -391,6 +391,14 @@ export {
   type WriterIdentity,
 } from './shadow-repo.ts';
 export {
+  createEphemeralProjectDir,
+  prepareSingleFileOpen,
+  SingleFileNotAFileError,
+  SingleFileNotFoundError,
+  SingleFileNotMarkdownError,
+  type SingleFileOpenPlan,
+} from './single-file-open.ts';
+export {
   type BuildAndOpenSkillOptions,
   type BuildAndOpenSkillResult,
   type BuildAndOpenSkillStatus,

@@ -210,6 +210,8 @@ export async function installHandoffMocks(page: Page, cfg: HandoffMockConfig): P
           projectPath: workerContentDir,
           projectName: 'handoff-e2e-fixture',
           mode: 'editor' as const,
+          singleFile: false,
+          initialDoc: null,
         },
         onProjectSwitched: () => () => {},
         onMenuAction: () => () => {},

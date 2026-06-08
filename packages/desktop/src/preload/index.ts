@@ -150,12 +150,16 @@ function readConfigFromArgv(): OkDesktopConfig {
   const projectName = parseArg('project-name') ?? '';
   const modeRaw = parseArg('mode') ?? 'editor';
   const mode: OkDesktopConfig['mode'] = modeRaw === 'navigator' ? 'navigator' : 'editor';
+  const singleFile = parseArg('single-file') === '1';
+  const initialDoc = parseArg('initial-doc') ?? null;
   return Object.freeze({
     collabUrl,
     apiOrigin,
     projectPath,
     projectName,
     mode,
+    singleFile,
+    initialDoc,
   });
 }
 

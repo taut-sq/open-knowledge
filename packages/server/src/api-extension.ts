@@ -1518,6 +1518,7 @@ export interface ApiExtensionOptions {
   hocuspocus: Hocuspocus;
   sessionManager: AgentSessionManager;
   contentDir: string;
+  ephemeral?: boolean;
   serverInstanceId: string;
   getFileIndex: () => ReadonlyMap<string, FileIndexEntry>;
   getFolderIndex?: () => ReadonlyMap<string, FolderIndexEntry>;
@@ -1631,6 +1632,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     ready,
     recentlyRemovedDocs,
     serializeDoc,
+    ephemeral = false,
   } = options;
 
   const localOpGuard = createConcurrencyGuard();
@@ -9653,6 +9655,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     FolderConfigPutRequestSchema,
     async (_req, res, body) => {
       try {
+        if (ephemeral) {
+          errorResponse(
+            res,
+            403,
+            'urn:ok:error:single-file-mode',
+            'Folder configuration is not available in single-file mode.',
+            { handler: 'folder-config-put' },
+          );
+          return;
+        }
         const actor = extractActorIdentity(
           body as unknown as Record<string, unknown>,
           getPrincipal,
@@ -9867,6 +9879,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     TemplatePutRequestSchema,
     async (_req, res, body) => {
       try {
+        if (ephemeral) {
+          errorResponse(
+            res,
+            403,
+            'urn:ok:error:single-file-mode',
+            'Templates are not available in single-file mode.',
+            { handler: 'template-put' },
+          );
+          return;
+        }
         const actor = extractActorIdentity(
           body as unknown as Record<string, unknown>,
           getPrincipal,
@@ -11046,7 +11068,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const collabUrl = host ? `ws://${host}/collab` : null;
         const port = paneTargetLockDir ? (readServerLock(paneTargetLockDir)?.port ?? 0) : 0;
         const paneTarget = paneTargetLockDir ? readArmedPaneTarget(paneTargetLockDir) : null;
-        const payload = { collabUrl, previewUrl: null, port, paneTarget };
+        const payload = { collabUrl, previewUrl: null, port, paneTarget, singleFile: ephemeral };
         if (req.method === 'HEAD') {
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
@@ -11259,6 +11281,28 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             'urn:ok:error:host-not-allowed',
             'Host header not allowed.',
             { handler: 'api-mutating-gate' },
+          );
+          return;
+        }
+      }
+
+      if (ephemeral && url.startsWith('/api/')) {
+        const peerAddress = request.socket?.remoteAddress;
+        if (peerAddress !== undefined && !isLoopbackAddress(peerAddress)) {
+          errorResponse(response, 403, 'urn:ok:error:loopback-required', 'Loopback required.', {
+            handler: 'api-ephemeral-gate',
+          });
+          return;
+        }
+        if (!isAllowedWorkspaceHostHeader(request.headers.host)) {
+          errorResponse(
+            response,
+            403,
+            'urn:ok:error:host-not-allowed',
+            'Host header not allowed.',
+            {
+              handler: 'api-ephemeral-gate',
+            },
           );
           return;
         }

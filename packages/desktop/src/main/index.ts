@@ -37,6 +37,7 @@ import {
 import {
   assertGitAvailable,
   classifyFsPath,
+  createEphemeralProjectDir,
   ensureProjectGit,
   findEnclosingGitRoot,
   findEnclosingProjectRoot,
@@ -45,6 +46,7 @@ import {
   initContent,
   isProcessAlive,
   normalizeFsPath,
+  prepareSingleFileOpen,
   RUNTIME_VERSION,
   readServerLock,
   readServerPackageVersion,
@@ -439,8 +441,14 @@ function ensureWindowManager() {
     utilityEntryPath,
     ...(bundleCliMjsPath !== null
       ? {
-          spawnDetachedServer: async ({ contentDir, reactShellDistDir }) => {
-            const lockDir = getLocalDir(contentDir);
+          spawnDetachedServer: async ({
+            contentDir,
+            reactShellDistDir,
+            singleFile,
+            projectDir,
+          }) => {
+            const projectRoot = projectDir ?? contentDir;
+            const lockDir = getLocalDir(projectRoot);
             if (!existsSync(lockDir)) {
               try {
                 mkdirSync(lockDir, { recursive: true });
@@ -486,6 +494,7 @@ function ensureWindowManager() {
               contentDir,
               spawnErrorLogFd,
               env: buildUtilityForkEnv(process.env),
+              ...(singleFile !== undefined ? { singleFile, projectDir } : {}),
             });
             let childRef: ReturnType<typeof spawn>;
             try {
@@ -547,6 +556,8 @@ function ensureWindowManager() {
           },
         }
       : {}),
+    createEphemeralProjectDir,
+    removeDir: (dir: string) => fsPromises.rm(dir, { recursive: true, force: true }),
     rendererEntryPath,
     rendererDevUrl,
     appVersion: app.getVersion(),
@@ -983,6 +994,70 @@ async function openProjectOrFallbackToNavigator(
     }
     dialog.showErrorBox(dialogTitle, dialogBody);
     openNavigator();
+  }
+}
+
+async function openEphemeralFile(filePath: string): Promise<void> {
+  ensureWindowManager();
+
+  let plan: ReturnType<typeof prepareSingleFileOpen>;
+  try {
+    plan = prepareSingleFileOpen(filePath);
+  } catch (err) {
+    dialog.showErrorBox(
+      'Cannot open this file',
+      `${filePath}\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  if (plan.mode === 'project') {
+    await openProjectOrFallbackToNavigator(plan.projectRoot, 'deep-link', {
+      kind: 'doc',
+      path: plan.docName,
+    });
+    return;
+  }
+
+  try {
+    const ctx = await wm.createEphemeralWindow({
+      canonicalFilePath: plan.canonicalFilePath,
+      contentDir: plan.contentDir,
+      docName: plan.docName,
+    });
+    getLogger('project').info(
+      { file: plan.canonicalFilePath, apiOrigin: ctx.apiOrigin },
+      'ephemeral single-file window created',
+    );
+    attachAssetSafetyNet(ctx.window.webContents, {
+      editorOrigin: ctx.apiOrigin,
+      openAsset: (relPath) =>
+        openAssetSafely(
+          {
+            projectPath: ctx.projectPath,
+            platform: process.platform,
+            openPath: (canonical) => shell.openPath(canonical),
+          },
+          relPath,
+        ),
+      openExternal: handleShellOpenExternal({
+        openExternal: (url) => shell.openExternal(url),
+      }),
+    });
+    tryCloseNavigator(navigatorWindow, { projectPath: plan.contentDir });
+    refreshApplicationMenu();
+  } catch (err) {
+    getLogger('project').error(
+      { file: plan.canonicalFilePath, err: err instanceof Error ? err.message : String(err) },
+      'ephemeral single-file open failed',
+    );
+    dialog.showErrorBox(
+      'Could not open file',
+      `${filePath}\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    if (BrowserWindow.getAllWindows().length === 0) {
+      openNavigator();
+    }
   }
 }
 
@@ -1593,6 +1668,8 @@ function registerIpcHandlers() {
       projectPath: ctx.projectPath,
       projectName: ctx.projectName,
       mode: 'editor' as const,
+      singleFile: ctx.ephemeral !== undefined,
+      initialDoc: null,
     };
   });
 
@@ -2117,7 +2194,7 @@ function bootPrimaryInstance(): void {
     attachRendererConsoleCapture(contents);
   });
 
-  registerProtocolHandler({
+  const protocolControl = registerProtocolHandler({
     app: {
       on: (event, cb) => {
         app.on(event as Parameters<typeof app.on>[0], cb as Parameters<typeof app.on>[1]);
@@ -2147,6 +2224,7 @@ function bootPrimaryInstance(): void {
       }
       return ctx.window as unknown as object;
     },
+    openEphemeralFile: (filePath) => openEphemeralFile(filePath),
     sendDeepLink: (win, payload) => {
       const w = win as BrowserWindowLike;
       sendToRenderer(w.webContents, 'ok:deep-link', payload);
@@ -2194,18 +2272,6 @@ function bootPrimaryInstance(): void {
     .then(async () => {
       app.setAboutPanelOptions(buildAboutPanelOptions(app.getVersion()));
 
-      const gitOutcome = await ensureGitAvailable({
-        assertGitAvailable,
-        showMessageBox: async (opts) =>
-          dialog.showMessageBox({ ...opts, buttons: [...opts.buttons] }),
-        openExternal: (url) => shell.openExternal(url),
-        log: { warn: (msg, obj) => console.warn(msg, obj) },
-      });
-      if (gitOutcome === 'aborted') {
-        app.quit();
-        return;
-      }
-
       const result = await runBootstrap({
         loadAppState,
         evaluateSchemaCompatibility,
@@ -2247,6 +2313,7 @@ function bootPrimaryInstance(): void {
         lastOpenedProject: appState.lastOpenedProject,
         optionHeld: process.argv.includes('--navigator'),
         pathExists: existsSync,
+        urlLaunch: protocolControl.singleFileLaunch(),
       });
       if (decision.clearSnapshot) {
         appState = { ...appState, pendingWindowRestore: null };
@@ -2256,14 +2323,31 @@ function bootPrimaryInstance(): void {
           });
         }
       }
+
+      if (decision.action !== 'none') {
+        const gitOutcome = await ensureGitAvailable({
+          assertGitAvailable,
+          showMessageBox: async (opts) =>
+            dialog.showMessageBox({ ...opts, buttons: [...opts.buttons] }),
+          openExternal: (url) => shell.openExternal(url),
+          log: { warn: (msg, obj) => console.warn(msg, obj) },
+        });
+        if (gitOutcome === 'aborted') {
+          app.quit();
+          return;
+        }
+      }
+
       if (decision.action === 'restore') {
         for (const projectPath of decision.projects) {
           void openProjectOrFallbackToNavigator(projectPath, 'recents');
         }
       } else if (decision.action === 'lastOpened') {
         void openProjectOrFallbackToNavigator(decision.project, 'recents');
-      } else {
+      } else if (decision.action === 'navigator') {
         openNavigator();
+      } else {
+        protocolControl.drainQueuedUrls();
       }
 
       void reclaimUserSkillsOnLaunch({

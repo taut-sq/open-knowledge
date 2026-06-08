@@ -8,6 +8,7 @@ import { OutlinePanel } from '@/components/OutlinePanel';
 import { TimelineContent } from '@/components/TimelinePanel';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useSingleFileMode } from '@/lib/single-file-mode';
 
 export type PanelTab = 'outline' | 'links' | 'graph' | 'timeline';
 
@@ -64,24 +65,28 @@ export function DocPanel({
 }: DocPanelProps) {
   const { t } = useLingui();
   const [diffLayout, setDiffLayout] = useState<DiffLayout>('unified');
+  const singleFile = useSingleFileMode();
+  const tabs = singleFile ? TABS.filter((tab) => tab.id === 'outline') : TABS;
+  const effectiveTab: PanelTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'outline';
+  const showTabStrip = mode === 'doc' && tabs.length > 1;
   return (
     <>
       {/* In `'doc'` mode: the info sub-tabs render as the panel header.
           In `'agent'` mode: no header row — `ActivityModeContent` owns its
           own header (avatar + back-arrow), which eliminates the empty-row
           footprint the standalone back-arrow used to have. */}
-      {mode === 'doc' ? (
+      {showTabStrip ? (
         <div className="flex flex-row items-center justify-center gap-3 p-2">
           <ToggleGroup
             type="single"
             variant="outline"
-            value={activeTab}
+            value={effectiveTab}
             onValueChange={(value: PanelTab) => {
               if (value) onActiveTabChange(value);
             }}
             aria-label={t`Document panels`}
           >
-            {TABS.map(({ id, icon: Icon }) => {
+            {tabs.map(({ id, icon: Icon }) => {
               const label = tabLabel(id);
               return (
                 <Tooltip key={id}>
@@ -107,16 +112,20 @@ export function DocPanel({
 
       {mode === 'doc' ? (
         <div
-          role="tabpanel"
-          id={`panel-${activeTab}`}
-          aria-labelledby={`tab-${activeTab}`}
+          {...(showTabStrip
+            ? {
+                role: 'tabpanel' as const,
+                id: `panel-${effectiveTab}`,
+                'aria-labelledby': `tab-${effectiveTab}`,
+              }
+            : {})}
           className="min-h-0 flex-1"
         >
-          {activeTab === 'outline' && (
+          {effectiveTab === 'outline' && (
             <OutlinePanel docName={docName} isSourceMode={isSourceMode} />
           )}
-          {activeTab === 'links' && <LinksPanel docName={docName} />}
-          {activeTab === 'graph' && (
+          {effectiveTab === 'links' && <LinksPanel docName={docName} />}
+          {effectiveTab === 'graph' && (
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -127,7 +136,7 @@ export function DocPanel({
               <LazyGraphPanel activeDocName={docName} />
             </Suspense>
           )}
-          {activeTab === 'timeline' && (
+          {effectiveTab === 'timeline' && (
             <TimelineContent
               docName={docName}
               diffLayout={diffLayout}

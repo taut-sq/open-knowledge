@@ -72,6 +72,7 @@ import { hashFromDocName } from '@/lib/doc-hash';
 import { runWithToast as runWithToastBase } from '@/lib/error-state';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
 import { formatShortcut, matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
+import { useSingleFileMode } from '@/lib/single-file-mode';
 import { SETTINGS_OPEN_HASH } from '@/lib/use-settings-route';
 import { useWorkspace } from '@/lib/use-workspace';
 import { cn } from '@/lib/utils.ts';
@@ -179,6 +180,7 @@ export function computeVisibleSearchResults({
 
 export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPaletteProps) {
   const { t } = useLingui();
+  const singleFile = useSingleFileMode();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const trimmedDeferredQuery = deferredQuery.trim();
@@ -414,10 +416,13 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
     matchesCommandQuery(t`Open folder on disk`, deferredQuery, ['project']);
   const showProjectSwitch =
     !isTagMode &&
+    !singleFile &&
     bridge !== null &&
     matchesCommandQuery(t`Switch Project`, deferredQuery, ['switch project navigator projects']);
   const showSettings =
-    !isTagMode && matchesCommandQuery(t`Settings`, deferredQuery, ['preferences config']);
+    !isTagMode &&
+    !singleFile &&
+    matchesCommandQuery(t`Settings`, deferredQuery, ['preferences config']);
   const showInstallClaudeDesktop =
     SHOW_INSTALL_SKILL &&
     !isTagMode &&

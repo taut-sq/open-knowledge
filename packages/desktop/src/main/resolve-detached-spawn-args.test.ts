@@ -138,4 +138,32 @@ describe('resolveDetachedSpawnArgs', () => {
       `${PARENT_APP}/Contents/Resources/app`,
     ]);
   });
+
+  test('ephemeral mode appends --single-file + --project-dir and cwds at the temp project root', () => {
+    const { args, opts } = resolveDetachedSpawnArgs(
+      makeInput({
+        contentDir: '/Users/me/notes', // the file's real parent
+        projectDir: '/tmp/ok-ephemeral-xyz', // throwaway temp project root
+        singleFile: '/Users/me/notes/todo.md',
+      }),
+    );
+    expect(args).toEqual([
+      `${PARENT_APP}/Contents/Resources/app.asar.unpacked/dist/cli.mjs`,
+      'start',
+      '--serve-content-assets',
+      '--react-shell-dist-dir',
+      `${PARENT_APP}/Contents/Resources/app`,
+      '--single-file',
+      '/Users/me/notes/todo.md',
+      '--project-dir',
+      '/tmp/ok-ephemeral-xyz',
+    ]);
+    expect(opts.cwd).toBe('/tmp/ok-ephemeral-xyz');
+  });
+
+  test('non-ephemeral spawn carries no single-file flags (absent fields omit cleanly)', () => {
+    const { args } = resolveDetachedSpawnArgs(makeInput());
+    expect(args).not.toContain('--single-file');
+    expect(args).not.toContain('--project-dir');
+  });
 });

@@ -94,6 +94,30 @@ async function postMcpWithHost(
   });
 }
 
+/** GET `path` with an explicit `Host` header — `fetch` can't override Host, so
+ *  the rebinding case (loopback TCP peer, attacker-controlled Host) needs the
+ *  raw `http.request`. */
+async function getWithHost(
+  port: number,
+  path: string,
+  host: string,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(
+      { hostname: '127.0.0.1', port, path, method: 'GET', headers: { Host: host } },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf-8') }),
+        );
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 async function requestUnknownUpgrade(port: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = createNetConnection({ host: '127.0.0.1', port });
@@ -326,6 +350,60 @@ describe('mountMcpAndApi content-asset middleware', () => {
     for (const dir of tmpDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('mountMcpAndApi ephemeral content-asset gate', () => {
+  const tmpDirs: string[] = [];
+
+  async function startAssets(ephemeral: boolean): Promise<{ port: number }> {
+    const contentDir = mkdtempSync(join(tmpdir(), 'ok-mcp-mount-gate-'));
+    tmpDirs.push(contentDir);
+    writeFileSync(
+      join(contentDir, 'secret.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+    const httpServer = createServer();
+    const mount = mountMcpAndApi({
+      httpServer,
+      hocuspocus,
+      log,
+      ephemeral,
+      contentAssetMiddleware: createAssetServeMiddleware({
+        contentFilter: { isPathIgnored: () => false },
+        contentSirv: sirv(contentDir, { dev: true, dotfiles: false }),
+        inlineExtensions: INLINE_RENDERABLE_EXTENSIONS,
+        assetExtensions: ASSET_EXTENSIONS,
+        blocklistExtensions: EXECUTABLE_BLOCKLIST_EXTENSIONS,
+      }),
+    });
+    const port = await getFreePort();
+    await new Promise<void>((resolve) => httpServer.listen(port, '127.0.0.1', () => resolve()));
+    servers.push({ httpServer, mount });
+    return { port };
+  }
+
+  test('ephemeral: a loopback request with a localhost Host still serves the asset', async () => {
+    const { port } = await startAssets(true);
+    const res = await getWithHost(port, '/secret.png', `localhost:${port}`);
+    expect(res.status).toBe(200);
+  });
+
+  test('ephemeral: a rebound Host header is rejected with 403 loopback-required', async () => {
+    const { port } = await startAssets(true);
+    const res = await getWithHost(port, '/secret.png', 'evil.example.com');
+    expect(res.status).toBe(403);
+    expect((JSON.parse(res.body) as { type?: string }).type).toBe('urn:ok:error:loopback-required');
+  });
+
+  test('non-ephemeral (project mode): the same rebound Host header still serves', async () => {
+    const { port } = await startAssets(false);
+    const res = await getWithHost(port, '/secret.png', 'evil.example.com');
+    expect(res.status).toBe(200);
+  });
+
+  afterEach(() => {
+    for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 });
 

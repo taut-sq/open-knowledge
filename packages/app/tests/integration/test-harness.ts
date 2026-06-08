@@ -85,46 +85,63 @@ export interface CreateTestServerOptions {
   gitEnabled?: boolean;
   commitDebounceMs?: number;
   localOpCliArgs?: string[];
+  ephemeral?: boolean;
+  projectDir?: string;
+  singleDocRelPath?: string;
 }
 
 export async function createTestServer(options: CreateTestServerOptions = {}): Promise<TestServer> {
+  const ephemeral = options.ephemeral ?? false;
+
   const contentDir =
     options.contentDir !== undefined
       ? realpathSync(options.contentDir)
       : realpathSync(mkdtempSync(join(tmpdir(), 'ok-test-')));
-  if (options.contentDir === undefined) {
-    writeFileSync(join(contentDir, 'test-doc.md'), '', 'utf-8');
-  }
 
-  if (options.contentDir === undefined) {
-    mkdirSync(join(contentDir, '.ok'), { recursive: true });
-    writeFileSync(join(contentDir, '.ok', 'config.yml'), '', 'utf-8');
-  }
+  const createdProjectDir = ephemeral && options.projectDir === undefined;
+  const projectDir = ephemeral
+    ? realpathSync(options.projectDir ?? mkdtempSync(join(tmpdir(), 'ok-ephemeral-test-')))
+    : contentDir;
 
-  await ensureProjectGit(contentDir);
+  if (!ephemeral) {
+    if (options.contentDir === undefined) {
+      writeFileSync(join(contentDir, 'test-doc.md'), '', 'utf-8');
+    }
+
+    if (options.contentDir === undefined) {
+      mkdirSync(join(contentDir, '.ok'), { recursive: true });
+      writeFileSync(join(contentDir, '.ok', 'config.yml'), '', 'utf-8');
+    }
+
+    await ensureProjectGit(contentDir);
+  }
 
   const port = await getFreePort();
   const srv = createServer({
     contentDir,
+    projectDir,
     quiet: true,
     debounce: options.debounce ?? 200,
     maxDebounce: options.maxDebounce ?? 1000,
-    gitEnabled: options.gitEnabled ?? false,
+    gitEnabled: ephemeral ? false : (options.gitEnabled ?? false),
     commitDebounceMs: options.commitDebounceMs ?? 200,
     contentRoot: options.gitEnabled === true ? '.' : undefined,
     enableTestRoutes: true,
     localOpCliArgs: options.localOpCliArgs,
+    ...(ephemeral ? { ephemeral: true, singleDocRelPath: options.singleDocRelPath } : {}),
     skipStateManifestCheck: true,
   });
 
   await srv.ready;
 
-  const mcpHttpHandler = createMcpHttpHandler({
-    contentDir,
-    projectDir: contentDir,
-    config: ConfigSchema.parse({}),
-    getServerUrl: () => `http://localhost:${port}`,
-  });
+  const mcpHttpHandler = ephemeral
+    ? undefined
+    : createMcpHttpHandler({
+        contentDir,
+        projectDir: contentDir,
+        config: ConfigSchema.parse({}),
+        getServerUrl: () => `http://localhost:${port}`,
+      });
 
   const httpServer = createHttpServer();
   const mount = mountMcpAndApi({
@@ -148,10 +165,13 @@ export async function createTestServer(options: CreateTestServerOptions = {}): P
     instance: srv,
     cleanup: async () => {
       await mount.shutdown();
-      await mcpHttpHandler.close();
+      await mcpHttpHandler?.close();
       await srv.destroy();
       mount.wss.close();
       await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+      if (createdProjectDir) {
+        rmSync(projectDir, { recursive: true, force: true });
+      }
       if (!options.keepContentDir) {
         rmSync(contentDir, { recursive: true, force: true });
       }

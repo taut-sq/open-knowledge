@@ -84,6 +84,11 @@ interface ProjectContext {
   window: BrowserWindowLike;
   utility: UtilityProcessLike | null;
   ownsServer: boolean;
+  ephemeral?: {
+    projectDir: string;
+    pid: number;
+    lockDir: string;
+  };
 }
 
 interface CreateProjectWindowOpts {
@@ -107,9 +112,16 @@ export interface WindowManagerDeps {
     opts: { windowLifecycleBound?: boolean },
   ): UtilityProcessLike;
   utilityEntryPath: string;
-  spawnDetachedServer?(opts: { contentDir: string; reactShellDistDir: string }): Promise<{
+  spawnDetachedServer?(opts: {
+    contentDir: string;
+    reactShellDistDir: string;
+    singleFile?: string;
+    projectDir?: string;
+  }): Promise<{
     pid: number;
   }>;
+  createEphemeralProjectDir?(contentDir: string): string;
+  removeDir?(dir: string): Promise<void>;
   spawnLockPollDeadlineMs?: number;
   sigtermGraceMs?: number;
   createKeepalive?(opts: { lockDir: string }): KeepaliveHandle;
@@ -144,6 +156,8 @@ export class WindowManager {
   private readonly windowsByPath = new Map<string, ProjectContext>();
 
   private readonly spawnedDetachedPids = new Map<string, number>();
+
+  private readonly ephemeralPendingByPath = new Map<string, Promise<ProjectContext>>();
 
   private readonly keepalives = new Map<string, KeepaliveHandle>();
 
@@ -259,7 +273,15 @@ export class WindowManager {
     };
     const entries = [...this.spawnedDetachedPids.entries()];
     this.spawnedDetachedPids.clear();
-    await Promise.all(entries.map(([key, pid]) => stopOne(key, pid)));
+
+    const ephemeralSessions = [...this.windowsByPath.values()]
+      .map((ctx) => ctx.ephemeral)
+      .filter((e): e is NonNullable<ProjectContext['ephemeral']> => e !== undefined);
+
+    await Promise.all([
+      ...entries.map(([key, pid]) => stopOne(key, pid)),
+      ...ephemeralSessions.map((session) => this.teardownEphemeralSession(session)),
+    ]);
   }
 
   private async terminateServerByPid(
@@ -692,6 +714,214 @@ export class WindowManager {
     };
     this.windowsByPath.set(canonicalKey, context);
     return context;
+  }
+
+  async createEphemeralWindow(opts: {
+    canonicalFilePath: string;
+    contentDir: string;
+    docName: string;
+  }): Promise<ProjectContext> {
+    const canonicalKey = this.canonicalizeKey(opts.canonicalFilePath);
+    const existing = this.windowsByPath.get(canonicalKey);
+    if (existing) {
+      if (existing.window.isDestroyed?.() !== true) {
+        existing.window.focus();
+        return existing;
+      }
+      this.deps.log?.warn(
+        { canonicalKey },
+        '[window-manager] stale destroyed ephemeral entry — clearing and re-creating',
+      );
+      this.windowsByPath.delete(canonicalKey);
+    }
+
+    const inFlight = this.ephemeralPendingByPath.get(canonicalKey);
+    if (inFlight) {
+      const ctx = await inFlight;
+      if (ctx.window.isDestroyed?.() !== true) {
+        ctx.window.focus();
+        return ctx;
+      }
+      return this.createEphemeralWindow(opts);
+    }
+
+    const work = (async (): Promise<ProjectContext> => {
+      try {
+        return await this.spawnEphemeralWindow(opts, canonicalKey);
+      } finally {
+        this.ephemeralPendingByPath.delete(canonicalKey);
+      }
+    })();
+    this.ephemeralPendingByPath.set(canonicalKey, work);
+    return work;
+  }
+
+  private async spawnEphemeralWindow(
+    opts: { canonicalFilePath: string; contentDir: string; docName: string },
+    canonicalKey: string,
+  ): Promise<ProjectContext> {
+    const { createEphemeralProjectDir, spawnDetachedServer, removeDir } = this.deps;
+    if (!createEphemeralProjectDir || !spawnDetachedServer || !removeDir) {
+      throw new Error(
+        'createEphemeralWindow requires createEphemeralProjectDir + spawnDetachedServer + removeDir deps to be wired',
+      );
+    }
+
+    const projectName = basename(opts.canonicalFilePath);
+
+    const tempProjectDir = createEphemeralProjectDir(opts.contentDir);
+    const lockDir = getLocalDir(tempProjectDir);
+
+    const reactShellDistDir = dirname(this.deps.rendererEntryPath);
+    let handle: { pid: number };
+    try {
+      handle = await spawnDetachedServer({
+        contentDir: opts.contentDir,
+        reactShellDistDir,
+        singleFile: opts.canonicalFilePath,
+        projectDir: tempProjectDir,
+      });
+    } catch (err) {
+      await removeDir(tempProjectDir).catch(() => {});
+      throw err;
+    }
+
+    const POLL_DEADLINE_MS = this.deps.spawnLockPollDeadlineMs ?? 15_000;
+    const lock = await this.pollServerLock(lockDir, POLL_DEADLINE_MS);
+    if (lock === null) {
+      try {
+        this.deps.killProbe(handle.pid, 'SIGTERM');
+      } catch (signalErr) {
+        const code = (signalErr as NodeJS.ErrnoException).code;
+        if (code !== 'ESRCH') {
+          this.deps.log?.warn(
+            {
+              event: 'desktop-ephemeral-spawn-orphan-sigterm-failed',
+              err: (signalErr as Error).message,
+              code,
+              pid: handle.pid,
+            },
+            '[window-manager] SIGTERM on ephemeral orphan after spawn-lock-timeout failed',
+          );
+        }
+      }
+      await removeDir(tempProjectDir).catch(() => {});
+      const STDERR_TAIL_BYTES = 8192;
+      let stderrTail: string | undefined;
+      try {
+        const raw = readFileSync(join(lockDir, SPAWN_ERROR_LOG), 'utf-8');
+        stderrTail = raw.length > STDERR_TAIL_BYTES ? `…${raw.slice(-STDERR_TAIL_BYTES)}` : raw;
+      } catch {}
+      const messageBase = `Open Knowledge server did not bind a port within ${POLL_DEADLINE_MS}ms after ephemeral spawn (pid=${handle.pid}).`;
+      throw Object.assign(
+        new Error(stderrTail ? `${messageBase}\n--- stderr ---\n${stderrTail}` : messageBase),
+        {
+          name: 'SpawnLockTimeoutError' as const,
+          kind: 'spawn-lock-timeout' as const,
+          pid: handle.pid,
+          ...(stderrTail !== undefined && { stderrTail }),
+        },
+      );
+    }
+
+    const port = lock.port;
+    const apiOrigin = `http://localhost:${port}`;
+    this.deps.log?.info(
+      {
+        event: 'desktop-ephemeral-server-spawned',
+        pid: handle.pid,
+        port,
+        lockDir,
+        file: opts.canonicalFilePath,
+      },
+      '[window-manager] ephemeral single-file server ready',
+    );
+
+    const window = this.deps.createWindow({
+      additionalArguments: [
+        `--ok-collab-url=ws://localhost:${port}/collab`,
+        `--ok-api-origin=${apiOrigin}`,
+        `--ok-project-path=${opts.contentDir}`,
+        `--ok-project-name=${projectName}`,
+        `--ok-mode=editor`,
+        `--ok-single-file=1`,
+        `--ok-initial-doc=${opts.docName}`,
+        `--ok-app-version=${this.deps.appVersion}`,
+      ],
+      title: formatEditorTitle(projectName),
+    });
+
+    const disposeShowGate = this.deps.showGate.register(window, { kind: 'editor' });
+
+    try {
+      if (this.deps.rendererDevUrl) {
+        await window.loadURL(this.deps.rendererDevUrl);
+      } else {
+        await window.loadFile(this.deps.rendererEntryPath);
+      }
+    } catch (err) {
+      disposeShowGate();
+      window.destroy?.();
+      await this.teardownEphemeralSession({
+        projectDir: tempProjectDir,
+        pid: handle.pid,
+        lockDir,
+      });
+      throw err;
+    }
+
+    const context: ProjectContext = {
+      projectPath: opts.contentDir,
+      canonicalKey,
+      projectName,
+      port,
+      apiOrigin,
+      window,
+      utility: null,
+      ownsServer: false,
+      ephemeral: { projectDir: tempProjectDir, pid: handle.pid, lockDir },
+    };
+
+    window.on('closed', () => {
+      disposeShowGate();
+      if (this.windowsByPath.get(canonicalKey) !== context) return;
+      this.windowsByPath.delete(canonicalKey);
+      void this.teardownEphemeralSession(
+        context.ephemeral as NonNullable<ProjectContext['ephemeral']>,
+      );
+    });
+
+    this.windowsByPath.set(canonicalKey, context);
+    return context;
+  }
+
+  private async teardownEphemeralSession(session: {
+    projectDir: string;
+    pid: number;
+    lockDir: string;
+  }): Promise<void> {
+    const term = await this.terminateServerByPid(session.lockDir, session.pid);
+    if (!term.ok) {
+      this.deps.log?.warn(
+        {
+          event: 'desktop-ephemeral-teardown',
+          outcome: term.reason,
+          pid: session.pid,
+          projectDir: session.projectDir,
+        },
+        '[window-manager] ephemeral server termination did not confirm; removing temp dir anyway',
+      );
+    }
+    await this.deps.removeDir?.(session.projectDir).catch((err: unknown) => {
+      this.deps.log?.warn(
+        {
+          event: 'desktop-ephemeral-teardown',
+          err: err instanceof Error ? err.message : String(err),
+          projectDir: session.projectDir,
+        },
+        '[window-manager] failed to remove ephemeral temp dir',
+      );
+    });
   }
 
   closeProjectWindow(projectPath: string): boolean {

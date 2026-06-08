@@ -18,6 +18,7 @@ import {
   type Config,
   isProjectRoot,
   type PinoLogger,
+  prepareSingleFileOpen,
 } from '@inkeep/open-knowledge-server';
 import { Command, InvalidArgumentError } from 'commander';
 import { detectGh } from '../auth/gh-detect.ts';
@@ -295,6 +296,8 @@ interface BootStartServerOptions {
   }) => Promise<unknown> | unknown;
   serveContentAssets?: boolean;
   reactShellDistDir?: string;
+  singleFile?: string;
+  projectDir?: string;
 }
 
 export interface BootedStartServer {
@@ -316,43 +319,54 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
   const idleThresholdMs = opts.idleThresholdMs ?? DEFAULT_IDLE_THRESHOLD_MS;
 
   const { existsSync, mkdirSync } = await import('node:fs');
+  const { basename, dirname } = await import('node:path');
   const { bootServer, getLogger, isProcessAlive, readUiLock, resolveContentDir } = await import(
     '@inkeep/open-knowledge-server'
   );
 
   const log = opts.log ?? getLogger('start');
 
-  if (!skipAutoInit && !isProjectRoot(cwd)) {
-    throw new OkDirMissingError(cwd);
+  const ephemeral = opts.singleFile !== undefined;
+  const ephemeralProjectDir = opts.projectDir ?? cwd;
+  const ephemeralFile = ephemeral
+    ? prepareSingleFileOpen(opts.singleFile as string).canonicalFilePath
+    : undefined;
+  const ephemeralContentDir = ephemeralFile ? dirname(ephemeralFile) : undefined;
+  const ephemeralDocRelPath = ephemeralFile ? basename(ephemeralFile) : undefined;
+
+  if (!ephemeral) {
+    if (!skipAutoInit && !isProjectRoot(cwd)) {
+      throw new OkDirMissingError(cwd);
+    }
+
+    const reclaimDisableEnv = process.env.OK_RECLAIM_DISABLE ?? null;
+
+    try {
+      const repair =
+        opts.repairMcpConfigsFn ?? (await import('./repair-mcp-configs.ts')).repairMcpConfigs;
+      repair({ projectDir: cwd, reclaimDisableEnv });
+    } catch (err) {
+      log.warn({ err }, '[start] mcp-config repair sweep failed; continuing');
+    }
+
+    try {
+      const repair =
+        opts.repairLaunchJsonFn ?? (await import('./repair-launch-json.ts')).repairLaunchJson;
+      repair({ projectDir: cwd, reclaimDisableEnv });
+    } catch (err) {
+      log.warn({ err }, '[start] launch.json repair sweep failed; continuing');
+    }
+
+    try {
+      const repair = opts.repairSkillsFn ?? (await import('./repair-skills.ts')).repairSkills;
+      await repair({ projectDir: cwd, reclaimDisableEnv });
+    } catch (err) {
+      log.warn({ err }, '[start] skill repair sweep failed; continuing');
+    }
   }
 
-  const reclaimDisableEnv = process.env.OK_RECLAIM_DISABLE ?? null;
-
-  try {
-    const repair =
-      opts.repairMcpConfigsFn ?? (await import('./repair-mcp-configs.ts')).repairMcpConfigs;
-    repair({ projectDir: cwd, reclaimDisableEnv });
-  } catch (err) {
-    log.warn({ err }, '[start] mcp-config repair sweep failed; continuing');
-  }
-
-  try {
-    const repair =
-      opts.repairLaunchJsonFn ?? (await import('./repair-launch-json.ts')).repairLaunchJson;
-    repair({ projectDir: cwd, reclaimDisableEnv });
-  } catch (err) {
-    log.warn({ err }, '[start] launch.json repair sweep failed; continuing');
-  }
-
-  try {
-    const repair = opts.repairSkillsFn ?? (await import('./repair-skills.ts')).repairSkills;
-    await repair({ projectDir: cwd, reclaimDisableEnv });
-  } catch (err) {
-    log.warn({ err }, '[start] skill repair sweep failed; continuing');
-  }
-
-  const contentDir = resolveContentDir(config, cwd);
-  if (!existsSync(contentDir)) {
+  const contentDir = ephemeralContentDir ?? resolveContentDir(config, cwd);
+  if (!ephemeral && !existsSync(contentDir)) {
     mkdirSync(contentDir, { recursive: true });
     log.info({ contentDir }, 'Created content directory');
   }
@@ -398,13 +412,26 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
   const booted: BootedServer = await bootServer({
     config,
     contentDir,
-    projectDir: cwd,
-    contentRoot: config.content.dir,
+    projectDir: ephemeral ? ephemeralProjectDir : cwd,
+    contentRoot: ephemeral ? undefined : config.content.dir,
     port: opts.port,
     host,
     quiet: false,
     detectGh,
     tokenStore,
+    ...(ephemeral
+      ? {
+          ephemeral: true as const,
+          singleDocRelPath: ephemeralDocRelPath,
+          gitEnabled: false as const,
+          gitPreflight: () => ({
+            ok: true as const,
+            version: '0.0.0',
+            resolvedPath: 'git',
+            source: 'PATH' as const,
+          }),
+        }
+      : {}),
     localOpCliArgs: [process.execPath, process.argv[1]],
     attachUiSibling,
     idleShutdownMs: idleThresholdMs,
@@ -473,6 +500,12 @@ interface StartCommandOptions {
   mode?: StartMode;
   serveContentAssets?: boolean;
   reactShellDistDir?: string;
+  /** From `--single-file <path>`. See `BootStartServerOptions.singleFile` — boots
+   *  the no-project ephemeral single-file shape (the desktop spawn passes it). */
+  singleFile?: string;
+  /** From `--project-dir <dir>`. See `BootStartServerOptions.projectDir` — the
+   *  throwaway temp project root for the ephemeral single-file shape. */
+  projectDir?: string;
 }
 
 function parseStartMode(value: string): StartMode {
@@ -522,6 +555,8 @@ export async function runStartCommand(config: Config, opts: StartCommandOptions)
       ...(requestedUiPort !== undefined ? { uiPort: requestedUiPort } : {}),
       ...(opts.serveContentAssets ? { serveContentAssets: true } : {}),
       ...(opts.reactShellDistDir ? { reactShellDistDir: opts.reactShellDistDir } : {}),
+      ...(opts.singleFile ? { singleFile: opts.singleFile } : {}),
+      ...(opts.projectDir ? { projectDir: opts.projectDir } : {}),
     });
   } catch (err) {
     if (err instanceof OkDirMissingError) {
@@ -535,6 +570,15 @@ export async function runStartCommand(config: Config, opts: StartCommandOptions)
       err instanceof serverModule.GitTooOldError
     ) {
       process.exit(78);
+    }
+
+    if (
+      err instanceof serverModule.SingleFileNotFoundError ||
+      err instanceof serverModule.SingleFileNotAFileError ||
+      err instanceof serverModule.SingleFileNotMarkdownError
+    ) {
+      console.error(error(err.message));
+      process.exit(1);
     }
 
     if (requestedUiPort !== undefined && isServerLockCollision(err, serverModule)) {
@@ -670,6 +714,14 @@ export function startCommand(getConfig: () => Config): Command {
     .option(
       '--react-shell-dist-dir <path>',
       'Serve React shell from <path> (suppresses ok ui sibling)',
+    )
+    .option(
+      '--single-file <path>',
+      'No-project ephemeral single-file mode: scope the server to one markdown file (git + MCP off)',
+    )
+    .option(
+      '--project-dir <dir>',
+      'Throwaway project root for --single-file (where ephemeral .ok/ state lives)',
     )
     .action(async (opts: StartCommandOptions) => {
       const config = getConfig();

@@ -91,6 +91,10 @@ function pathHasAlwaysSkipSegment(relativePath: string): boolean {
   return false;
 }
 
+function isSingleDocAncestorDir(relativeDir: string, singleDocRelPath: string): boolean {
+  return singleDocRelPath === relativeDir || singleDocRelPath.startsWith(`${relativeDir}/`);
+}
+
 const IGNORE_FILE_NAMES = ['.gitignore', '.okignore'] as const;
 
 function loadGitExcludeSources(projectDir: string, bytesAcc: { value: number }): string[] {
@@ -227,6 +231,7 @@ async function appendExcludeFileIfExistsAsync(
 export interface ContentFilterOptions {
   projectDir: string;
   contentDir: string;
+  singleDocRelPath?: string;
   onAfterRebuild?: () => void;
 }
 
@@ -259,7 +264,7 @@ export interface ContentFilter {
 }
 
 export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
-  const { projectDir, contentDir, onAfterRebuild } = opts;
+  const { projectDir, contentDir, onAfterRebuild, singleDocRelPath } = opts;
 
   const contentRelPrefix = relative(projectDir, contentDir);
   const contentOutsideProject = contentRelPrefix.startsWith('..');
@@ -354,7 +359,12 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
     return ig.ignores(projectRelPath);
   }
 
-  populateDirCount(contentDir, '', isIgnored, dirCount);
+  const refreshDirCount = (): void => {
+    if (singleDocRelPath !== undefined) return;
+    populateDirCount(contentDir, '', isIgnored, dirCount);
+  };
+
+  refreshDirCount();
 
   function isReservedDocName(relativePath: string): boolean {
     const docName = stripDocExtension(relativePath);
@@ -376,6 +386,8 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
 
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
 
+      if (singleDocRelPath !== undefined) return relativePath !== singleDocRelPath;
+
       if (opts?.bypassFilters) return false;
 
       if (isRejectedByConfigurableRules(relativePath)) return true;
@@ -394,6 +406,9 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
 
     isDirExcluded(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (singleDocRelPath !== undefined) {
+        return !isSingleDocAncestorDir(relativePath, singleDocRelPath);
+      }
       if (opts?.bypassFilters) return false;
       for (const segment of relativePath.split('/')) {
         if (BUILTIN_SKIP_DIRS.has(segment)) return true;
@@ -435,7 +450,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
       const prev = new Map(dirCount);
       dirCount.clear();
       try {
-        populateDirCount(contentDir, '', isIgnored, dirCount);
+        refreshDirCount();
       } catch (err) {
         for (const [k, v] of prev) dirCount.set(k, v);
         getLogger('content-filter').warn(
@@ -461,7 +476,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
         try {
           const counts = buildPatternState();
           dirCount.clear();
-          populateDirCount(contentDir, '', isIgnored, dirCount);
+          refreshDirCount();
 
           const durationMs = Date.now() - startedAt;
           span.setAttributes({
@@ -506,7 +521,7 @@ export function createContentFilter(opts: ContentFilterOptions): ContentFilter {
           lastBytes = prevBytes;
           dirCount.clear();
           try {
-            populateDirCount(contentDir, '', isIgnored, dirCount);
+            refreshDirCount();
           } catch (rollbackErr) {
             log.warn(
               {
@@ -676,7 +691,7 @@ async function initContentDirStateAsync(
 }
 
 export async function createContentFilterAsync(opts: ContentFilterOptions): Promise<ContentFilter> {
-  const { projectDir, contentDir, onAfterRebuild } = opts;
+  const { projectDir, contentDir, onAfterRebuild, singleDocRelPath } = opts;
 
   const contentRelPrefix = relative(projectDir, contentDir);
   const contentOutsideProject = contentRelPrefix.startsWith('..');
@@ -685,6 +700,11 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
   let watcherIgnoreGlobs: string[] = [];
 
   const dirCount = new Map<string, number>();
+
+  const refreshDirCount = (): void => {
+    if (singleDocRelPath !== undefined) return;
+    populateDirCount(contentDir, '', isIgnored, dirCount);
+  };
 
   function isIgnored(relativePath: string): boolean {
     if (contentOutsideProject) return false;
@@ -742,15 +762,17 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
     }
 
     const newDirCount = new Map<string, number>();
-    await initContentDirStateAsync(
-      contentDir,
-      '',
-      projectDir,
-      newIg,
-      contentRelPrefix,
-      contentOutsideProject,
-      newDirCount,
-    );
+    if (singleDocRelPath === undefined) {
+      await initContentDirStateAsync(
+        contentDir,
+        '',
+        projectDir,
+        newIg,
+        contentRelPrefix,
+        contentOutsideProject,
+        newDirCount,
+      );
+    }
 
     ig = newIg;
     watcherIgnoreGlobs = newRootPatterns.filter(
@@ -766,6 +788,7 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
     isExcluded(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (isReservedDocName(relativePath)) return true;
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (singleDocRelPath !== undefined) return relativePath !== singleDocRelPath;
       if (opts?.bypassFilters) return false;
       if (isRejectedByConfigurableRules(relativePath)) return true;
       if (isSupportedDocFile(relativePath)) return false;
@@ -780,6 +803,9 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
 
     isDirExcluded(relativePath: string, opts?: ContentFilterReadOpts): boolean {
       if (pathHasAlwaysSkipSegment(relativePath)) return true;
+      if (singleDocRelPath !== undefined) {
+        return !isSingleDocAncestorDir(relativePath, singleDocRelPath);
+      }
       if (opts?.bypassFilters) return false;
       for (const segment of relativePath.split('/')) {
         if (BUILTIN_SKIP_DIRS.has(segment)) return true;
@@ -821,7 +847,7 @@ export async function createContentFilterAsync(opts: ContentFilterOptions): Prom
       const prev = new Map(dirCount);
       dirCount.clear();
       try {
-        populateDirCount(contentDir, '', isIgnored, dirCount);
+        refreshDirCount();
       } catch (err) {
         for (const [k, v] of prev) dirCount.set(k, v);
         getLogger('content-filter').warn(

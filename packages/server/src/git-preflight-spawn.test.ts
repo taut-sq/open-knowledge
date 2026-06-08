@@ -47,7 +47,7 @@ describe('bootServer() preflight survives the subprocess boundary (FR6 / US-005)
             contentDir: projectDir,
             port: 0,
             quiet: true,
-            gitEnabled: false,
+            gitEnabled: true,
             idleShutdownMs: null,
             attachUiSibling: false,
             gitPreflight: () => { throw new GitNotAvailableError('linux', guidance); },
@@ -120,7 +120,7 @@ describe('bootServer() preflight survives the subprocess boundary (FR6 / US-005)
             contentDir: projectDir,
             port: 0,
             quiet: true,
-            gitEnabled: false,
+            gitEnabled: true,
             idleShutdownMs: null,
             attachUiSibling: false,
             gitPreflight: () => {
