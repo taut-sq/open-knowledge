@@ -1,7 +1,0 @@
----
-"@inkeep/open-knowledge-server": patch
----
-
-Fix `exec` MCP results overflowing the client's per-result token limit on mid-size reads. The visible body was serialized up to 3× per result — `content[].text`, `structuredContent.text` (the load-bearing cross-client mirror that Claude-class clients read when they drop `content[].text`), and a redundant `structuredContent.stdout` raw copy — while the soft cap budgeted only one copy. A markdown file comfortably under the cap (so `exec` reported `stdoutTruncated: false`) could still produce a result large enough that the client rejected it and spilled to a file, silently degrading an in-budget read.
-
-Two changes: (1) drop the `structuredContent.stdout` field. It was the original Claude-Desktop `content[].text`-drop workaround, fully superseded by the `structuredContent.text` mirror it predates; its bytes are a strict subset of `text` and nothing consumed it. (2) Recalibrate the soft cap to budget the realized 2× body duplication (`content[].text` + `structuredContent.text`) rather than a single copy — the per-string cap is now ~25 KB (`RESULT_BODY_BUDGET_BYTES / WIRE_BODY_COPIES`), so the doubled payload stays well under the client ceiling. Oversized reads now truncate with the existing `<truncated: … re-run with a more-specific query>` marker instead of silently overflowing. The cross-client `content[].text` + `structuredContent.text` mirror is unchanged.
