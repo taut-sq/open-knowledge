@@ -122,6 +122,50 @@
   padding: 0.12em 0.4em;
 }
 
+/* ------------------------------------------------------------------
+ * .ok-route-tabs — render the Quickstart "pick a path" tabs as an
+ * obvious full-width segmented control (boxed pills) instead of
+ * Fumadocs' default underline tabs, so it clearly reads as a choice.
+ * Rules are unlayered (they win over Tailwind utility classes) and
+ * target ARIA roles, so Radix a11y + the shared-groupId sync are kept;
+ * this is purely visual.
+ * ------------------------------------------------------------------ */
+.ok-route-tabs {
+  --ok-route-accent: #3784ff;
+}
+.dark .ok-route-tabs {
+  --ok-route-accent: #69a3ff;
+}
+.ok-route-tabs [role="tablist"] {
+  gap: 0.375rem;
+  padding: 0.375rem;
+}
+.ok-route-tabs [role="tab"] {
+  flex: 1 1 0;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-weight: 500;
+  color: var(--color-fd-muted-foreground);
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.ok-route-tabs [role="tab"]:hover {
+  color: var(--color-fd-foreground);
+  background: color-mix(in oklch, var(--color-fd-card) 70%, transparent);
+}
+.ok-route-tabs [role="tab"][data-state="active"] {
+  background: var(--color-fd-card);
+  color: var(--color-fd-foreground);
+  border-color: var(--ok-route-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
 .slide-btn-accent {
   background-color: var(--slide-accent);
   color: #fff;

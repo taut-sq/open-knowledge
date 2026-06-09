@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Get your Agent maintained knowledge base up and running in less than five minutes.
+description: Setup your agent maintained knowledge base in less than five minutes.
 ---
 
 <Callout type="info" title="Prerequisites">
@@ -14,27 +14,55 @@ description: Get your Agent maintained knowledge base up and running in less tha
 
 ### Install the desktop app
 
-Download Open Knowledge for macOS. Open the DMG, drag **Open Knowledge** to **Applications**, and launch it.
+Click the below button to download the latest version of the Open Knowledge desktop app for macOS.
 
 <DownloadButton href="https://github.com/inkeep/open-knowledge-legacy/releases/latest/download/Open-Knowledge-arm64.dmg" label="Download for macOS" />
-
-_Apple Silicon (M1 and later) only for now; Intel Macs are not yet supported._
 
 </Step>
 
 <Step>
 
-### Pick a project
+### Open or create an Open Knowledge project
 
-**Want to explore without any setup?** Open our example knowledge base — a collection of notes on notable tech IPOs — and poke around:
+Choose how you want to start, then follow that path through the rest of this guide. You can switch anytime; your choice carries over to the prompts below.
 
-<CtaButton href="https://openknowledge.ai/d/AWh0dHBzOi8vZ2l0aHViLmNvbS9pbmtlZXAvdGVjaC1pcG9zL2Jsb2IvbWFpbi9SRUFETUUubWQ" label="Open the example knowledge base" />
+<Tabs groupId="ok-start-route" persist className="ok-route-tabs" items={['Tech IPOs KB Example', 'Your own repo', 'New project']}>
 
-Follow the prompts to open the example repo in the Open Knowledge app.
+<Tab>
 
-Otherwise, open the Open Knowledge app and click **Pick Existing Project** to choose your own project, **Create New Project** to scaffold a fresh one, or **Clone from GitHub** to pull down a remote repo.
+**Recommended: the fastest way to explore, with no setup and no files of your own.** Our example knowledge base is a collection of notes on notable tech IPOs happening this year.
 
-The first-launch consent dialog detects every MCP-capable editor on your machine (Claude Code, Cursor, Codex, Claude Desktop) and offers to wire them up to Open Knowledge.
+<CtaButton href="https://openknowledge.ai/d/AWh0dHBzOi8vZ2l0aHViLmNvbS9pbmtlZXAvdGVjaC1pcG9zL2Jsb2IvbWFpbi9SRUFETUUubWQ" label="Open inkeep/tech-ipos-kb-example" />
+
+- Click **Open inkeep/tech-ipos-kb-example** button above.
+- Follow the prompts to open the example repo in the Open Knowledge app.
+
+</Tab>
+
+<Tab>
+
+Point Open Knowledge at a code repository you already work in to organize your technical specs; they live in git, right next to the code they describe.
+
+- Open the Open Knowledge app and click **Pick Existing Project**.
+- Choose your repo (or a `docs/` or `specs/` folder inside it).
+- Working off GitHub? **Clone from GitHub** pulls it down first.
+
+</Tab>
+
+<Tab>
+
+Starting from scratch? Build a brand-new, empty knowledge base.
+
+- Open the Open Knowledge app.
+- Click **Create New Project** to scaffold a fresh, empty knowledge base.
+
+</Tab>
+
+</Tabs>
+
+<Callout type="info">
+  Whichever route you pick, the first-launch consent dialog detects every MCP-capable editor on your machine (Claude Code, Cursor, Codex, Claude Desktop) and offers to wire them up to Open Knowledge.
+</Callout>
 
 </Step>
 
@@ -42,9 +70,19 @@ The first-launch consent dialog detects every MCP-capable editor on your machine
 
 ### Open the project in your AI tool
 
-Click the **Open with AI** button and select your preferred tool. This dispatches the current file, folder, or project to your chosen agent with a starter prompt.
+With Open Knowledge app open, click the **Open with AI** button and select your preferred agent from the list. This dispatches the current file, folder, or project to your chosen agent with a starter prompt. 
 
-If your tool prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
+![The Open with AI button in the Open Knowledge app, showing the agent picker with Claude and Cursor](/screenshots/open-with-ai.png)
+
+<Callout type="info">
+  If your tool prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
+</Callout>
+
+</Step>
+
+<Step>
+
+Opening a project initializes the Open Knowledge MCP tools for that project. From then on, your agent prefers Open Knowledge's tool wrappers over its built-in file operations, so its edits keep your front matter consistent and your links intact.
 
 </Step>
 
@@ -52,19 +90,49 @@ If your tool prompts you to approve a new MCP server (Cursor does this), approve
 
 ### Ask the agent to edit a doc
 
-Opening a project initializes the Open Knowledge MCP tools for that project. From then on, your agent prefers Open Knowledge's tool wrappers over its built-in file operations, so its edits keep your front matter consistent and your links intact.
+Add your own instructions to steer the agent. These starters match the path you picked above (switch tabs to change it). Click any prompt to copy it.
 
-If you opened the example knowledge base, try one of these:
+<Tabs groupId="ok-start-route" persist className="ok-route-tabs" items={['Tech IPOs KB Example', 'Your own repo', 'New project']}>
 
-> Update the SpaceX note with the latest news about its IPO.
+<Tab>
 
-> Search for any docs that mention valuation.
+Explore the example knowledge base of notable tech IPOs:
 
-> List the recent docs.
+<CopyPrompt>Create a report on which IPO topics are trending on Hacker News this month.</CopyPrompt>
 
-Or something that spans the whole knowledge base:
+<CopyPrompt>Update the SpaceX note with the latest news about its IPO.</CopyPrompt>
 
-> Update the historical IPO prices across these notes to account for inflation.
+<CopyPrompt>What references are there to under or overvaluation?</CopyPrompt>
+
+<CopyPrompt>Update the historical IPO prices to account for inflation.</CopyPrompt>
+
+</Tab>
+
+<Tab>
+
+Turn your codebase into living technical specs the agent can read and maintain:
+
+<CopyPrompt>Read through this codebase and draft a technical spec for the most complex module: an overview, the architecture, key files, and open questions, all linked from a specs index page.</CopyPrompt>
+
+<CopyPrompt>Organize my existing specs into a linked index grouped by area, and flag any that have drifted out of sync with the current code.</CopyPrompt>
+
+<CopyPrompt>Document the architecture of this repo: create an overview page that links to a page per major module describing its responsibilities and entry points.</CopyPrompt>
+
+</Tab>
+
+<Tab>
+
+Hand the agent a topic for your empty project. Try a fan wiki about something you love:
+
+<CopyPrompt>Build a fan wiki about Avatar: The Last Airbender. Start with an overview page, then add cross-linked pages for the main characters, the four nations, notable episodes, and a timeline of major events.</CopyPrompt>
+
+<CopyPrompt>Build an in-depth knowledge base about the evolution of prequel vs sequel memes over the span of several decades. Start with an overview page, then add cross-linked pages for each era, the defining meme formats, the films and franchises that spawned them, and a timeline tracing how the rivalry evolved.</CopyPrompt>
+
+<CopyPrompt>Build a knowledge wiki about the different types of flightless birds. Start with an overview page, then add cross-linked pages for each major group (ratites like ostriches, emus, and kiwis; penguins; and flightless rails), the regions they live in, and a timeline of how flightlessness evolved.</CopyPrompt>
+
+</Tab>
+
+</Tabs>
 
 </Step>
 
@@ -77,23 +145,13 @@ The editor's sidebar shows every doc in your knowledge base. Each doc has:
 - A WYSIWYG body and a source-mode toggle
 - A frontmatter panel for properties
 - A timeline of recent edits with per-burst diffs and selective rollback
-- Backlinks to other docs that reference it
+- Backlinks to other docs that reference it and a graph view to see doc connectivity
 
 Right-click anywhere in the sidebar (empty space, a folder, or a file) to create, reveal, rename, hide, delete (to Trash), and **Open with AI**. The full feature tour is under [Features](/docs/features/editor).
 
 </Step>
 
 </Steps>
-
-## Configure it (optional)
-
-Open Knowledge works out of the box; configuration is optional. When you do want to change something, settings live in three files, and the most specific one wins:
-
-- **Project** — `.ok/config.yml`, shared with your team via git
-- **User** — `~/.ok/global.yml`, personal to you across every project on your machine
-- **This machine** — `.ok/local/config.yml`, per-machine and not shared (gitignored)
-
-Change settings in the editor's **Settings** pane (Cmd/Ctrl-,), or edit `.ok/config.yml` directly (it ships with a `$schema` comment for autocomplete and inline descriptions). Full reference: [Configuration](/docs/reference/configuration).
 
 ## What's next
 

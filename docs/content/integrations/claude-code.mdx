@@ -3,7 +3,7 @@ title: Claude Code
 description: Use Open Knowledge with Claude Code.
 ---
 
-Open Knowledge plugs into Claude Code through MCP plus an installed skill that teaches the agent how to use the tools.
+Open Knowledge works with Claude Code Agent via MCP and Skills.
 
 ## Install
 
@@ -17,16 +17,9 @@ Open the project in Claude Code and ask:
 
 > List all the docs in this project.
 
-Claude Code should call `exec` (e.g. `ls`) and respond with your knowledge base. If it doesn't see the tool, restart Claude Code so it picks up the new MCP entry.
+Claude Code should call `exec` (e.g. `ls`) and respond with your knowledge base. If Claude Code doesn't use the Open Knowledge `exec` tool, restart Claude Code so it picks up the new MCP entry.
 
 ## Live editing
 
-When Claude Code writes to a doc, the desktop editor focuses on that doc and the change streams in live.
+When Claude Code writes to a doc, You will be able to see that change in the Open Knowledge app. Just ask Claude to open it for you.
 
-## Open with AI
-
-From the editor, **Open with AI ▸ Claude** dispatches the current file, folder, or project to Claude Code in one click. Three entry points: the editor header's sparkle icon, the sidebar's right-click menu (any file, folder, or empty space), and the macOS **File → Open with AI** menu.
-
-Claude Code receives a short prompt asking it to open the target in Open Knowledge's web preview. The agent then grounds the rest of the conversation through the MCP tools, with no file attachment and no content over the wire. See [Editor → Open with AI](/docs/features/editor#open-with-ai) for the full UX.
-
-Install detection hides the Claude row from the submenu when the desktop app isn't on the machine the OK server is running on. On remote-hosted setups (where the browser and server are on different machines) every agent renders and your browser's OS protocol-dispatch dialog decides what fires.

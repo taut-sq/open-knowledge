@@ -7,6 +7,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import type { MDXComponents } from 'mdx/types';
 import { AgentIcons } from '@/components/agent-icons';
+import { CopyPrompt } from '@/components/copy-prompt';
 import { CtaButton } from '@/components/cta-button';
 import { DownloadButton } from '@/components/download-button';
 import { Mermaid } from '@/components/mermaid';
@@ -20,6 +21,7 @@ export function getMDXComponents(): MDXComponents {
     AgentIcons,
     Card,
     Cards,
+    CopyPrompt,
     CtaButton,
     DownloadButton,
     Image: ImageZoom,
