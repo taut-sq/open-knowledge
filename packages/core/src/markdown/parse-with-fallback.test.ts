@@ -276,6 +276,36 @@ describeBench('parseWithFallback perf bound vs happy path (R23)', () => {
   );
 });
 
+describe('parse budget counter split', () => {
+  beforeEach(() => {
+    resetParseHealth();
+  });
+  afterEach(() => {
+    resetParseHealth();
+  });
+
+  test('budget exhaustion increments wholeDocBudget, never the structural wholeDoc', () => {
+    const mgr = new MarkdownManager({ extensions: sharedExtensions });
+    const result = parseRecursive('# fine\n\nplain paragraph\n', (s) => mgr.parse(s), 0, {
+      startMs: -1_000_000,
+      calls: 0,
+    });
+    expect(result.type).toBe('doc');
+    const h = getParseHealth();
+    expect(h.parseFallback.wholeDocBudget).toBe(1);
+    expect(h.parseFallback.wholeDoc).toBe(0);
+    expect(h.parseFallback.blockLevel).toBe(0);
+  });
+
+  test('structural whole-doc fallback leaves wholeDocBudget untouched', () => {
+    const mgr = new MarkdownManager({ extensions: sharedExtensions });
+    parseRecursive('# h', (s) => mgr.parse(s), 21);
+    const h = getParseHealth();
+    expect(h.parseFallback.wholeDoc).toBe(1);
+    expect(h.parseFallback.wholeDocBudget).toBe(0);
+  });
+});
+
 describe('scanTagEvents (SC series)', () => {
   function scan(src: string): TagEvent[] {
     return scanTagEvents(src, findFencedRegions(src));

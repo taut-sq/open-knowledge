@@ -18,6 +18,7 @@ describe('parse-health metrics', () => {
     const h = getParseHealth();
     expect(h.parseFallback.blockLevel).toBe(0);
     expect(h.parseFallback.wholeDoc).toBe(0);
+    expect(h.parseFallback.wholeDocBudget).toBe(0);
     expect(h.ypsMismatch.block).toBe(0);
     expect(h.ypsMismatch.inline).toBe(0);
     expect(h.jsxRenderFailure).toEqual({});
@@ -67,6 +68,7 @@ describe('parse-health metrics', () => {
     const h = getParseHealth();
     expect(h.parseFallback.blockLevel).toBe(0);
     expect(h.parseFallback.wholeDoc).toBe(0);
+    expect(h.parseFallback.wholeDocBudget).toBe(0);
     expect(h.ypsMismatch.block).toBe(0);
     expect(h.ypsMismatch.inline).toBe(0);
     expect(h.jsxRenderFailure).toEqual({});

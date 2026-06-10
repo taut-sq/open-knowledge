@@ -29,6 +29,7 @@ test('A11Y01: Tab key cycles through PropPanel controls in visual DOM order', as
     timeout: 5000,
   });
 
+  await page.locator('[data-jsx-component]').first().hover();
   const gear = page
     .locator('[data-jsx-component] .jsx-component-chrome button[aria-label*="properties"]')
     .first();
@@ -84,6 +85,7 @@ test('A11Y03: PropPanel Esc key closes and returns focus to block', async ({ pag
     timeout: 5000,
   });
 
+  await page.locator('[data-jsx-component]').first().hover();
   const gear = page
     .locator('[data-jsx-component] .jsx-component-chrome button[aria-label*="properties"]')
     .first();

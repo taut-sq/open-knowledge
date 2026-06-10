@@ -82,6 +82,7 @@ const EXEMPT_HANDLERS = new Set([
   'handleLocalOpEmbeddingsSetKey',
   'handleLocalOpEmbeddingsClearKey',
   'handleTestReset',
+  'handleTestFlushGit',
   'handlePrincipal',
   'handleInstalledAgentsRoute',
   'handleServerInfo',

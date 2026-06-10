@@ -1,5 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
-import { incrementBlockFallback, incrementWholeDocFallback } from '../metrics/parse-health.ts';
+import {
+  incrementBlockFallback,
+  incrementWholeDocBudgetFallback,
+  incrementWholeDocFallback,
+} from '../metrics/parse-health.ts';
 import { findFencedRegions, isInsideFence } from './fence-regions.ts';
 import { hoistRefDefs } from './ref-def-hoist.ts';
 
@@ -71,7 +75,7 @@ export function parseRecursive(
 
   if (budget) {
     if (budgetExhausted(budget)) {
-      incrementWholeDocFallback();
+      incrementWholeDocBudgetFallback();
       console.warn(
         JSON.stringify({
           event: 'mdx-whole-doc-fallback',

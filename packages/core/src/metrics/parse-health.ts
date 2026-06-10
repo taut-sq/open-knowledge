@@ -16,7 +16,7 @@ function ypsCounters(): YpsCounters {
 }
 
 export interface ParseHealthMetrics {
-  parseFallback: { blockLevel: number; wholeDoc: number };
+  parseFallback: { blockLevel: number; wholeDoc: number; wholeDocBudget: number };
   ypsMismatch: { block: number; inline: number };
   jsxRenderFailure: Record<string, number>;
   jsxAutoConvertFailed: Record<string, number>;
@@ -32,7 +32,7 @@ export interface ParseHealthMetrics {
 }
 
 const metrics: {
-  parseFallback: { blockLevel: number; wholeDoc: number };
+  parseFallback: { blockLevel: number; wholeDoc: number; wholeDocBudget: number };
   jsxRenderFailure: Record<string, number>;
   jsxAutoConvertFailed: Record<string, number>;
   jsxAutoConvertSucceeded: Record<string, number>;
@@ -45,7 +45,7 @@ const metrics: {
   blockGripClickSelectFailed: Record<string, number>;
   jsxArrowNodeSelectFailed: Record<string, number>;
 } = {
-  parseFallback: { blockLevel: 0, wholeDoc: 0 },
+  parseFallback: { blockLevel: 0, wholeDoc: 0, wholeDocBudget: 0 },
   jsxRenderFailure: {},
   jsxAutoConvertFailed: {},
   jsxAutoConvertSucceeded: {},
@@ -65,6 +65,10 @@ export function incrementBlockFallback(): void {
 
 export function incrementWholeDocFallback(): void {
   metrics.parseFallback.wholeDoc++;
+}
+
+export function incrementWholeDocBudgetFallback(): void {
+  metrics.parseFallback.wholeDocBudget++;
 }
 
 export function incrementJsxRenderFailure(component: string): void {
@@ -148,6 +152,7 @@ export function getParseHealth(): ParseHealthMetrics {
 export function resetParseHealth(): void {
   metrics.parseFallback.blockLevel = 0;
   metrics.parseFallback.wholeDoc = 0;
+  metrics.parseFallback.wholeDocBudget = 0;
   for (const k of Object.keys(metrics.jsxRenderFailure)) delete metrics.jsxRenderFailure[k];
   for (const k of Object.keys(metrics.jsxAutoConvertFailed)) delete metrics.jsxAutoConvertFailed[k];
   for (const k of Object.keys(metrics.jsxAutoConvertSucceeded))

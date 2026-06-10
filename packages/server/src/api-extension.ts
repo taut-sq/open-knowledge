@@ -162,6 +162,7 @@ import {
   TemplatePutRequestSchema,
   TemplatePutSuccessSchema,
   TemplatesListSuccessSchema,
+  TestFlushGitSuccessSchema,
   TestRescanBacklinksSuccessSchema,
   TestRescanFilesSuccessSchema,
   TestResetSuccessSchema,
@@ -4929,6 +4930,23 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       }
     },
     { handler: 'agent-burst-diff', method: 'GET', skipBodyParse: true },
+  );
+
+  const handleTestFlushGit = withValidation(
+    EmptyRequestSchema,
+    async (_req, res) => {
+      try {
+        await flushGitCommit?.();
+        successResponse(res, 200, TestFlushGitSuccessSchema, {}, { handler: 'test-flush-git' });
+      } catch (e) {
+        log.error({ err: e }, '[test-flush-git] flush failed');
+        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Internal server error.', {
+          handler: 'test-flush-git',
+          cause: e,
+        });
+      }
+    },
+    { handler: 'test-flush-git', method: 'POST', skipBodyParse: true },
   );
 
   const handleTestReset = withValidation(
@@ -11007,6 +11025,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
   if (enableTestRoutes) {
     routes['/api/test-reset'] = handleTestReset;
+    routes['/api/test-flush-git'] = handleTestFlushGit;
     routes['/api/test-rescan-backlinks'] = handleTestRescanBacklinks;
     routes['/api/test-rescan-files'] = handleTestRescanFiles;
   }
@@ -11030,6 +11049,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/sync/resolve-conflict',
     '/api/git/checkout',
     '/api/test-reset',
+    '/api/test-flush-git',
     '/api/test-rescan-backlinks',
     '/api/test-rescan-files',
     '/api/install-skill',

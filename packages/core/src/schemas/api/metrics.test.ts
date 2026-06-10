@@ -10,6 +10,7 @@ import {
   MetricsAgentPresenceSuccessSchema,
   MetricsParseHealthSuccessSchema,
   MetricsReconciliationSuccessSchema,
+  TestFlushGitSuccessSchema,
   TestRescanBacklinksSuccessSchema,
   TestRescanFilesSuccessSchema,
   TestResetSuccessSchema,
@@ -201,6 +202,17 @@ describe('TestRescanFilesSuccessSchema', () => {
   });
   test('parses a body with extra fields (.loose())', () => {
     expect(TestRescanFilesSuccessSchema.safeParse({ extraField: 'forward-compat' }).success).toBe(
+      true,
+    );
+  });
+});
+
+describe('TestFlushGitSuccessSchema', () => {
+  test('parses an empty body', () => {
+    expect(TestFlushGitSuccessSchema.safeParse({}).success).toBe(true);
+  });
+  test('parses a body with extra fields (.loose())', () => {
+    expect(TestFlushGitSuccessSchema.safeParse({ extraField: 'forward-compat' }).success).toBe(
       true,
     );
   });

@@ -765,6 +765,8 @@ export {
   TemplatesListEntrySchema,
   type TemplatesListSuccess,
   TemplatesListSuccessSchema,
+  type TestFlushGitSuccess,
+  TestFlushGitSuccessSchema,
   type TestRescanBacklinksSuccess,
   TestRescanBacklinksSuccessSchema,
   type TestRescanFilesSuccess,

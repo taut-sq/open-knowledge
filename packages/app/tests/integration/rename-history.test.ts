@@ -204,6 +204,12 @@ async function awaitWipCommit(
   const intervals = [100, 250, 500, 1000];
   let attempt = 0;
   while (Date.now() < deadline) {
+    const flushRes = await fetch(`http://localhost:${server.port}/api/test-flush-git`, {
+      method: 'POST',
+    });
+    if (!flushRes.ok) {
+      console.warn(`[awaitWipCommit] test-flush-git returned ${flushRes.status} — continuing poll`);
+    }
     const h = await getHistory(server.port, docName);
     const newWip = h.entries.find((e) => e.type === 'wip' && !beforeShas.has(e.sha));
     if (newWip !== undefined) return newWip.sha;

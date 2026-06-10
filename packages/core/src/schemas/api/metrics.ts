@@ -58,6 +58,11 @@ export type TestRescanBacklinksSuccess = z.infer<typeof TestRescanBacklinksSucce
 export const TestRescanFilesSuccessSchema = z.object({}).loose() satisfies StandardSchemaV1;
 export type TestRescanFilesSuccess = z.infer<typeof TestRescanFilesSuccessSchema>;
 
+/** Success body for `POST /api/test-flush-git` — flat empty object, same
+ * dev-only test-route convention as the rescan siblings above. */
+export const TestFlushGitSuccessSchema = z.object({}).loose() satisfies StandardSchemaV1;
+export type TestFlushGitSuccess = z.infer<typeof TestFlushGitSuccessSchema>;
+
 export const MetricsReconciliationSuccessSchema = z.object({}).loose() satisfies StandardSchemaV1;
 export type MetricsReconciliationSuccess = z.infer<typeof MetricsReconciliationSuccessSchema>;
 
