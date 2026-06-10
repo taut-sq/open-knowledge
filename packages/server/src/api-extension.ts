@@ -6240,79 +6240,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     { handler: 'rescue-list', method: 'GET', skipBodyParse: true },
   );
 
-  async function handleRescueGet(
-    req: IncomingMessage,
-    res: ServerResponse,
-    docName: string,
-  ): Promise<void> {
-    if (req.method !== 'GET') {
-      errorResponse(res, 405, 'urn:ok:error:method-not-allowed', 'Method not allowed.', {
-        handler: 'rescue-get',
-        extraHeaders: { Allow: 'GET' },
-      });
-      return;
-    }
-    if (!shadowRef?.current) {
-      errorResponse(res, 503, 'urn:ok:error:shadow-not-configured', 'Shadow repo not configured.', {
-        handler: 'rescue-get',
-      });
-      return;
-    }
-
-    const rescueBase = resolve(shadowRef.current.gitDir, 'rescue');
-    const filePath = resolve(rescueBase, `${docName}${getDocExtension(docName)}`);
-    if (!filePath.startsWith(`${rescueBase}/`)) {
-      errorResponse(res, 400, 'urn:ok:error:invalid-request', 'Invalid document name.', {
-        handler: 'rescue-get',
-      });
-      return;
-    }
-    if (existsSync(filePath)) {
-      const stat = statSync(filePath);
-      if (Date.now() - stat.mtimeMs > RESCUE_MAX_AGE_MS) {
-        try {
-          unlinkSync(filePath);
-        } catch {}
-      } else {
-        const content = readFileSync(filePath, 'utf-8');
-        res.writeHead(200, {
-          'Content-Type': 'text/markdown',
-          'X-Content-Type-Options': 'nosniff',
-        });
-        res.end(content);
-        return;
-      }
-    }
-
-    try {
-      const branch = getCurrentBranch?.() ?? 'main';
-      const timelineEntries = await listRescueCheckpoints(shadowRef.current, branch);
-      const match = timelineEntries
-        .filter((e) => e.docName === docName)
-        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-      if (match) {
-        const sg = shadowGit(shadowRef.current);
-        const tree = (await sg.raw('ls-tree', '-r', match.sha)).trim();
-        const firstLine = tree.split('\n')[0] ?? '';
-        const parts = firstLine.split(/\s+/);
-        const blobSha = parts[2];
-        if (blobSha) {
-          const content = await sg.raw('cat-file', '-p', blobSha);
-          res.writeHead(200, {
-            'Content-Type': 'text/markdown',
-            'X-Content-Type-Options': 'nosniff',
-          });
-          res.end(content);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('[rescue] timeline-ref fallback failed:', e);
-    }
-
-    errorResponse(res, 404, 'urn:ok:error:not-found', 'Not found.', { handler: 'rescue-get' });
-  }
-
   const handleCreatePage = withValidation(
     CreatePageRequestSchema,
     async (_req, res, body) => {
@@ -11436,8 +11363,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const extractedCtx = propagation.extract(context.active(), request.headers);
       const method = request.method ?? 'GET';
       let routeTemplate = url;
-      if (url.startsWith('/api/rescue/')) routeTemplate = '/api/rescue/:docName';
-      else if (url.startsWith('/api/history/')) routeTemplate = '/api/history/:sha';
+      if (url.startsWith('/api/history/')) routeTemplate = '/api/history/:sha';
       else if (url.startsWith('/api/tags/')) routeTemplate = '/api/tags/:name';
       else if (!routes[url]) routeTemplate = '/api/*';
 
@@ -11463,12 +11389,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               if (handler) {
                 dispatched = true;
                 await handler(request, response);
-              } else if (url.startsWith('/api/rescue/')) {
-                const docName = decodeURIComponent(url.slice('/api/rescue/'.length));
-                if (docName) {
-                  dispatched = true;
-                  await handleRescueGet(request, response, docName);
-                }
               } else if (url.startsWith('/api/history/')) {
                 const sha = decodeURIComponent(url.slice('/api/history/'.length));
                 if (sha) {

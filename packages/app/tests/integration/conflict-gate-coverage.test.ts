@@ -52,7 +52,6 @@ const EXEMPT_HANDLERS = new Set([
   'handleWorkspace',
   'handleApiConfig',
   'handleRescueList',
-  'handleRescueGet',
   'handleSyncStatus',
   'handleSyncConflicts',
   'handleSyncConflictContent',
