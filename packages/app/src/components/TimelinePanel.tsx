@@ -61,6 +61,7 @@ const LazyActivityPanelDiffView = lazy(async () => {
   return { default: mod.ActivityPanelDiffView };
 });
 
+
 interface TimelineContentProps {
   docName: string;
   diffLayout: DiffLayout;
@@ -71,6 +72,7 @@ interface TimelineContentProps {
   onSaveVersion: () => void;
   saving: boolean;
 }
+
 
 function formatRelativeTime(isoString: string): string {
   const date = new Date(isoString);
@@ -167,6 +169,7 @@ function ContributorIcon({ entry, isDark }: { entry: TimelineEntry; isDark: bool
   return <User className={iconClass} />;
 }
 
+
 interface WipGroupProps {
   entries: TimelineEntry[];
   defaultExpanded: boolean;
@@ -226,6 +229,7 @@ function WipGroup({
   );
 }
 
+
 type CheckpointVariant = 'save' | 'bridge-merge-loss' | 'external-change-rescue';
 
 export function checkpointVariant(entry: TimelineEntry): CheckpointVariant {
@@ -270,6 +274,7 @@ function restoreDialogTitle(entry: TimelineEntry): string {
   if (semantic === 'auto-save') return t`Restore this auto-save?`;
   return t`Restore to this point?`;
 }
+
 
 export function allSummariesFor(entry: TimelineEntry): string[] {
   const out: string[] = [];
@@ -325,6 +330,7 @@ function SummaryBullets({ summaries }: SummaryBulletsProps) {
   );
 }
 
+
 interface EntryDiffPanelProps {
   sha: string;
   docName: string;
@@ -364,6 +370,7 @@ function EntryDiffPanel({ sha, docName, cache, diffLayout, panelId }: EntryDiffP
     </div>
   );
 }
+
 
 interface EntryRowProps {
   entry: TimelineEntry;
@@ -455,7 +462,8 @@ function EntryRow({
       try {
         const problem = ProblemDetailsSchema.safeParse(await res.json());
         if (problem.success) detail = problem.data.title;
-      } catch {}
+      } catch {
+      }
       console.error('[timeline] rollback failed', {
         docName,
         sha: entry.sha,
@@ -636,6 +644,7 @@ function EntryRow({
   );
 }
 
+
 export function TimelineContent({
   docName,
   diffLayout,
@@ -711,6 +720,7 @@ export function TimelineContent({
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [docName, t]);
+
 
   const groups: Array<
     | { kind: 'checkpoint'; entry: TimelineEntry }

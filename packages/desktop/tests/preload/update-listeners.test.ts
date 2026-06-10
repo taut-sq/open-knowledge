@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 
+
 type FakeListener = (_event: unknown, payload: unknown) => void;
 
 interface FakeIpcRenderer {
@@ -77,6 +78,7 @@ describe('M3 update-listener subscribe/unsubscribe pattern', () => {
     const channels = [
       'ok:update:downloaded',
       'ok:update:relaunching',
+      'ok:update:relaunch-failed',
       'ok:update:whats-new',
       'ok:update:whats-new-dismissed',
       'ok:update:stuck-hint',

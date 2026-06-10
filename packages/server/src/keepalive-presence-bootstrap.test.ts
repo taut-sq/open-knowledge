@@ -52,7 +52,8 @@ afterAll(async () => {
     try {
       await s.booted.destroy();
       rmSync(s.contentDir, { recursive: true, force: true });
-    } catch {}
+    } catch {
+    }
   }
 });
 

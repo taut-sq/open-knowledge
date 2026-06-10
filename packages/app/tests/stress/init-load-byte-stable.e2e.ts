@@ -1,3 +1,4 @@
+
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,6 +30,7 @@ const APP_PACKAGE_ROOT = resolve(HELPERS_DIR, '..', '..');
 
 const PROD_MAX_DEBOUNCE_MS = 10_000;
 const POST_MOUNT_WAIT_MS = PROD_MAX_DEBOUNCE_MS * 2 + 500; // 21 500 ms
+
 
 interface OkFixture {
   port: number;
@@ -115,6 +117,7 @@ const test = base.extend<{ okFixture: OkFixture }>({
   },
 });
 
+
 const E2E_TARGET_FILENAME = 'mega-combo-8ng.md';
 
 test.describe('init-load-byte-stable: full-UI mount produces zero disk mutations', () => {
@@ -171,6 +174,8 @@ test.describe('init-load-byte-stable: full-UI mount produces zero disk mutations
     }
   });
 });
+
+
 
 test.describe('init-load-byte-stable.e2e: negative-case control (diff harness has teeth)', () => {
   test('direct mutation of a corpus file IS detected by the diff harness', async ({

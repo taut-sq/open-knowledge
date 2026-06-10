@@ -794,6 +794,7 @@ describe('position-slice: definition source-form recovery (FR-24)', () => {
 });
 
 describe('splitGfmCellSegments — GFM cell tokenizer edge cases', () => {
+
   test('splits canonical pipe-surround row into N+2 segments (leading + trailing empties)', () => {
     expect(splitGfmCellSegments('| a | b | c |')).toEqual(['', ' a ', ' b ', ' c ', '']);
   });

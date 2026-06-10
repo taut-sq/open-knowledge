@@ -1,3 +1,4 @@
+
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 
 export const TOAST_A_ACTION = 'Relaunch';
@@ -111,6 +112,17 @@ export function attachUpdateSubscribers(
         body: TOAST_A_PROGRESS_BODY,
         priority: PRIORITY_UPDATE_DOWNLOADED,
         dismissible: false,
+      });
+    }),
+  );
+
+  unsubscribers.push(
+    bridge.onUpdateRelaunchFailed(({ version, message }) => {
+      addNotice({
+        id: `relaunch-error-${version}`,
+        body: message ? `${TOAST_A_ERROR_BODY}: ${message}` : TOAST_A_ERROR_BODY,
+        variant: 'error',
+        priority: PRIORITY_RELAUNCH_ERROR,
       });
     }),
   );

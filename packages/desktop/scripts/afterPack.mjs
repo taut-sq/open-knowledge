@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { FuseV1Options, FuseVersion, flipFuses } from '@electron/fuses';
 import { targetFuses } from './target-fuses.mjs';
 
+
 export default async function afterPack(context) {
   const { appOutDir, packager, electronPlatformName } = context;
 

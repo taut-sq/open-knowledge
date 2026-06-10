@@ -1,3 +1,4 @@
+
 import { IndexeddbPersistence } from 'y-indexeddb';
 import * as Y from 'yjs';
 import { mark } from '@/lib/perf';

@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import SRC from './EditorTabs?raw';
 
@@ -275,6 +276,7 @@ describe('EditorTabs source-level guards — tab drag-reorder (US-004)', () => {
 });
 
 describe('EditorTabs — Post-commit reconciliation error labeling', () => {
+
   test('reconciliation is wrapped in its own try/catch (split from the fetch catch)', () => {
     const handlerStart = SRC.indexOf('async function commitRename');
     expect(handlerStart).toBeGreaterThan(-1);

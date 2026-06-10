@@ -519,6 +519,7 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
     };
   }, [editor, docName]);
 
+
   useEffect(() => {
     const activityMap = provider.document.getMap('agent-flash');
     let lastSeenTimestamp = Date.now();

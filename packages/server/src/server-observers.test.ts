@@ -44,6 +44,7 @@ import {
   shouldRethrowBridgeMergeLoss,
 } from './server-observers.ts';
 
+
 const mdManager = new MarkdownManager({ extensions: sharedExtensions });
 const schema = getSchema(sharedExtensions);
 
@@ -86,6 +87,7 @@ function populateFragment(doc: Y.Doc, xmlFragment: Y.XmlFragment, md: string): v
   const meta = { mapping: new Map(), isOMark: new Map() };
   updateYFragment(doc, xmlFragment, pmNode, meta);
 }
+
 
 describe('Server Observer A — XmlFragment → Y.Text', () => {
   test('Observer A settles synchronously after each transact; multiple rapid edits each fire once', () => {
@@ -553,6 +555,7 @@ describe('Origin-guard truth table (§7d)', () => {
     cleanup();
   });
 
+
   function runPairedWriteShortCircuitTest(origin: LocalTransactionOrigin, marker: string): void {
     const { doc, xmlFragment, ytext, recorder } = createTestDoc();
     const cleanup = setupServerObservers(setupOpts({ doc, xmlFragment, ytext, recorder }));
@@ -713,6 +716,7 @@ describe('Initial sync', () => {
 });
 
 describe('Server Observer B — error recovery paths', () => {
+
   /** Wrap mdManager so parse/serialize can be toggled to throw.
    *
    * Under FR-22/G9, Observer B calls `parseWithFallback` — the real impl
@@ -884,7 +888,9 @@ describe('Server Observer B — error recovery paths', () => {
   });
 });
 
+
 describe('Server Observer B — Y.Text-is-truth contract (FR-31)', () => {
+
   test('Y.Text bytes preserved verbatim across Observer B (no canonicalize-write-back)', () => {
     const { doc, xmlFragment, ytext, recorder } = createTestDoc();
     const cleanup = setupServerObservers(setupOpts({ doc, xmlFragment, ytext, recorder }));

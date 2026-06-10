@@ -182,6 +182,7 @@ async function installDelayedDesktopSessionBridge(
         onMenuAction: () => unsubscribe,
         onUpdateDownloaded: () => unsubscribe,
         onUpdateRelaunching: () => unsubscribe,
+        onUpdateRelaunchFailed: () => unsubscribe,
         onWhatsNew: () => unsubscribe,
         onWhatsNewDismissed: () => unsubscribe,
         onUpdateStuckHint: () => unsubscribe,

@@ -81,6 +81,7 @@ describe('PaneTargetLanding wiring (R7)', () => {
   });
 });
 
+
 const DRAG_LITERAL = '[-webkit-app-region:drag]';
 
 function hasIsElectronHostGatedDrag(appSrc: string): boolean {
@@ -157,6 +158,7 @@ describe('Editor BrowserWindow — wrapper-strip drag region contract', () => {
     expect(attrLanded).toBe(true);
   });
 });
+
 
 describe('ActiveTargetBridgePush — renderer→main push for File menu', () => {
   test('declares an ActiveTargetBridgePush component and mounts it inside the App tree', () => {

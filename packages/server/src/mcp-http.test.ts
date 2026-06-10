@@ -144,6 +144,7 @@ afterEach(async () => {
   openHarnesses = [];
 });
 
+
 test('active MCP session cap refuses new sessions before allocation', async () => {
   const config: Config = ConfigSchema.parse({});
   const harness = await bootHandler(config, { maxSessions: 1 });
@@ -288,7 +289,8 @@ test('forwarded connectionId header reaches /api/agent-write-md as agentId', asy
               agentId?: unknown;
             };
             if (typeof body.agentId === 'string') capturedAgentId = body.agentId;
-          } catch {}
+          } catch {
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
         });
@@ -416,7 +418,8 @@ test('invalid connectionId header is ignored — session falls back to a fresh U
               agentId?: unknown;
             };
             if (typeof body.agentId === 'string') capturedAgentId = body.agentId;
-          } catch {}
+          } catch {
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true }));
         });

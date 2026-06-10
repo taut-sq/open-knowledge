@@ -111,6 +111,7 @@ function nthOccurrenceOffset(text: string, find: string, occurrence: number): nu
   return -1;
 }
 
+
 async function handleDocBody(
   doc: { path: string; find?: string; replace?: string; occurrence?: number },
   args: { summary?: string },
@@ -272,6 +273,7 @@ function composeWritePreviewResult(
   return textPlusStructured(text, nestDocResult(preview, warning, document));
 }
 
+
 function templateFilePath(
   cwd: string,
   folder: string,
@@ -387,6 +389,7 @@ async function handleTemplate(
   });
 }
 
+
 async function handleFolder(
   folder: { path: string; frontmatter: FrontmatterPatch },
   summary: string | undefined,
@@ -409,6 +412,7 @@ async function handleFolder(
     folder: { ok: true, path: entry.path ?? `${folder.path}/.ok/frontmatter.yml`, action },
   });
 }
+
 
 export function register(server: ServerInstance, deps: EditDeps): void {
   const bodyFields = {

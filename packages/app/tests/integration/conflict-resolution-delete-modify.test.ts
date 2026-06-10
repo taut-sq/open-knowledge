@@ -31,7 +31,8 @@ async function setupDUConflict(
   await execFileAsync('git', ['rm', fileName], opts);
   await execFileAsync('git', ['commit', '-m', 'oursdelete'], opts);
 
-  await execFileAsync('git', ['merge', 'theirs-branch'], opts).catch(() => {});
+  await execFileAsync('git', ['merge', 'theirs-branch'], opts).catch(() => {
+  });
 
   return { baseContent, theirsContent };
 }
@@ -58,7 +59,8 @@ async function setupUDConflict(
   writeFileSync(join(contentDir, fileName), oursContent, 'utf-8');
   await execFileAsync('git', ['commit', '-am', 'oursmod'], opts);
 
-  await execFileAsync('git', ['merge', 'theirs-branch'], opts).catch(() => {});
+  await execFileAsync('git', ['merge', 'theirs-branch'], opts).catch(() => {
+  });
 
   return { baseContent, oursContent };
 }
@@ -97,6 +99,7 @@ async function createUDTestServer(): Promise<TestServer> {
   await registerConflict(dir, 'foo.md');
   return createTestServer({ contentDir: dir, keepContentDir: false });
 }
+
 
 describe('DU (delete-modify) conflict — foundational contract', () => {
   let server: TestServer;
@@ -153,6 +156,7 @@ describe('DU (delete-modify) conflict — foundational contract', () => {
   });
 });
 
+
 describe('UD (modify-delete) conflict — foundational contract', () => {
   let server: TestServer;
 
@@ -195,6 +199,7 @@ describe('UD (modify-delete) conflict — foundational contract', () => {
   });
 });
 
+
 describe("POST /api/sync/resolve-conflict { strategy: 'content', content: '' }", () => {
   let server: TestServer;
 
@@ -232,6 +237,7 @@ describe("POST /api/sync/resolve-conflict { strategy: 'content', content: '' }",
   });
 });
 
+
 describe('both-modified conflict — backward compatibility', () => {
   let server: TestServer;
   let contentDir: string;
@@ -254,7 +260,8 @@ describe('both-modified conflict — backward compatibility', () => {
     await execFileAsync('git', ['checkout', 'main'], opts);
     writeFileSync(join(contentDir, 'foo.md'), 'ours\n', 'utf-8');
     await execFileAsync('git', ['commit', '-am', 'ours'], opts);
-    await execFileAsync('git', ['merge', 'theirs-branch'], opts).catch(() => {});
+    await execFileAsync('git', ['merge', 'theirs-branch'], opts).catch(() => {
+    });
     await registerConflict(contentDir, 'foo.md');
 
     server = await createTestServer({ contentDir, keepContentDir: false });

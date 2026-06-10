@@ -1,3 +1,4 @@
+
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,6 +13,7 @@ import {
   type TestServer,
   testReset,
 } from './test-harness';
+
 
 function findRawMdxFallback(fragment: Y.XmlFragment): Y.XmlElement | null {
   for (let i = 0; i < fragment.length; i++) {
@@ -44,6 +46,7 @@ function getFirstXmlText(el: Y.XmlElement): Y.XmlText | null {
   }
   return null;
 }
+
 
 describe('rawMdxFallback multi-client Y.Item identity (US-011, M8, Q5)', () => {
   let server: TestServer;

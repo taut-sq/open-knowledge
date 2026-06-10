@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { ShareButton } from './ShareButton';
 import SRC from './ShareButton?raw';
@@ -72,6 +73,7 @@ describe('ShareButton — load-bearing structural guards', () => {
     expect(SRC).toMatch(/setBusy\(true\)/);
     expect(SRC).toMatch(/setBusy\(false\)/);
   });
+
 
   test('no React Compiler escape hatches (forwardRef / memo / useMemo / useCallback)', () => {
     expect(SRC).not.toMatch(/\bforwardRef\b/);

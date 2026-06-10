@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import SRC from './SettingsDialogBody?raw';
 
@@ -208,4 +209,5 @@ describe('SettingsDialogBody SyncSection Switch — bound to local CRDT preferen
     expect(syncSectionSrc).toContain("status?.pushPermission?.checkStatus === 'denied'");
     expect(syncSectionSrc).toMatch(/Sync disabled — you don't have permission to push/);
   });
+
 });

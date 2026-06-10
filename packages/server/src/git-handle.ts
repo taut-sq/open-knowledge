@@ -1,7 +1,9 @@
+
 import { resolve } from 'node:path';
 import simpleGit, { type SimpleGit, type SimpleGitOptions } from 'simple-git';
 
 export { withParentLock } from './git-mutex.ts';
+
 
 interface GitHandleOptions {
   credentialArgs?: string[];
@@ -19,6 +21,7 @@ type CredentialHelperUnsafeGitOptions = SimpleGitOptions & {
     allowUnsafeCredentialHelper?: boolean;
   };
 };
+
 
 export function buildGitEnv(): Record<string, string> {
   const env: Record<string, string> = { LANG: 'C', LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0' };

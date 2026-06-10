@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -68,6 +69,7 @@ describe('extractPrimitiveProps', () => {
     const result = extractPrimitiveProps({}, reactNodes());
     expect(result).toEqual({});
   });
+
 
   test('XSS: strips javascript: URL from href before it reaches live React', () => {
     const attrs = { props: { href: 'javascript:alert(1)', title: 'bad' } };
@@ -149,6 +151,7 @@ describe('stableHash', () => {
     expect(stableHash(undefined)).toBe(JSON.stringify(undefined));
   });
 });
+
 
 const VIEW_FILE = join(dirname(fileURLToPath(import.meta.url)), 'JsxComponentView.tsx');
 const KIND_GUARD_RE = /attrs\.kind\s*(?:!==|===)\s*['"]element['"]/;

@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { applyPatchToFm, parseFmRegion } from './frontmatter-region.ts';
 
@@ -68,6 +69,7 @@ describe('parseFmRegion — mixed-scalar array coercion', () => {
 });
 
 describe('applyPatchToFm — array style preservation', () => {
+
   test('flow-style input preserves flow style when patch replaces the array', () => {
     const fenced = '---\ntags: [travel, spain, 2026]\n---\n';
     const result = applyPatchToFm(fenced, { tags: ['travel', 'spain', '2026', 'paris'] });

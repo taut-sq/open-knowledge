@@ -1,3 +1,4 @@
+
 import type { ChildProcess } from 'node:child_process';
 import {
   closeSync,
@@ -51,7 +52,8 @@ export function openServerLog(label: string): ServerLog {
 export function closeServerLog(log: ServerLog): void {
   try {
     closeSync(log.fd);
-  } catch {}
+  } catch {
+  }
 }
 
 export function tailServerLog(log: ServerLog, lines = 40): string {
@@ -85,10 +87,12 @@ export async function checkCollabSync(port: number, timeoutMs = 10_000): Promise
   } finally {
     try {
       provider.destroy();
-    } catch {}
+    } catch {
+    }
     try {
       doc.destroy();
-    } catch {}
+    } catch {
+    }
   }
 }
 

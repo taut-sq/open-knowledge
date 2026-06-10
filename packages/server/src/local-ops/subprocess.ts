@@ -1,3 +1,4 @@
+
 import { spawn } from 'node:child_process';
 
 interface ParsedLine {
@@ -113,7 +114,8 @@ export function runSubprocess(opts: SubprocessRunOptions): SubprocessController 
       if (!child.killed) {
         try {
           child.kill('SIGTERM');
-        } catch {}
+        } catch {
+        }
       }
     },
   };

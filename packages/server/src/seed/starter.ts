@@ -1,3 +1,4 @@
+
 export type PackId =
   | 'knowledge-base'
   | 'software-lifecycle'
@@ -26,6 +27,7 @@ export interface StarterPack {
   templates: Readonly<Record<string, string>>;
   rootFiles?: Readonly<Record<string, string>>;
 }
+
 
 const KNOWLEDGE_BASE_FOLDERS: readonly StarterFolder[] = [
   {
@@ -121,6 +123,7 @@ description: Append-only audit trail of changes to this knowledge base.
 
 Append-only audit trail. Add one dated entry per turn that creates, edits, or restructures content. The knowledge-base skill describes what to log and the entry shape.
 `;
+
 
 const SOFTWARE_LIFECYCLE_FOLDERS: readonly StarterFolder[] = [
   {
@@ -361,6 +364,7 @@ tags: [postmortem]
 `,
 };
 
+
 const PLAIN_NOTES_FOLDERS: readonly StarterFolder[] = [
   {
     path: 'notes',
@@ -416,6 +420,7 @@ tags: [daily]
 - Gratitude:
 `,
 };
+
 
 const WORLDBUILDING_FOLDERS: readonly StarterFolder[] = [
   {
@@ -673,6 +678,7 @@ tags: [lore, history]
 `,
 };
 
+
 const WRITING_PIPELINE_FOLDERS: readonly StarterFolder[] = [
   {
     path: 'ideas',
@@ -744,6 +750,7 @@ tags: [published]
 
 `,
 };
+
 
 const ENTITY_VAULT_FOLDERS: readonly StarterFolder[] = [
   {
@@ -1047,6 +1054,7 @@ description: When the agent does scheduled work: daily briefings, end-of-day dos
 
 `;
 
+
 export const STARTER_PACKS: Readonly<Record<PackId, StarterPack>> = {
   'knowledge-base': {
     id: 'knowledge-base',
@@ -1184,6 +1192,7 @@ function computePackEntryCounts(pack: StarterPack): StarterPackEntryCounts {
   files += pack.rootFiles ? Object.keys(pack.rootFiles).length : 0;
   return { files, folders };
 }
+
 
 export const STARTER_FOLDERS: readonly StarterFolder[] = KNOWLEDGE_BASE_FOLDERS;
 

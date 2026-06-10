@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { isInteractiveSidebarControl } from './FileSidebar';
 import SRC from './FileSidebar?raw';
@@ -165,6 +166,7 @@ describe('FileSidebar source-level guards — chrome-row retrofit', () => {
   });
 
   test('pill row inherits Electron no-drag opt-out (structurally anchored)', () => {
+
     expect(SRC).toMatch(/isElectronHost\s*&&\s*['"]\[&>\*\]:\[-webkit-app-region:no-drag\]['"]/);
 
     expect(SRC).toMatch(
@@ -342,6 +344,7 @@ describe('FileSidebar source-level guards — chrome-row retrofit', () => {
   });
 
   test('pill row fades synchronously with the toolbar during sidebar collapse (structurally anchored)', () => {
+
     const sidebarHeaderBlock = SRC.match(
       /SidebarHeader\b[^>]*?className=\{cn\(([\s\S]*?h-12[\s\S]*?)\)\}/,
     )?.[1];
@@ -365,6 +368,7 @@ describe('FileSidebar source-level guards — chrome-row retrofit', () => {
     );
   });
 });
+
 
 describe('FileSidebar onMenuAction subscriber (US-020 + US-021)', () => {
   test('subscribes via the canonical bridge.onMenuAction surface', () => {
@@ -435,6 +439,7 @@ describe('FileSidebar onMenuAction subscriber (US-020 + US-021)', () => {
     expect(SRC).toMatch(/case\s+['"]toggle-sidebar['"]\s*:\s*\{[\s\S]*?toggleSidebar\(\)/);
   });
 });
+
 
 describe('FileSidebar view-menu state push (US-021)', () => {
   test('declares a useEffect that calls bridge.editor.notifyViewMenuStateChanged', () => {

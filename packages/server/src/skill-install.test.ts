@@ -428,6 +428,7 @@ function host(calls: ReadonlyArray<{ opts: { env?: NodeJS.ProcessEnv } }>): Node
   return (calls[0]?.opts.env ?? {}) as NodeJS.ProcessEnv;
 }
 
+
 describe('buildAndOpenSkill', () => {
   function makeFakeSpawn(capture: {
     command?: string;
@@ -544,6 +545,7 @@ describe('buildAndOpenSkill', () => {
   });
 });
 
+
 describe('buildAndOpenSkill — install-state gate', () => {
   function makeNoopSpawn(): SpawnLike {
     return ((command: string) => {
@@ -596,7 +598,8 @@ describe('buildAndOpenSkill — install-state gate', () => {
     try {
       readFileSync(join(home, 'should-not-build.skill'));
       outExists = true;
-    } catch {}
+    } catch {
+    }
     expect(outExists).toBe(false);
   });
 

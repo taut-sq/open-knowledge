@@ -1,3 +1,4 @@
+
 import { parseWriterId } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
 import { gcRenameLog, getOrLoadRenameLogIndex } from './rename-log.ts';
@@ -60,7 +61,8 @@ async function listProjectBranches(projectGitDir: string): Promise<Set<string>> 
         if (line) branches.add(line);
       }
     }
-  } catch {}
+  } catch {
+  }
   return branches;
 }
 
@@ -164,7 +166,8 @@ export async function gcShadowBranches(
             }
 
             await sg.raw('update-ref', '-d', ref);
-          } catch {}
+          } catch {
+          }
         }
         if (!result.retainedBranches.includes(orphanedBranch)) {
           result.deletedBranches.push(orphanedBranch);
@@ -229,7 +232,8 @@ export async function gcShadowBranches(
             await sg.raw('update-ref', '-d', ref);
             result.deletedStaleSessionRefs++;
           }
-        } catch {}
+        } catch {
+        }
       }
     }
   }

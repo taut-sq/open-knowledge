@@ -1,3 +1,4 @@
+
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron';
 import type {
   OkDesktopBridge,
@@ -16,6 +17,7 @@ import type {
   OkShareReceivedPayload,
   OkThemeSource,
   OkUpdateDownloadedInfo,
+  OkUpdateRelaunchFailedInfo,
   OkUpdateRelaunchingInfo,
   OkUpdateStuckHintInfo,
   OkWhatsNewInfo,
@@ -193,6 +195,13 @@ const bridge: OkDesktopBridge = {
     // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
     ipcRenderer.on('ok:update:relaunching', listener);
     return () => ipcRenderer.removeListener('ok:update:relaunching', listener);
+  },
+
+  onUpdateRelaunchFailed(cb: (info: OkUpdateRelaunchFailedInfo) => void) {
+    const listener = (_event: IpcRendererEvent, info: OkUpdateRelaunchFailedInfo) => cb(info);
+    // biome-ignore lint/plugin/no-loosely-typed-webcontents-ipc: preload-side subscription wrapper (precedent #14)
+    ipcRenderer.on('ok:update:relaunch-failed', listener);
+    return () => ipcRenderer.removeListener('ok:update:relaunch-failed', listener);
   },
 
   onWhatsNew(cb: (info: OkWhatsNewInfo) => void) {

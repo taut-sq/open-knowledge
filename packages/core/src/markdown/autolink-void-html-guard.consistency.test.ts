@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import * as fc from 'fast-check';
 import { protectFromMdx } from './autolink-void-html-guard.ts';

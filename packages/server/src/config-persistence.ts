@@ -1,3 +1,4 @@
+
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
@@ -215,7 +216,8 @@ async function atomicWriteConfig(absPath: string, content: string): Promise<void
   } catch (e) {
     try {
       tracedUnlinkSync(tmpPath);
-    } catch {}
+    } catch {
+    }
     throw e;
   }
 }

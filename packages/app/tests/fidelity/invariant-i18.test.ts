@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import * as fc from 'fast-check';
@@ -122,6 +123,7 @@ describe('I18 — PBT: every GFM type + arbitrary body text round-trips', () => 
     );
   });
 });
+
 
 function findFirstNode(node: JSONContent, type: string): JSONContent | undefined {
   if (node.type === type) return node;

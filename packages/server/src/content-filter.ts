@@ -1,3 +1,4 @@
+
 import { execFile as execFileCb, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { readdir, readFile as readFileAsync } from 'node:fs/promises';
@@ -192,7 +193,8 @@ async function resolveGlobalExcludesfileAsync(projectDir: string): Promise<strin
     );
     const raw = stdout.trim();
     if (raw) return raw;
-  } catch {}
+  } catch {
+  }
   return xdgGlobalIgnoreDefault();
 }
 
