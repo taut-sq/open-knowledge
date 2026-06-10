@@ -53,6 +53,7 @@ import {
 import { TableCellHandles } from './table-controls/TableCellHandles';
 import { attachTypingBurstDetector } from './typing-burst-detector';
 import { getEditorView } from './utils/get-editor-view';
+import { walkCurrencyExtension } from './walk-currency-extension';
 
 function renderCursor(user: Record<string, string>): HTMLElement {
   const cursor = document.createElement('span');
@@ -121,8 +122,35 @@ interface BuildEditorOptionsArgs {
   onWedged?: (detail: WedgeDetail) => void;
 }
 
-function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
+interface PrewarmBoundCollaboration {
+  collaboration: AnyExtension;
+  guard: AnyExtension[];
+}
+
+function buildPrewarmBoundCollaboration(
+  provider: HocuspocusProvider,
+  prebuiltMapping: ProsemirrorMapping | undefined,
+): PrewarmBoundCollaboration {
+  if (!prebuiltMapping) {
+    return { collaboration: Collaboration.configure({ document: provider.document }), guard: [] };
+  }
+  return {
+    collaboration: Collaboration.configure({
+      document: provider.document,
+      ySyncOptions: { mapping: prebuiltMapping },
+    }),
+    guard: [
+      walkCurrencyExtension({
+        fragment: provider.document.getXmlFragment('default'),
+        docName: provider.configuration.name ?? '',
+      }),
+    ],
+  };
+}
+
+export function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
   const { provider, placeholder, prebuiltMapping, onWedged } = args;
+  const { collaboration, guard } = buildPrewarmBoundCollaboration(provider, prebuiltMapping);
   return [
     ...sharedExtensions.map((ext) => {
       if (ext.name === 'link' || ext.name === 'wikiLink' || ext.name === 'jsxComponent') {
@@ -134,10 +162,7 @@ function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
       placeholder: placeholder ?? "Type '/' for commands",
       showOnlyCurrent: true,
     }),
-    Collaboration.configure({
-      document: provider.document,
-      ...(prebuiltMapping ? { ySyncOptions: { mapping: prebuiltMapping } } : {}),
-    }),
+    collaboration,
     Extension.create({
       name: 'imageUploadDecoration',
       addProseMirrorPlugins() {
@@ -172,6 +197,7 @@ function buildExtensionList(args: BuildEditorOptionsArgs): AnyExtension[] {
         ];
       },
     }),
+    ...guard,
   ];
 }
 
