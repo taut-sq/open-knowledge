@@ -88,11 +88,15 @@ test('S1c: ArrowDown into compound Callout descends into body (no NodeSelect)', 
   await page.waitForSelector('.jsx-component-wrapper[data-component-type="callout"]');
 
   await page.locator('.ProseMirror h1').first().click();
+  await focusEditor(page);
+  await waitForPmSelectionInNode(page, 'heading');
   await page.keyboard.press('End');
 
   await page.keyboard.press('ArrowDown');
 
   await expect(page.locator('.jsx-component-wrapper[data-selected="true"]')).toHaveCount(0);
+
+  await waitForPmSelectionInNode(page, 'jsxComponent');
 
   const insideBody = await page.evaluate(() => {
     const editor = window.__activeEditor;
@@ -252,8 +256,7 @@ test('S3: nested Callout/Accordion — only innermost paints halo', async ({ pag
   const outerDataSelected = await outerCallout.getAttribute('data-selected');
   expect(outerDataSelected).toBeNull();
 
-  const selectedCount = await page.locator('[data-selected="true"]').count();
-  expect(selectedCount).toBe(1);
+  await expect(page.locator('[data-selected="true"]')).toHaveCount(1);
 });
 
 test('S3b: outer-NodeSelection on Callout with nested Accordion — only outer paints halo', async ({
@@ -276,8 +279,7 @@ test('S3b: outer-NodeSelection on Callout with nested Accordion — only outer p
   const innerDataSelected = await innerAccordion.getAttribute('data-selected');
   expect(innerDataSelected).toBeNull();
 
-  const selectedCount = await page.locator('[data-selected="true"]').count();
-  expect(selectedCount).toBe(1);
+  await expect(page.locator('[data-selected="true"]')).toHaveCount(1);
 });
 
 test('S4: dragstart/dragend toggles data-dragging', async ({ page, api }) => {

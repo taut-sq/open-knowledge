@@ -24,6 +24,8 @@ test.describe('NG7 Pattern D — rapid-nav coherence', () => {
 
     const aRow = page.getByRole('treeitem', { name: `${docA}.md`, exact: true });
     const bRow = page.getByRole('treeitem', { name: `${docB}.md`, exact: true });
+    await expect(aRow).toBeVisible({ timeout: 30_000 });
+    await expect(bRow).toBeVisible({ timeout: 30_000 });
     const navStartTime = await page.evaluate(() => performance.now());
     await aRow.click({ timeout: 10_000 });
     await bRow.click({ timeout: 10_000 });
@@ -43,6 +45,26 @@ test.describe('NG7 Pattern D — rapid-nav coherence', () => {
     expect(totalPmCount).toBeLessThanOrEqual(3);
     expect(totalPmCount).toBeGreaterThanOrEqual(1);
 
+    await page.waitForFunction(
+      ({ targetDoc, since }) => {
+        const isMountSettle = (entry: PerformanceEntry) =>
+          entry.name === 'ok/mount/resolve' ||
+          entry.name === 'ok/mount/reject' ||
+          entry.name === 'ok/cache/hit';
+        return performance
+          .getEntriesByType('measure')
+          .filter(isMountSettle)
+          .filter((m) => m.startTime >= since)
+          .some((m) => {
+            const detail = (m as unknown as { detail?: { devtools?: { properties?: unknown } } })
+              .detail;
+            const props = (detail?.devtools?.properties ?? []) as Array<[string, string]>;
+            return props.find(([k]) => k === 'docName')?.[1] === targetDoc;
+          });
+      },
+      { targetDoc: docA, since: navStartTime },
+      { timeout: 30_000 },
+    );
     const aSettleMarks = await page.evaluate(
       ({ targetDoc, since }) => {
         const isMountSettle = (entry: PerformanceEntry) =>

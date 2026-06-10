@@ -17,6 +17,9 @@ const viteCacheDir = process.env.OK_TEST_VITE_CACHE_DIR;
 export default defineConfig({
   base: './',
   cacheDir: viteCacheDir,
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
   plugins: [
     rejectionLoopGuardPlugin(),
     chromeTokensVitePlugin(),

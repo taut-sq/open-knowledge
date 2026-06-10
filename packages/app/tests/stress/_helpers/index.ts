@@ -9,6 +9,7 @@ export {
   type AgentIdentity,
   type ApiHelpers,
   expect,
+  REQUIRED_FIXTURE_ENTRY_NAMES,
   test,
   type WorkerServer,
 } from './fixtures.ts';
@@ -18,7 +19,17 @@ export {
   type WaitForProviderOptions,
   waitForActiveProviderSynced,
 } from './provider.ts';
-export { getFreePort, killGracefully, waitForHttpReady } from './server-process.ts';
+export {
+  checkCollabSync,
+  closeServerLog,
+  getFreePort,
+  killGracefully,
+  openServerLog,
+  prepareViteCacheDir,
+  type ServerLog,
+  tailServerLog,
+  waitForHttpReady,
+} from './server-process.ts';
 export { sidebarFileButton } from './sidebar.ts';
 export {
   getSelectedItemSnapshot,

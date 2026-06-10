@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
-import { type ApiHelpers, createPngBuffer, expect, test, type WorkerServer } from './_helpers';
+import {
+  type ApiHelpers,
+  createPngBuffer,
+  expect,
+  REQUIRED_FIXTURE_ENTRY_NAMES,
+  test,
+  type WorkerServer,
+} from './_helpers';
 
 function testId(): string {
   return randomUUID().slice(0, 8);
@@ -52,6 +59,7 @@ async function deletePathIfExists(
 async function clearVisibleContentEntries(workerServer: WorkerServer): Promise<void> {
   for (const entry of readdirSync(workerServer.contentDir, { withFileTypes: true })) {
     if (entry.name.startsWith('.')) continue;
+    if ((REQUIRED_FIXTURE_ENTRY_NAMES as readonly string[]).includes(entry.name)) continue;
     if (entry.isDirectory()) {
       await deletePathIfExists(workerServer.baseURL, 'folder', entry.name);
       continue;
@@ -295,13 +303,18 @@ test.describe('Editor tabs', () => {
     await expect(sidebarItem).not.toHaveAttribute('aria-selected', 'true');
   });
 
-  test('sidebar click fills the active third new tab in place', async ({ page, api }) => {
+  test('sidebar click fills the active third new tab in place', async ({
+    page,
+    api,
+    workerServer,
+  }) => {
     const id = testId();
     const firstDoc = `new-tab-fill-first-${id}`;
     const selectedDoc = `new-tab-fill-selected-${id}`;
     const firstLabel = `${firstDoc}.md`;
     const selectedLabel = `${selectedDoc}.md`;
 
+    await clearVisibleContentEntries(workerServer);
     await seedMarkdownDocs(api, [
       { name: firstDoc, markdown: `# First ${id}` },
       { name: selectedDoc, markdown: `# Selected ${id}` },
@@ -336,6 +349,7 @@ test.describe('Editor tabs', () => {
   test('sidebar folder click replaces the active file tab with the folder tab', async ({
     page,
     api,
+    workerServer,
   }) => {
     const id = testId();
     const fileDoc = `folder-click-file-${id}`;
@@ -344,6 +358,7 @@ test.describe('Editor tabs', () => {
     const fileLabel = `${fileDoc}.md`;
     const folderLabel = `${folder}/`;
 
+    await clearVisibleContentEntries(workerServer);
     await seedMarkdownDocs(api, [
       { name: fileDoc, markdown: `# File ${id}` },
       { name: nestedDoc, markdown: `# Nested ${id}` },
@@ -373,6 +388,7 @@ test.describe('Editor tabs', () => {
     const docLabel = `${docName}.md`;
     const assetPath = `asset-tab-${id}.png`;
 
+    await clearVisibleContentEntries(workerServer);
     await seedReferencedAssetDoc(api, workerServer, docName, assetPath);
 
     await page.goto(`/#/${docName}`);
@@ -628,6 +644,7 @@ test.describe('Editor tabs', () => {
   test('tab click selects the already-open foo.md tab without rewriting the bar.md tab', async ({
     page,
     api,
+    workerServer,
   }) => {
     const id = testId();
     const fooDoc = `foo-click-${id}`;
@@ -635,6 +652,7 @@ test.describe('Editor tabs', () => {
     const fooLabel = `${fooDoc}.md`;
     const barLabel = `${barDoc}.md`;
 
+    await clearVisibleContentEntries(workerServer);
     await seedMarkdownDocs(api, [
       { name: fooDoc, markdown: `# Foo Click ${id}` },
       { name: barDoc, markdown: `# Bar Click ${id}` },

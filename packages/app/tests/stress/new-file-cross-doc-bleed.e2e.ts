@@ -3,11 +3,18 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test, waitForActiveProviderSynced } from './_helpers';
 
 async function yieldFramesInPage(page: Page): Promise<void> {
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
+  await page.waitForFunction(
+    () => {
+      const w = window as typeof window & { __okYieldFrameCount?: number };
+      w.__okYieldFrameCount = (w.__okYieldFrameCount ?? 0) + 1;
+      if (w.__okYieldFrameCount >= 3) {
+        w.__okYieldFrameCount = 0;
+        return true;
+      }
+      return false;
+    },
+    null,
+    { polling: 'raf', timeout: 10_000 },
   );
 }
 

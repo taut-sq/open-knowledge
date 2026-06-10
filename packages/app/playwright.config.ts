@@ -5,6 +5,7 @@ const isCI = !!process.env.CI;
 export default defineConfig({
   testDir: './tests/stress',
   testMatch: /.*\.e2e\.ts$/,
+  globalSetup: './tests/stress/_helpers/global-warm-cache.ts',
   timeout: 120_000,
   retries: isCI ? 2 : 0,
   failOnFlakyTests: false,

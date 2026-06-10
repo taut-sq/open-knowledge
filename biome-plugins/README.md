@@ -99,6 +99,19 @@ The rule does NOT catch:
 
 Plugin: [`biome-plugins/playwright-topass-budget.grit`](playwright-topass-budget.grit). Fixture: [`biome-plugins/__fixtures__/playwright-topass-budget.fixture.tsx`](__fixtures__/playwright-topass-budget.fixture.tsx). Test: [`packages/desktop/tests/integration/playwright-topass-budget.test.ts`](../packages/desktop/tests/integration/playwright-topass-budget.test.ts). See [PRECEDENTS.md #42](../PRECEDENTS.md#custom-lint-enforcement-precedent-42) for the GritQL-plugin convention.
 
+### `playwright-prefer-to-have-count.grit`
+
+Flags `expect(await locator.count())` — the one-shot count snapshot that never retries. Under CI CPU contention the DOM settles a few frames after the read, so the assertion flakes while the auto-retrying web-first form `await expect(locator).toHaveCount(n)` passes deterministically (the no-retry read was one of the hidden-flake shapes in the 2026-06 e2e CI audit). The pattern matches the probe sub-expression regardless of the matcher that follows (`.toBe`, `.toEqual`, `.toBeGreaterThanOrEqual`, ...). Upstream precedent: eslint-plugin-playwright `prefer-to-have-count`.
+
+**Scoped via `overrides[].plugins`** to `packages/app/tests/{stress,visual,a11y}/**/*.e2e.ts` (the same three dirs `tests/integration/e2e-stop-rules.test.ts` source-scans) + the fixture. Not workspace-wide: outside Playwright specs, `.count()` is usually not a `Locator` and the web-first rewrite does not apply.
+
+The rule does NOT catch:
+- `expect.soft(await locator.count())` — different callee node shape; zero occurrences today.
+- A count read assigned to a variable and asserted later (`const n = await loc.count(); expect(n).toBe(2)`) — two statements; GritQL cannot correlate them. Add an e2e-stop-rules source-scan rule if the split form ever recurs.
+- Biome 2.4 plugin diagnostics are diagnostic-only — the `toHaveCount` rewrite is named in the message but not auto-applied.
+
+Plugin: [`biome-plugins/playwright-prefer-to-have-count.grit`](playwright-prefer-to-have-count.grit). Fixture: [`biome-plugins/__fixtures__/playwright-prefer-to-have-count.fixture.tsx`](__fixtures__/playwright-prefer-to-have-count.fixture.tsx). Test: [`packages/app/tests/lint-plugins/playwright-prefer-to-have-count.test.ts`](../packages/app/tests/lint-plugins/playwright-prefer-to-have-count.test.ts). See [PRECEDENTS.md #42](../PRECEDENTS.md#custom-lint-enforcement-precedent-42) for the GritQL-plugin convention.
+
 ## Suppression
 
 Inline `// biome-ignore` comments silence individual diagnostics. The most specific form names the rule and the reason:

@@ -24,20 +24,19 @@ test.describe('Activity mode (DocPanel) — avatar drill-in, back-arrow exit', (
     const claude = agentId('claude-t1');
     await api.writeAsAgent(docA, '# Claude wrote to A', {
       agentId: claude,
-      agentName: 'Claude',
+      agentName: 'Claude T1',
       clientName: 'claude-code',
     });
     await api.writeAsAgent(docB, '# Claude also wrote to B', {
       agentId: claude,
-      agentName: 'Claude',
+      agentName: 'Claude T1',
       clientName: 'claude-code',
     });
 
     const bar = page.locator('[data-slot="presence-bar"]');
 
     const claudeAvatar = bar
-      .locator('[data-presence-badge="agent"]')
-      .filter({ has: page.locator('[aria-label*="Claude"]') })
+      .locator('[data-presence-badge="agent"][aria-label*="Claude T1"]')
       .first();
     await expect(claudeAvatar).toBeVisible({ timeout: 10_000 });
     await claudeAvatar.click();
@@ -76,13 +75,12 @@ test.describe('Activity mode (DocPanel) — avatar drill-in, back-arrow exit', (
     const claude = agentId('claude-t2');
     await api.writeAsAgent(docAgent, '# Claude', {
       agentId: claude,
-      agentName: 'Claude',
+      agentName: 'Claude T2',
       clientName: 'claude-code',
     });
 
     const claudeAvatar = page
-      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"]')
-      .filter({ has: page.locator('[aria-label*="Claude"]') })
+      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"][aria-label*="Claude T2"]')
       .first();
     await expect(claudeAvatar).toBeVisible({ timeout: 10_000 });
 
@@ -114,13 +112,12 @@ test.describe('Activity mode (DocPanel) — avatar drill-in, back-arrow exit', (
     const claude = agentId('claude-t3');
     await api.writeAsAgent(docAgent, '# Claude', {
       agentId: claude,
-      agentName: 'Claude',
+      agentName: 'Claude T3',
       clientName: 'claude-code',
     });
 
     const claudeAvatar = page
-      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"]')
-      .filter({ has: page.locator('[aria-label*="Claude"]') })
+      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"][aria-label*="Claude T3"]')
       .first();
     await expect(claudeAvatar).toBeVisible({ timeout: 10_000 });
     await claudeAvatar.click();
@@ -151,13 +148,12 @@ test.describe('Activity mode (DocPanel) — avatar drill-in, back-arrow exit', (
     const claude = agentId('claude-t6');
     await api.writeAsAgent(docTarget, '# Claude wrote target', {
       agentId: claude,
-      agentName: 'Claude',
+      agentName: 'Claude T6',
       clientName: 'claude-code',
     });
 
     const claudeAvatar = page
-      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"]')
-      .filter({ has: page.locator('[aria-label*="Claude"]') })
+      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"][aria-label*="Claude T6"]')
       .first();
     await expect(claudeAvatar).toBeVisible({ timeout: 10_000 });
     await claudeAvatar.click();
@@ -196,16 +192,16 @@ test.describe('Activity mode (DocPanel) — avatar drill-in, back-arrow exit', (
     const claude = agentId('claude-t7');
     await api.writeAsAgent(docAgent, '# Claude wrote burst 1', {
       agentId: claude,
-      agentName: 'Claude',
+      agentName: 'Claude T7',
       clientName: 'claude-code',
     });
 
     const urlBefore = page.url();
 
     const claudeAvatar = page
-      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"]')
-      .filter({ has: page.locator('[aria-label*="Claude"]') })
+      .locator('[data-slot="presence-bar"] [data-presence-badge="agent"][aria-label*="Claude T7"]')
       .first();
+    await expect(claudeAvatar).toBeVisible({ timeout: 10_000 });
     await claudeAvatar.click();
     const panel = page.locator('[data-testid="activity-panel"]');
     await expect(panel).toBeVisible({ timeout: 5_000 });

@@ -70,6 +70,21 @@
       "plugins": ["./biome-plugins/playwright-topass-budget.grit"]
     },
     {
+      // One-shot `expect(await locator.count())` reads never retry and are
+      // the canonical hidden-flake assertion shape (2026-06 e2e audit).
+      // Scoped to the browser e2e suites (all three dirs the e2e-stop-rules
+      // source-scan also covers) + the plugin's own fixture. Not workspace-
+      // wide: outside Playwright specs, `.count()` is usually not a Locator
+      // and the web-first rewrite does not apply.
+      "includes": [
+        "packages/app/tests/stress/**/*.e2e.ts",
+        "packages/app/tests/visual/**/*.e2e.ts",
+        "packages/app/tests/a11y/**/*.e2e.ts",
+        "biome-plugins/__fixtures__/playwright-prefer-to-have-count.fixture.tsx"
+      ],
+      "plugins": ["./biome-plugins/playwright-prefer-to-have-count.grit"]
+    },
+    {
       // UI primitives discipline (see PR #937 retrospective). Scoped to
       // packages/{app,desktop,plugin}/src/**/*.tsx — production UI surfaces.
       // Exemptions:

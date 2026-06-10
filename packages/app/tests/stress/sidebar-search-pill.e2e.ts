@@ -109,7 +109,7 @@ test.describe('sidebar-search-pill — discovery, click, keyboard, semantics', (
     await page.goto('/#/q002');
     await page.waitForSelector('[role="treeitem"]', { timeout: 15_000 });
 
-    expect(await cmdkRoot(page).count()).toBe(0);
+    await expect(cmdkRoot(page)).toHaveCount(0);
 
     await pill(page).click();
     await expect(cmdkRoot(page)).toBeVisible({ timeout: 2_000 });
@@ -214,7 +214,7 @@ test.describe('sidebar-search-pill — discovery, click, keyboard, semantics', (
     });
 
     const searchInsideHeader = sidebarHeader(page).getByRole('button', { name: 'Search' });
-    expect(await searchInsideHeader.count()).toBe(0);
+    await expect(searchInsideHeader).toHaveCount(0);
 
     await expect(
       sidebarHeader(page).getByRole('button', { name: 'Tree View Options' }),
@@ -236,7 +236,7 @@ test.describe('sidebar-search-pill — discovery, click, keyboard, semantics', (
     await page.waitForSelector('[role="treeitem"]', { timeout: 15_000 });
 
     const matchingPills = page.getByRole('button', { name: /^Search/ });
-    expect(await matchingPills.count()).toBe(1);
+    await expect(matchingPills).toHaveCount(1);
 
     const ariaLabel = await pill(page).getAttribute('aria-label');
     expect(ariaLabel).toBeNull();

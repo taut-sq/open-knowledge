@@ -13,8 +13,13 @@ import {
   snapshotMarkdownOnly,
 } from '../integration/_fixtures/init-load-byte-stable-snapshot.ts';
 import {
+  checkCollabSync,
+  closeServerLog,
   getFreePort,
   killGracefully,
+  openServerLog,
+  prepareViteCacheDir,
+  tailServerLog,
   waitForActiveProviderSynced,
   waitForHttpReady,
 } from './_helpers';
@@ -51,34 +56,50 @@ const test = base.extend<{ ephemeral: EphemeralFixture }>({
     const projectDir = createEphemeralProjectDir(notesDir);
 
     const baseURL = `http://localhost:${port}`;
+    const viteCacheDir = prepareViteCacheDir('sf-ephemeral');
+    const serverLog = openServerLog('sf-ephemeral');
     const proc = spawn('bun', ['run', '--silent', 'dev'], {
       cwd: APP_PACKAGE_ROOT,
       env: {
         ...process.env,
         VITE_PORT: String(port),
         OK_TEST_CONTENT_DIR: notesDir,
+        OK_TEST_VITE_CACHE_DIR: viteCacheDir,
+        OK_TEST_SKIP_I18N_COMPILE: '1',
         OK_TEST_SINGLE_DOC_REL_PATH: FILE_NAME,
         OK_TEST_PROJECT_DIR: projectDir,
         NO_COLOR: process.env.NO_COLOR ?? '1',
       },
-      stdio: ['ignore', 'ignore', 'inherit'],
+      stdio: ['ignore', serverLog.fd, 'inherit'],
     });
 
     try {
       await Promise.race([
-        waitForHttpReady(baseURL, 60_000),
+        (async () => {
+          await waitForHttpReady(baseURL, 60_000);
+          await checkCollabSync(port);
+        })(),
         new Promise<never>((_, reject) => {
           proc.once('error', (err) => reject(err));
           proc.once('exit', (code, signal) => {
-            if (code !== 0 && code !== null)
-              reject(new Error(`dev server exited early: code=${code} signal=${signal}`));
+            if (code !== null)
+              reject(
+                new Error(
+                  `dev server exited early: code=${code} signal=${signal}\n--- dev server log tail (${serverLog.path}) ---\n${tailServerLog(serverLog)}`,
+                ),
+              );
           });
         }),
       ]);
     } catch (err) {
-      await killGracefully(proc);
-      rmSync(userDir, { recursive: true, force: true });
-      rmSync(projectDir, { recursive: true, force: true });
+      try {
+        await killGracefully(proc);
+      } finally {
+        closeServerLog(serverLog);
+        rmSync(userDir, { recursive: true, force: true });
+        rmSync(projectDir, { recursive: true, force: true });
+        rmSync(viteCacheDir, { recursive: true, force: true });
+      }
       throw err;
     }
 
@@ -88,8 +109,11 @@ const test = base.extend<{ ephemeral: EphemeralFixture }>({
       try {
         await killGracefully(proc);
       } finally {
+        closeServerLog(serverLog);
+        rmSync(serverLog.path, { force: true });
         rmSync(userDir, { recursive: true, force: true });
         rmSync(projectDir, { recursive: true, force: true });
+        rmSync(viteCacheDir, { recursive: true, force: true });
       }
     }
   },

@@ -317,10 +317,15 @@ test.describe('FileTree sidebar create', () => {
       await page.goto('/#/zz-bulk-delete-a');
       await page.waitForLoadState('domcontentloaded');
 
+      await expect(
+        page.locator('[data-slot="sidebar-container"]').getByRole('treeitem').first(),
+      ).toBeVisible({ timeout: 30_000 });
+
       const firstItem = await visibleSidebarItemByPath(page, 'zz-bulk-delete-a.md');
       const secondItem = await visibleSidebarItemByPath(page, 'zz-bulk-delete-b.md');
 
       await firstItem.click();
+      await expect(firstItem).toHaveAttribute('aria-selected', 'true');
       await secondItem.click({
         modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'],
       });
@@ -761,16 +766,16 @@ test.describe('FileTree sidebar create', () => {
       await expect(page).toHaveURL(new RegExp(`#/${name}$`));
 
       await folderItem.click();
+      await expect(page).toHaveURL(new RegExp(`#/${name}/$`));
       await expect(activeEditorTabButton(page, `${name}/`)).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page).toHaveURL(new RegExp(`#/${name}/$`));
 
       await fileItem.click();
+      await expect(page).toHaveURL(new RegExp(`#/${name}$`));
       await expect(activeEditorTabButton(page, `${name}.md`)).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page).toHaveURL(new RegExp(`#/${name}$`));
 
       expect(existsSync(join(workerServer.contentDir, name))).toBe(true);
       expect(statSync(join(workerServer.contentDir, name)).isDirectory()).toBe(true);

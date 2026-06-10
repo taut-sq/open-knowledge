@@ -182,27 +182,11 @@ test.describe('asset-click dispatcher — P9 E2E scenarios (SPEC 2026-04-23)', (
     await expect(page.locator('[data-resolution-state="asset"]').first()).toBeVisible({
       timeout: 10_000,
     });
-    await page.evaluate(() => {
-      const w = window as typeof window & { __assetOpenCalls?: string[] };
-      const originalOpen = window.open.bind(window);
-      w.__assetOpenCalls = [];
-      window.open = ((url?: string | URL, target?: string, features?: string) => {
-        w.__assetOpenCalls?.push(String(url ?? ''));
-        return originalOpen(url, target, features);
-      }) as typeof window.open;
-    });
-
     const [newPage] = await Promise.all([
       context.waitForEvent('page', { timeout: 5_000 }),
       page.click('span[data-link]', { modifiers: ['Meta'] }),
     ]);
-    await expect
-      .poll(async () =>
-        page.evaluate(() => {
-          return (window as typeof window & { __assetOpenCalls?: string[] }).__assetOpenCalls ?? [];
-        }),
-      )
-      .toContain('./guide.html');
+    await newPage.waitForURL('**/guide.html', { timeout: 10_000 });
     await newPage.close();
   });
 

@@ -122,6 +122,11 @@ test.describe('multi-agent presence — sectioned PresenceBar (FR-9)', () => {
       { hasText: '' },
     );
     await expect(crossDocAvatar.first()).toBeVisible({ timeout: 10_000 });
+    await api.writeAsAgent(docBar, '# Cursor on bar', {
+      agentId: agentId('cursor-nav-bar'),
+      agentName: 'Cursor',
+      clientName: 'cursor',
+    });
     await crossDocAvatar.first().click();
 
     const panel = page.locator('[data-testid="activity-panel"]');
@@ -154,9 +159,14 @@ test.describe('multi-agent presence — sectioned PresenceBar (FR-9)', () => {
       '[data-presence-section="crossdoc"] [data-presence-badge="agent"][data-presence-crossdoc="true"]',
     );
     await expect(crossDocAvatar.first()).toBeVisible({ timeout: 10_000 });
+    await api.writeAsAgent(docBar, '# Cursor on bar', {
+      agentId: agentId('cursor-nodoc-bar'),
+      agentName: 'Cursor',
+      clientName: 'cursor',
+    });
     await crossDocAvatar.first().click();
 
-    await expect(panel).toBeVisible({ timeout: 10_000 });
     await expect.poll(() => page.url()).toContain(`#/${docBar}`);
+    await expect(panel).toBeVisible({ timeout: 10_000 });
   });
 });

@@ -11,7 +11,7 @@ export async function selectAllAndWaitForSelection(page: Page, selector: string)
   );
 }
 
-export async function focusEditor(page: Page, timeoutMs = 2_000): Promise<void> {
+export async function focusEditor(page: Page, timeoutMs = 5_000): Promise<void> {
   await page.evaluate(() => {
     const editor = window.__activeEditor;
     if (!editor) return;

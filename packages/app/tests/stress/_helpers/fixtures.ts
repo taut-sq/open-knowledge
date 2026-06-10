@@ -1,16 +1,19 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { HocuspocusProvider } from '@hocuspocus/provider';
-import { SYSTEM_DOC_NAME } from '@inkeep/open-knowledge-core';
+import { join } from 'node:path';
 import { test as base } from '@playwright/test';
-import * as Y from 'yjs';
-import { getFreePort, killGracefully, waitForHttpReady } from './server-process.ts';
-
-const HELPERS_DIR = dirname(fileURLToPath(import.meta.url));
-const APP_PACKAGE_ROOT = resolve(HELPERS_DIR, '..', '..', '..');
+import {
+  APP_PACKAGE_ROOT,
+  checkCollabSync,
+  closeServerLog,
+  getFreePort,
+  killGracefully,
+  openServerLog,
+  prepareViteCacheDir,
+  tailServerLog,
+  waitForHttpReady,
+} from './server-process.ts';
 
 export interface WorkerServer {
   port: number;
@@ -70,40 +73,13 @@ async function checkApiConfig(baseURL: string, timeoutMs = 2_000): Promise<void>
   }
 }
 
-async function checkCollabSync(port: number, timeoutMs = 10_000): Promise<void> {
-  const doc = new Y.Doc();
-  const provider = new HocuspocusProvider({
-    url: `ws://localhost:${port}/collab`,
-    name: SYSTEM_DOC_NAME,
-    document: doc,
-    connect: false,
-  });
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`/collab sync round-trip did not complete within ${timeoutMs}ms`));
-      }, timeoutMs);
-      provider.on('synced', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-      provider.connect();
-    });
-  } finally {
-    try {
-      provider.destroy();
-    } catch {}
-    try {
-      doc.destroy();
-    } catch {}
-  }
-}
-
 async function waitForServerReady(baseURL: string, port: number): Promise<void> {
-  await waitForHttpReady(baseURL, 30_000);
+  await waitForHttpReady(baseURL, 60_000);
   await checkApiConfig(baseURL);
   await checkCollabSync(port);
 }
+
+export const REQUIRED_FIXTURE_ENTRY_NAMES = ['test-doc.md', 'sidebar-folder'] as const;
 
 function seedRequiredFixtureFiles(contentDir: string): void {
   writeFileSync(join(contentDir, 'test-doc.md'), '', 'utf-8');
@@ -117,12 +93,11 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     async ({}, use, workerInfo) => {
       const port = await getFreePort();
       const contentDir = mkdtempSync(join(tmpdir(), `ok-w${workerInfo.workerIndex}-`));
-      mkdirSync(join(APP_PACKAGE_ROOT, 'node_modules'), { recursive: true });
-      const viteCacheDir = mkdtempSync(
-        join(APP_PACKAGE_ROOT, 'node_modules', `.vite-w${workerInfo.workerIndex}-`),
-      );
+      const viteCacheDir = prepareViteCacheDir(`w${workerInfo.workerIndex}`);
       seedRequiredFixtureFiles(contentDir);
       const baseURL = `http://localhost:${port}`;
+
+      const serverLog = openServerLog(`w${workerInfo.workerIndex}`);
 
       const proc = spawn('bun', ['run', '--silent', 'dev'], {
         cwd: APP_PACKAGE_ROOT,
@@ -131,10 +106,11 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           VITE_PORT: String(port),
           OK_TEST_CONTENT_DIR: contentDir,
           OK_TEST_VITE_CACHE_DIR: viteCacheDir,
+          OK_TEST_SKIP_I18N_COMPILE: '1',
           OK_TEST_GIT_ENABLED: '1',
           NO_COLOR: process.env.NO_COLOR ?? '1',
         },
-        stdio: ['ignore', 'ignore', 'inherit'],
+        stdio: ['ignore', serverLog.fd, 'inherit'],
       });
 
       proc.on('error', (err) => {
@@ -144,19 +120,31 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       try {
         await waitForServerReady(baseURL, port);
       } catch (err) {
-        await killGracefully(proc);
-        rmSync(contentDir, { recursive: true, force: true });
-        rmSync(viteCacheDir, { recursive: true, force: true });
-        throw err;
+        const reason = err instanceof Error ? err.message : String(err);
+        try {
+          await killGracefully(proc);
+        } finally {
+          closeServerLog(serverLog);
+          rmSync(contentDir, { recursive: true, force: true });
+          rmSync(viteCacheDir, { recursive: true, force: true });
+        }
+        throw new Error(
+          `${reason}\n--- dev server log tail (${serverLog.path}) ---\n${tailServerLog(serverLog)}`,
+        );
       }
 
       await use({ port, baseURL, contentDir });
 
-      await killGracefully(proc);
-      rmSync(contentDir, { recursive: true, force: true });
-      rmSync(viteCacheDir, { recursive: true, force: true });
+      try {
+        await killGracefully(proc);
+      } finally {
+        closeServerLog(serverLog);
+        rmSync(serverLog.path, { force: true });
+        rmSync(contentDir, { recursive: true, force: true });
+        rmSync(viteCacheDir, { recursive: true, force: true });
+      }
     },
-    { scope: 'worker', timeout: 60_000 },
+    { scope: 'worker', timeout: 120_000 },
   ],
 
   baseURL: async ({ workerServer }, use) => {
@@ -165,41 +153,49 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
   api: async ({ workerServer }, use) => {
     const { baseURL } = workerServer;
+    const API_CALL_TIMEOUT_MS = 30_000;
+    async function post(path: string, body?: unknown): Promise<Response> {
+      try {
+        return await fetch(`${baseURL}${path}`, {
+          method: 'POST',
+          ...(body !== undefined
+            ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+            : {}),
+          signal: AbortSignal.timeout(API_CALL_TIMEOUT_MS),
+        });
+      } catch (err) {
+        const name = (err as { name?: string })?.name;
+        if (name === 'TimeoutError' || name === 'AbortError') {
+          throw new Error(
+            `POST ${path} timed out after ${API_CALL_TIMEOUT_MS}ms — server stalled mid-test (port ${workerServer.port})`,
+          );
+        }
+        throw err;
+      }
+    }
     const helpers: ApiHelpers = {
       async createPage(path: string): Promise<void> {
-        const res = await fetch(`${baseURL}/api/create-page`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path }),
-        });
+        const res = await post('/api/create-page', { path });
         if (res.status === 409) return;
         if (!res.ok) {
           throw new Error(`create-page failed for ${path}: ${res.status}`);
         }
       },
       async replaceDoc(docName: string, markdown: string): Promise<void> {
-        const res = await fetch(`${baseURL}/api/agent-write-md`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ docName, markdown, position: 'replace' }),
-        });
+        const res = await post('/api/agent-write-md', { docName, markdown, position: 'replace' });
         if (!res.ok) {
           throw new Error(`agent-write-md failed for ${docName}: ${res.status}`);
         }
       },
       async writeAsAgent(docName: string, markdown: string, identity): Promise<void> {
-        const res = await fetch(`${baseURL}/api/agent-write-md`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            docName,
-            markdown,
-            position: 'replace',
-            agentId: identity.agentId,
-            agentName: identity.agentName,
-            clientName: identity.clientName,
-            colorSeed: identity.colorSeed,
-          }),
+        const res = await post('/api/agent-write-md', {
+          docName,
+          markdown,
+          position: 'replace',
+          agentId: identity.agentId,
+          agentName: identity.agentName,
+          clientName: identity.clientName,
+          colorSeed: identity.colorSeed,
         });
         if (!res.ok) {
           throw new Error(
@@ -208,10 +204,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         }
       },
       async testReset(docName?: string): Promise<void> {
-        const url = docName
-          ? `${baseURL}/api/test-reset?docName=${encodeURIComponent(docName)}`
-          : `${baseURL}/api/test-reset`;
-        const res = await fetch(url, { method: 'POST' });
+        const res = await post(
+          docName ? `/api/test-reset?docName=${encodeURIComponent(docName)}` : '/api/test-reset',
+        );
         if (!res.ok) {
           throw new Error(`test-reset failed${docName ? ` for ${docName}` : ''}: ${res.status}`);
         }

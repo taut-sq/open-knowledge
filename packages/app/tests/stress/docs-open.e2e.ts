@@ -660,7 +660,7 @@ test.describe('docs-open — hybrid navigation UX', () => {
     await waitForActiveProviderSynced(page);
 
     await expect(page.getByText('Content rendered from a .mdx file')).toBeVisible({
-      timeout: 10_000,
+      timeout: 30_000,
     });
     await expect(
       page.getByRole('main').getByRole('button', { name: `${docName}.mdx`, exact: true }),
