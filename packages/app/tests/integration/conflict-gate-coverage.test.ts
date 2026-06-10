@@ -43,7 +43,6 @@ const EXEMPT_HANDLERS = new Set([
   'handlePageHeadings',
   'handleHistory',
   'handleHistoryVersion',
-  'handleDiff',
   'handleMetricsReconciliation',
   'handleMetricsParseHealth',
   'handleMetricsAgentPresence',

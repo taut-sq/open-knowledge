@@ -60,7 +60,6 @@ import {
   DeadLinksSuccessSchema,
   DeletePathRequestSchema,
   DeletePathSuccessSchema,
-  DiffSuccessSchema,
   type DiskEditReconciledWarning,
   type DocumentListEntry,
   DocumentListSuccessSchema,
@@ -183,7 +182,6 @@ import {
   resolveGitDirDetailed,
 } from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import busboy from 'busboy';
-import { diffLines } from 'diff';
 import { fileTypeFromFile } from 'file-type';
 import { parse as parseYaml } from 'yaml';
 import { captureEffect } from './activity-log.ts';
@@ -5371,148 +5369,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       });
     }
   }
-
-  const handleDiff = withValidation(
-    EmptyRequestSchema,
-    async (req, res) => {
-      const shadow = shadowRef?.current;
-      if (!shadow) {
-        errorResponse(
-          res,
-          503,
-          'urn:ok:error:shadow-not-configured',
-          'Shadow repo not configured.',
-          { handler: 'diff' },
-        );
-        return;
-      }
-
-      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-      const docName = url.searchParams.get('docName') ?? '';
-      const from = url.searchParams.get('from') ?? '';
-      const to = url.searchParams.get('to') ?? '';
-
-      if (!to || !/^[0-9a-f]{40}$/i.test(to)) {
-        errorResponse(
-          res,
-          400,
-          'urn:ok:error:invalid-request',
-          "'to' must be a valid 40-char commit SHA.",
-          { handler: 'diff' },
-        );
-        return;
-      }
-
-      const resolvedContentRoot = contentRoot ?? '.';
-      const pathResult = safeDocPath(docName, resolvedContentRoot);
-      if ('error' in pathResult) {
-        errorResponse(res, 400, 'urn:ok:error:invalid-request', pathResult.error, {
-          handler: 'diff',
-        });
-        return;
-      }
-      const sg = shadowGit(shadow);
-      const branch = getCurrentBranch?.() ?? 'main';
-
-      const renameLogIndex = getOrLoadRenameLogIndex(shadow.gitDir);
-      const ancestorCache = createAncestorShaSetCache();
-      const pathFor = (name: string): string => {
-        const p = safeDocPath(name, resolvedContentRoot);
-        return 'error' in p ? `${name}.md` : p.path;
-      };
-
-      try {
-        const toHistoricalPath = await resolveDocPathAtCommit(
-          shadow,
-          docName,
-          to,
-          branch,
-          renameLogIndex,
-          pathFor,
-          ancestorCache,
-        );
-        if (toHistoricalPath === null) {
-          errorResponse(
-            res,
-            404,
-            'urn:ok:error:doc-not-found',
-            'Document did not exist at the target version.',
-            { handler: 'diff' },
-          );
-          return;
-        }
-        const toContent = await sg.raw('show', `${to}:${toHistoricalPath}`);
-
-        let fromContent: string;
-        if (from && /^[0-9a-f]{40}$/i.test(from)) {
-          const fromHistoricalPath = await resolveDocPathAtCommit(
-            shadow,
-            docName,
-            from,
-            branch,
-            renameLogIndex,
-            pathFor,
-            ancestorCache,
-          );
-          if (fromHistoricalPath === null) {
-            errorResponse(
-              res,
-              404,
-              'urn:ok:error:doc-not-found',
-              'Document did not exist at the source version.',
-              { handler: 'diff' },
-            );
-            return;
-          }
-          fromContent = await sg.raw('show', `${from}:${fromHistoricalPath}`);
-        } else {
-          const doc = hocuspocus.documents.get(docName);
-          if (!doc) {
-            errorResponse(
-              res,
-              409,
-              'urn:ok:error:doc-not-open',
-              'Document is not currently open — open it in the editor first.',
-              { handler: 'diff' },
-            );
-            return;
-          }
-          fromContent = doc.getText('source').toString();
-        }
-
-        const fromBody = stripFrontmatter(fromContent).body;
-        const toBody = stripFrontmatter(toContent).body;
-        const changes = diffLines(fromBody, toBody);
-
-        const lines: { type: 'added' | 'removed' | 'unchanged'; text: string }[] = [];
-        let additions = 0;
-        let deletions = 0;
-        for (const change of changes) {
-          const changeLines = change.value.replace(/\n$/, '').split('\n');
-          const type = change.added ? 'added' : change.removed ? 'removed' : 'unchanged';
-          for (const text of changeLines) {
-            lines.push({ type, text });
-          }
-          if (change.added) additions += changeLines.length;
-          if (change.removed) deletions += changeLines.length;
-        }
-
-        successResponse(
-          res,
-          200,
-          DiffSuccessSchema,
-          { lines, additions, deletions },
-          { handler: 'diff' },
-        );
-      } catch (e) {
-        errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Internal server error.', {
-          handler: 'diff',
-          cause: e,
-        });
-      }
-    },
-    { handler: 'diff', method: 'GET', skipBodyParse: true },
-  );
 
   const handleRollback = withValidation(
     RollbackRequestSchema,
@@ -11094,7 +10950,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/agent-burst-diff': handleAgentBurstDiff,
     '/api/save-version': handleSaveVersion,
     '/api/history': handleHistory,
-    '/api/diff': handleDiff,
     '/api/rollback': handleRollback,
     '/api/metrics/reconciliation': handleMetricsReconciliation,
     '/api/metrics/parse-health': handleMetricsParseHealth,

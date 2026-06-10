@@ -14,10 +14,3 @@ export interface TimelineEntry {
   contributors: ShadowContributor[];
   checkpoint: ParsedCheckpoint | null;
 }
-
-export type DiffLineType = 'added' | 'removed' | 'unchanged';
-
-export interface DiffLine {
-  type: DiffLineType;
-  text: string;
-}

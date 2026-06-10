@@ -503,10 +503,6 @@ export {
   DeletePathRequestSchema,
   type DeletePathSuccess,
   DeletePathSuccessSchema,
-  type DiffLine as ApiDiffLine,
-  DiffLineSchema,
-  type DiffSuccess,
-  DiffSuccessSchema,
   type DiskEditReconciledWarning,
   DiskEditReconciledWarningSchema,
   type DocumentListEntry,
@@ -875,8 +871,6 @@ export type {
 export type { Identity } from './types/identity.ts';
 export type { Principal } from './types/principal.ts';
 export type {
-  DiffLine,
-  DiffLineType,
   EntryType,
   ShadowContributor,
   TimelineEntry,
