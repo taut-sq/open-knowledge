@@ -77,22 +77,6 @@ export const LocalOpAuthSetIdentityRequestSchema = z
   .loose() satisfies StandardSchemaV1;
 export type LocalOpAuthSetIdentityRequest = z.infer<typeof LocalOpAuthSetIdentityRequestSchema>;
 
-export const LocalOpAuthIdentitySchema = z
-  .object({
-    name: z.string().min(1),
-    email: z.string().min(1),
-  })
-  .loose()
-  .nullable() satisfies StandardSchemaV1;
-export type LocalOpAuthIdentity = z.infer<typeof LocalOpAuthIdentitySchema>;
-
-export const LocalOpAuthIdentitySuccessSchema = z
-  .object({
-    identity: LocalOpAuthIdentitySchema,
-  })
-  .loose() satisfies StandardSchemaV1;
-export type LocalOpAuthIdentitySuccess = z.infer<typeof LocalOpAuthIdentitySuccessSchema>;
-
 export const LocalOpAuthStatusSuccessSchema = z
   .object({
     authenticated: z.boolean(),

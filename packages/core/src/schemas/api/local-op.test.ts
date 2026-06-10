@@ -2,8 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   LocalOpAuthEmptySuccessSchema,
   LocalOpAuthHostRequestSchema,
-  LocalOpAuthIdentitySchema,
-  LocalOpAuthIdentitySuccessSchema,
   LocalOpAuthSetIdentityRequestSchema,
   LocalOpAuthStatusSuccessSchema,
   LocalOpOpenRequestSchema,
@@ -103,36 +101,6 @@ describe('LocalOpAuthSetIdentityRequestSchema', () => {
   });
   test('rejects missing fields', () => {
     expect(LocalOpAuthSetIdentityRequestSchema.safeParse({ name: 'Alice' }).success).toBe(false);
-  });
-});
-
-describe('LocalOpAuthIdentitySchema', () => {
-  test('parses a populated identity', () => {
-    expect(
-      LocalOpAuthIdentitySchema.safeParse({ name: 'Alice', email: 'alice@example.com' }).success,
-    ).toBe(true);
-  });
-  test('parses null', () => {
-    expect(LocalOpAuthIdentitySchema.safeParse(null).success).toBe(true);
-  });
-  test('rejects empty name', () => {
-    expect(LocalOpAuthIdentitySchema.safeParse({ name: '', email: 'x@y.z' }).success).toBe(false);
-  });
-});
-
-describe('LocalOpAuthIdentitySuccessSchema', () => {
-  test('parses a populated identity', () => {
-    expect(
-      LocalOpAuthIdentitySuccessSchema.safeParse({
-        identity: { name: 'Alice', email: 'alice@example.com' },
-      }).success,
-    ).toBe(true);
-  });
-  test('parses null identity', () => {
-    expect(LocalOpAuthIdentitySuccessSchema.safeParse({ identity: null }).success).toBe(true);
-  });
-  test('rejects missing identity field', () => {
-    expect(LocalOpAuthIdentitySuccessSchema.safeParse({}).success).toBe(false);
   });
 });
 

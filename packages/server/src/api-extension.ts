@@ -94,7 +94,6 @@ import {
   LocalOpAuthEmptySuccessSchema,
   type LocalOpAuthHostRequest,
   LocalOpAuthHostRequestSchema,
-  LocalOpAuthIdentitySuccessSchema,
   LocalOpAuthSetIdentityRequestSchema,
   LocalOpAuthStatusSuccessSchema,
   type LocalOpCloneRequest,
@@ -379,7 +378,7 @@ import {
 } from './git-branch-info.ts';
 import { CHECKOUT_HANDLER_TAG, runCheckoutFlow } from './git-checkout.ts';
 import { withParentLock } from './git-handle.ts';
-import { resolveGitIdentity, writeGitIdentity } from './git-identity.ts';
+import { writeGitIdentity } from './git-identity.ts';
 import {
   createStreamingErrorWriter,
   errorResponse,
@@ -8657,44 +8656,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     },
   );
 
-  const HANDLE_LOCAL_OP_AUTH_IDENTITY = 'local-op-auth-identity';
-  async function handleLocalOpAuthIdentity(
-    req: IncomingMessage,
-    res: ServerResponse,
-  ): Promise<void> {
-    if (!checkLocalOpSecurity(req, res, { handler: HANDLE_LOCAL_OP_AUTH_IDENTITY })) return;
-    if (req.method !== 'GET') {
-      errorResponse(res, 405, 'urn:ok:error:method-not-allowed', 'Method not allowed.', {
-        handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-        extraHeaders: { Allow: 'GET' },
-      });
-      return;
-    }
-    if (!projectDir) {
-      errorResponse(res, 503, 'urn:ok:error:no-project-dir', 'No project directory configured.', {
-        handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-      });
-      return;
-    }
-    try {
-      const identity = await resolveGitIdentity(projectDir);
-      successResponse(
-        res,
-        200,
-        LocalOpAuthIdentitySuccessSchema,
-        { identity },
-        {
-          handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-        },
-      );
-    } catch (err) {
-      errorResponse(res, 500, 'urn:ok:error:internal-server-error', 'Identity resolution failed.', {
-        handler: HANDLE_LOCAL_OP_AUTH_IDENTITY,
-        cause: err,
-      });
-    }
-  }
-
   const LOCAL_OP_AUTH_SET_IDENTITY_KEY = '/api/local-op/auth/set-identity';
 
   const HANDLE_LOCAL_OP_AUTH_SET_IDENTITY = 'local-op-auth-set-identity';
@@ -11211,7 +11172,6 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     '/api/local-op/auth/status': handleLocalOpAuthStatus,
     '/api/local-op/auth/repos': handleLocalOpAuthRepos,
     '/api/local-op/auth/signout': handleLocalOpAuthSignout,
-    '/api/local-op/auth/identity': handleLocalOpAuthIdentity,
     '/api/local-op/auth/set-identity': handleLocalOpAuthSetIdentity,
     '/api/local-op/embeddings/set-key': handleLocalOpEmbeddingsSetKey,
     '/api/local-op/embeddings/clear-key': handleLocalOpEmbeddingsClearKey,
