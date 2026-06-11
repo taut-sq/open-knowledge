@@ -151,6 +151,7 @@ import { useDocumentContext } from '@/editor/DocumentContext';
 import { captureRenameSnapshots } from '@/editor/editor-cache';
 import { assetTabId, docTabId, folderTabId, remapPathForFolderRenames } from '@/editor/editor-tabs';
 import { useConflicts } from '@/hooks/use-conflicts';
+import { useFolderConfig } from '@/hooks/use-folder-config';
 import { useConfigContext } from '@/lib/config-provider';
 import { dispatchOpenInTerminal } from '@/lib/dispatch-open-in-terminal';
 import {
@@ -555,6 +556,11 @@ function FileTreeMenu({
   const showHiddenFiles = mergedConfig?.appearance?.sidebar?.showHiddenFiles ?? false;
   const showAllFiles = mergedConfig?.appearance?.sidebar?.showAllFiles ?? false;
   const canToggleVisibility = projectLocalBinding !== null;
+  const folderConfig = useFolderConfig(isFolder ? treeDirectoryPathToFolderPath(item.path) : null);
+  const folderHasTemplates =
+    folderConfig.state.status === 'ready'
+      ? (folderConfig.state.data.folder.templates_available?.length ?? 0) > 0
+      : true;
   const selectedTreePaths = model.getSelectedPaths();
   const selectedDeleteTargets = selectedTreePaths.includes(target.treePath)
     ? selectedTreePathsToDeleteTargets(selectedTreePaths, documents)
@@ -666,22 +672,24 @@ function FileTreeMenu({
               <SquarePen aria-hidden="true" />
               <Trans>New File</Trans>
             </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={anyActionBusy}>
-                <FilePlus aria-hidden="true" />
-                <Trans>New from template</Trans>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <TemplateMenuRows
-                  parentDir={treeDirectoryPathToFolderPath(item.path)}
-                  onSelectTemplate={(templateName) => {
-                    closeForInlineSurface();
-                    onCreateFromTemplate(treeDirectoryPathToFolderPath(item.path), templateName);
-                  }}
-                  ItemComponent={DropdownMenuItem}
-                />
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            {folderHasTemplates ? (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={anyActionBusy}>
+                  <FilePlus aria-hidden="true" />
+                  <Trans>New from template</Trans>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <TemplateMenuRows
+                    parentDir={treeDirectoryPathToFolderPath(item.path)}
+                    onSelectTemplate={(templateName) => {
+                      closeForInlineSurface();
+                      onCreateFromTemplate(treeDirectoryPathToFolderPath(item.path), templateName);
+                    }}
+                    ItemComponent={DropdownMenuItem}
+                  />
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            ) : null}
             <DropdownMenuItem
               disabled={anyActionBusy}
               onSelect={() => {

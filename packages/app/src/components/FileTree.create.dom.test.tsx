@@ -174,6 +174,15 @@ let createStatus = 200;
 let createGate: Promise<void> | null = null;
 let createFetchError: Error | null = null;
 let fetchCalls: FetchCall[] = [];
+let folderTemplates: Array<{
+  name: string;
+  title?: string;
+  path: string;
+  source_folder: string;
+  scope: 'local' | 'inherited';
+}> = [];
+let folderConfigStatus: 'ready' | 'loading' = 'ready';
+let lastFolderConfigPath: string | null = null;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -255,6 +264,22 @@ mock.module('@/lib/config-provider', () => ({
     projectLocalBinding: null,
     merged: null,
   }),
+}));
+
+mock.module('@/hooks/use-folder-config', () => ({
+  useFolderConfig: (folderPath: string | null) => {
+    lastFolderConfigPath = folderPath;
+    if (folderConfigStatus === 'loading') {
+      return { state: { status: 'loading' }, refresh: () => {} };
+    }
+    return {
+      state: {
+        status: 'ready',
+        data: { folder: { templates_available: folderTemplates } },
+      },
+      refresh: () => {},
+    };
+  },
 }));
 
 mock.module('./handoff/useInstalledAgents', () => ({
@@ -378,6 +403,9 @@ describe('FileTree startCreating addPage symmetry', () => {
     createStatus = 200;
     createGate = null;
     createFetchError = null;
+    folderTemplates = [];
+    folderConfigStatus = 'ready';
+    lastFolderConfigPath = null;
     fetchCalls = [];
     globalThis.fetch = makeFetchMock() as unknown as typeof fetch;
     toastSuccessMock.mockClear();
@@ -423,5 +451,37 @@ describe('FileTree startCreating addPage symmetry', () => {
 
     await waitFor(() => expect(fetchCalls.some((c) => c.url === '/api/create-folder')).toBe(true));
     expect(addPageMock).not.toHaveBeenCalled();
+  });
+
+  test('folder context-menu hides "New from template" when the folder has no templates', async () => {
+    folderTemplates = [];
+    renderFileTree();
+
+    expect(await screen.findByRole('menuitem', { name: /new file/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /new from template/i })).toBeNull();
+  });
+
+  test('folder context-menu shows "New from template" when the folder has templates', async () => {
+    folderTemplates = [
+      {
+        name: 'daily',
+        title: 'Daily',
+        path: 'notes/.ok/templates/daily.md',
+        source_folder: 'notes',
+        scope: 'local',
+      },
+    ];
+    renderFileTree();
+
+    expect(await screen.findByRole('menuitem', { name: /new from template/i })).toBeTruthy();
+    expect(lastFolderConfigPath).toBe('notes');
+  });
+
+  test('folder context-menu keeps "New from template" while folder config is loading', async () => {
+    folderConfigStatus = 'loading';
+    folderTemplates = [];
+    renderFileTree();
+
+    expect(await screen.findByRole('menuitem', { name: /new from template/i })).toBeTruthy();
   });
 });

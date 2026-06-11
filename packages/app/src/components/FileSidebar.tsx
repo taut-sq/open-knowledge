@@ -695,22 +695,24 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             <SquarePen aria-hidden="true" />
             <Trans>New File</Trans>
           </ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger
-              disabled={!workspace || !rootHasTemplates}
-              data-testid="empty-space-menu-new-from-template"
-            >
-              <FilePlus aria-hidden="true" />
-              <Trans>New from template</Trans>
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <TemplateMenuRows
-                parentDir=""
-                onSelectTemplate={handleEmptySpaceSelectTemplate}
-                ItemComponent={ContextMenuItem}
-              />
-            </ContextMenuSubContent>
-          </ContextMenuSub>
+          {rootHasTemplates ? (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger
+                disabled={!workspace}
+                data-testid="empty-space-menu-new-from-template"
+              >
+                <FilePlus aria-hidden="true" />
+                <Trans>New from template</Trans>
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <TemplateMenuRows
+                  parentDir=""
+                  onSelectTemplate={handleEmptySpaceSelectTemplate}
+                  ItemComponent={ContextMenuItem}
+                />
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          ) : null}
           <ContextMenuItem
             disabled={!workspace}
             onSelect={handleEmptySpaceCreateFolder}

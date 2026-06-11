@@ -574,6 +574,18 @@ describe('FileSidebar runtime behavior', () => {
     });
   });
 
+  test('toolbar and empty-space menu hide "New from template" when no templates exist', async () => {
+    hasTemplates = false;
+    installBridge();
+    await renderSidebar();
+    await waitFor(() => expect(treeListeners.size).toBe(1));
+
+    expect(screen.queryByRole('button', { name: 'New from template' })).toBeNull();
+    expect(screen.queryByTestId('empty-space-menu-new-from-template')).toBeNull();
+    expect(screen.getByTestId('empty-space-menu-new-file')).toBeTruthy();
+    expect(screen.getByTestId('empty-space-menu-new-folder')).toBeTruthy();
+  });
+
   test('View menu state pushes merged visibility and tree smart-hide state to the desktop bridge', async () => {
     installBridge();
     await renderSidebar();
