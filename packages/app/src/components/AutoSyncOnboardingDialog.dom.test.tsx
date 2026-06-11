@@ -52,7 +52,7 @@ describe('AutoSyncOnboardingDialog runtime behavior', () => {
     expect(screen.getByRole('button', { name: 'Enable auto-sync' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Keep disabled' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
-    expect(screen.getByRole('alert').textContent).toContain('Before you enable it');
+    expect(screen.getByRole('note').textContent).toContain('Heads up');
   });
 
   test('disables both choices until the project-local sync writer is ready', async () => {

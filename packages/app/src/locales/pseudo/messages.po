@@ -763,10 +763,6 @@ msgstr ""
 msgid "Before syncing, set your identity for git commits:"
 msgstr ""
 
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "Before you enable it"
-msgstr ""
-
 #: src/editor/slash-command/items.tsx
 msgid "Below"
 msgstr ""
@@ -1113,6 +1109,10 @@ msgstr ""
 msgid "Code expired — please try again"
 msgstr ""
 
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Collaborators see your in-progress edits as soon as they sync."
+msgstr ""
+
 #: src/components/GraphPanel.tsx
 msgid "Collapse"
 msgstr ""
@@ -1161,6 +1161,10 @@ msgstr ""
 
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Commit or stash changes to switch:"
+msgstr ""
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Commits happen automatically"
 msgstr ""
 
 #: src/components/CloneDialog.tsx
@@ -2588,6 +2592,10 @@ msgstr ""
 msgid "heading-slug"
 msgstr ""
 
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Heads up"
+msgstr ""
+
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "Hello, world!"
 msgstr ""
@@ -2699,10 +2707,6 @@ msgstr ""
 
 #: src/components/ShareReceiveDialog.tsx
 msgid "I already have it locally →"
-msgstr ""
-
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "If this repo is shared, your in-progress edits become visible to collaborators as soon as they sync."
 msgstr ""
 
 #: src/components/ConsentDialogBody.tsx
@@ -4349,7 +4353,7 @@ msgid "Pulling"
 msgstr ""
 
 #: src/components/AutoSyncEnableWarning.tsx
-msgid "Pulls may overwrite uncommitted local file changes."
+msgid "Pulls may overwrite uncommitted edits in your local files."
 msgstr ""
 
 #: src/components/SyncStatusBadge.tsx
@@ -4992,6 +4996,10 @@ msgstr ""
 #: src/components/CreateProjectDialog.tsx
 #: src/components/settings/SharingSection.tsx
 msgid "Share with my team"
+msgstr ""
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Shared repositories"
 msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
@@ -5700,6 +5708,10 @@ msgstr ""
 
 #: src/editor/components/CodePreviewEditModal.tsx
 msgid "Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."
+msgstr ""
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Uncommitted changes"
 msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts

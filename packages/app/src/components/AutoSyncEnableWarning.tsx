@@ -1,4 +1,5 @@
 import { Trans } from '@lingui/react/macro';
+import { ArrowRightLeft, Eye, GitCommitVertical } from 'lucide-react';
 import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 export function AutoSyncEnableDialogIntro() {
@@ -19,30 +20,58 @@ export function AutoSyncEnableDialogIntro() {
 
 export function AutoSyncEnableWarning() {
   return (
-    <div
-      role="alert"
-      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-    >
-      <p className="mb-2 font-medium">
-        <Trans>Before you enable it</Trans>
+    <div role="note" className="text-sm space-y-5">
+      <p className="flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-primary">
+        <span aria-hidden="true" className="mb-[3px] flex items-center justify-center">
+          ◇
+        </span>
+        <Trans>Heads up</Trans>
       </p>
-      <ul className="list-disc space-y-1.5 pl-5">
-        <li>
-          <Trans>Pulls may overwrite uncommitted local file changes.</Trans>
-        </li>
-        <li>
-          <Trans>
-            Open Knowledge will create commits and push them to your remote automatically. If you do
-            not want automatic commits in your git history, you should not enable auto-sync.
-          </Trans>
-        </li>
-        <li>
-          <Trans>
-            If this repo is shared, your in-progress edits become visible to collaborators as soon
-            as they sync.
-          </Trans>
-        </li>
-      </ul>
+      <div className="space-y-5">
+        <div className="flex items-start gap-3">
+          <ArrowRightLeft
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+          />
+          <div className="space-y-0.5">
+            <p className="font-medium">
+              <Trans>Uncommitted changes</Trans>
+            </p>
+            <p className="text-muted-foreground">
+              <Trans>Pulls may overwrite uncommitted edits in your local files.</Trans>
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <GitCommitVertical
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+          />
+          <div className="space-y-0.5">
+            <p className="font-medium">
+              <Trans>Commits happen automatically</Trans>
+            </p>
+            <p className="text-muted-foreground">
+              <Trans>
+                Open Knowledge will create commits and push them to your remote automatically. If
+                you do not want automatic commits in your git history, you should not enable
+                auto-sync.
+              </Trans>
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <Eye aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <div className="space-y-0.5">
+            <p className="font-medium">
+              <Trans>Shared repositories</Trans>
+            </p>
+            <p className="text-muted-foreground">
+              <Trans>Collaborators see your in-progress edits as soon as they sync.</Trans>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

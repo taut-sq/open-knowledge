@@ -768,10 +768,6 @@ msgstr "Becomes the document's content when someone creates a doc from this temp
 msgid "Before syncing, set your identity for git commits:"
 msgstr "Before syncing, set your identity for git commits:"
 
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "Before you enable it"
-msgstr "Before you enable it"
-
 #: src/editor/slash-command/items.tsx
 msgid "Below"
 msgstr "Below"
@@ -1118,6 +1114,10 @@ msgstr "Code copied to clipboard"
 msgid "Code expired — please try again"
 msgstr "Code expired — please try again"
 
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Collaborators see your in-progress edits as soon as they sync."
+msgstr "Collaborators see your in-progress edits as soon as they sync."
+
 #: src/components/GraphPanel.tsx
 msgid "Collapse"
 msgstr "Collapse"
@@ -1167,6 +1167,10 @@ msgstr "Commands"
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Commit or stash changes to switch:"
 msgstr "Commit or stash changes to switch:"
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Commits happen automatically"
+msgstr "Commits happen automatically"
 
 #: src/components/CloneDialog.tsx
 msgid "Complete"
@@ -2593,6 +2597,10 @@ msgstr "Heading suggestions"
 msgid "heading-slug"
 msgstr "heading-slug"
 
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Heads up"
+msgstr "Heads up"
+
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "Hello, world!"
 msgstr "Hello, world!"
@@ -2705,10 +2713,6 @@ msgstr "Hubs"
 #: src/components/ShareReceiveDialog.tsx
 msgid "I already have it locally →"
 msgstr "I already have it locally →"
-
-#: src/components/AutoSyncEnableWarning.tsx
-msgid "If this repo is shared, your in-progress edits become visible to collaborators as soon as they sync."
-msgstr "If this repo is shared, your in-progress edits become visible to collaborators as soon as they sync."
 
 #: src/components/ConsentDialogBody.tsx
 #: src/components/settings/OkignoreSection.tsx
@@ -4354,8 +4358,8 @@ msgid "Pulling"
 msgstr "Pulling"
 
 #: src/components/AutoSyncEnableWarning.tsx
-msgid "Pulls may overwrite uncommitted local file changes."
-msgstr "Pulls may overwrite uncommitted local file changes."
+msgid "Pulls may overwrite uncommitted edits in your local files."
+msgstr "Pulls may overwrite uncommitted edits in your local files."
 
 #: src/components/SyncStatusBadge.tsx
 msgid "Push"
@@ -4998,6 +5002,10 @@ msgstr "Share URL"
 #: src/components/settings/SharingSection.tsx
 msgid "Share with my team"
 msgstr "Share with my team"
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Shared repositories"
+msgstr "Shared repositories"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Sharing a doc needs a GitHub repository. Create one for this project."
@@ -5706,6 +5714,10 @@ msgstr "Type a query, then press ↵ to search your pages by meaning."
 #: src/editor/components/CodePreviewEditModal.tsx
 msgid "Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."
 msgstr "Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."
+
+#: src/components/AutoSyncEnableWarning.tsx
+msgid "Uncommitted changes"
+msgstr "Uncommitted changes"
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Underline"
