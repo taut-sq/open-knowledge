@@ -39,8 +39,8 @@ function FeatureCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid row-span-2 grid-rows-subgrid">
-      <MockupCard className="md:min-h-[220px] lg:min-h-[260px] xl:min-h-[320px] flex items-center justify-center">
+    <div className="flex flex-col gap-4 lg:grid lg:row-span-2 lg:grid-rows-subgrid">
+      <MockupCard className="lg:min-h-[260px] xl:min-h-[320px] flex items-center justify-center">
         {children}
       </MockupCard>
       <div className="flex flex-col gap-1.5">
@@ -606,7 +606,7 @@ export function RichEditing() {
         A canvas for your knowledge.
       </SectionHeading>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 grid-rows-[auto_auto] gap-x-6 gap-y-5 lg:gap-x-8">
+      <div className="grid grid-cols-1 gap-y-12 lg:grid-cols-3 lg:grid-rows-[auto_auto] lg:gap-x-8 lg:gap-y-5">
         <FeatureCard title="Rich elements" description="Tables, images, code, diagrams, and more.">
           <BlockComponents />
         </FeatureCard>
