@@ -230,6 +230,103 @@ describe(`CLI Linux e2e (${SUT_MODE} SUT)`, () => {
     }
   }, 60_000);
 
+  test('4b. bundled mermaid validator emits renderWarnings through the packed bin', async () => {
+    const transport = new StdioClientTransport({
+      command: NODE,
+      args: [H.cliPath, 'mcp'],
+      cwd: H.contentDir,
+      env: { ...process.env, ...HERMETIC_ENV } as Record<string, string>,
+    });
+    const client = new Client({ name: 'ok-e2e-mermaid', version: '0.0.0' });
+    try {
+      await client.connect(transport);
+      const writeRes = (await client.callTool({
+        name: 'write',
+        arguments: {
+          cwd: H.contentDir,
+          document: {
+            path: 'e2e/mermaid-smoke',
+            content: '# Smoke\n\n```mermaid\nsequenceDiagram\n  A->>B: hi; there\n```\n',
+          },
+        },
+      })) as {
+        isError?: boolean;
+        content?: Array<{ type: string; text?: string }>;
+        structuredContent?: {
+          document?: {
+            warnings?: Array<{ kind: string; fenceIndex: number; message: string }>;
+          };
+        };
+      };
+      expect(writeRes.isError ?? false).toBe(false);
+      const warnings = writeRes.structuredContent?.document?.warnings;
+      expect(warnings, 'warnings missing from packed-bin write response').toBeDefined();
+      expect(warnings?.[0]?.kind).toBe('mermaid-parse-error');
+      expect(warnings?.[0]?.message).toContain('Parse error');
+      const text = (writeRes.content ?? []).map((c) => c.text ?? '').join('\n');
+      expect(text).toContain('⚠');
+      expect(text).toContain('will not render');
+
+      const editRes = (await client.callTool({
+        name: 'edit',
+        arguments: {
+          cwd: H.contentDir,
+          document: { path: 'e2e/mermaid-smoke', find: '# Smoke', replace: '# Smoke (edited)' },
+        },
+      })) as {
+        isError?: boolean;
+        content?: Array<{ type: string; text?: string }>;
+        structuredContent?: { document?: { warnings?: Array<{ kind: string }> } };
+      };
+      expect(editRes.isError ?? false).toBe(false);
+      expect(editRes.structuredContent?.document?.warnings?.[0]?.kind).toBe('mermaid-parse-error');
+      const editText = (editRes.content ?? []).map((c) => c.text ?? '').join('\n');
+      expect(editText).toContain('will not render');
+
+      const validRes = (await client.callTool({
+        name: 'write',
+        arguments: {
+          cwd: H.contentDir,
+          document: {
+            path: 'e2e/mermaid-smoke-valid',
+            content: '```mermaid\ngraph LR\n  A-->B\n```\n',
+          },
+        },
+      })) as {
+        isError?: boolean;
+        structuredContent?: { document?: { warnings?: unknown } };
+      };
+      expect(validRes.isError ?? false).toBe(false);
+      expect(validRes.structuredContent?.document?.warnings).toBeUndefined();
+
+      const batchRes = (await client.callTool({
+        name: 'write',
+        arguments: {
+          cwd: H.contentDir,
+          documents: [
+            { path: 'e2e/mermaid-batch-ok', content: '```mermaid\ngraph LR\n  A-->B\n```\n' },
+            {
+              path: 'e2e/mermaid-batch-bad',
+              content: '```mermaid\nsequenceDiagram\n  A->>B: x; y\n```\n',
+            },
+          ],
+        },
+      })) as {
+        isError?: boolean;
+        structuredContent?: {
+          documents?: Array<{ docName: string; warnings?: Array<{ kind: string }> }>;
+        };
+      };
+      expect(batchRes.isError ?? false).toBe(false);
+      const batchDocs = batchRes.structuredContent?.documents ?? [];
+      expect(batchDocs).toHaveLength(2);
+      expect(batchDocs[0]?.warnings).toBeUndefined();
+      expect(batchDocs[1]?.warnings?.[0]?.kind).toBe('mermaid-parse-error');
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }, 60_000);
+
   test('5. file-watcher ingests an external disk write (inotify on Linux)', async () => {
     const marker = `okwatchprobe${START_PORT}`;
     writeFileSync(

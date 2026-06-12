@@ -60,8 +60,12 @@ describe('PRD-6832 β L1: agent write reconciles a newer out-of-band disk edit',
       }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { warning?: { kind?: string } };
+    const body = (await res.json()) as {
+      warning?: { kind?: string };
+      warnings?: Array<{ kind?: string }>;
+    };
     expect(body.warning?.kind).toBe('disk-edit-reconciled');
+    expect(body.warnings?.map((w) => w.kind)).toEqual(['disk-edit-reconciled']);
 
     const after = readTestDoc(contentDir, docName);
     expect(after).toContain('body-v2-native'); // out-of-band edit preserved (no clobber)

@@ -85,6 +85,22 @@ describe('palette tool', () => {
     expect(tabs?.example).toContain('<Tabs>');
   });
 
+  test('Mermaid entry teaches the grammar sharp edges and the feedback loop', async () => {
+    const handler = captureRegistration();
+    const { structuredContent } = await handler({});
+    const mermaid = structuredContent?.components.find((c) => c.id === 'Mermaid');
+    expect(mermaid).toBeDefined();
+    expect(mermaid?.guidance).toContain('`;`');
+    expect(mermaid?.guidance).toContain('`#`');
+    expect(mermaid?.guidance).toContain('#59;');
+    expect(mermaid?.guidance).toContain('#35;');
+    expect(mermaid?.guidance).toContain('label (with) punctuation');
+    expect(mermaid?.guidance).toContain('mermaid-parse-error');
+    expect(mermaid?.example).toContain('sequenceDiagram');
+    expect(mermaid?.example).toContain('#59;');
+    expect(mermaid?.example).toContain('"Start (label with punctuation)"');
+  });
+
   test('every registry-backed authoring form names a live canonical descriptor', async () => {
     const handler = captureRegistration();
     const { structuredContent } = await handler({});

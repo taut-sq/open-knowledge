@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { validateDocName, WriteWarningSchema } from '@inkeep/open-knowledge-core';
+import { AdvisoryWarningSchema, validateDocName } from '@inkeep/open-knowledge-core';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.ts';
@@ -72,9 +72,13 @@ export const previewAttachWarningField = z
 
 export const documentResultBaseShape = {
   summary: summaryOutputSchema.optional(),
-  contentDivergence: WriteWarningSchema.optional().describe(
-    "Present when the converged Y.Text didn't byte-match the bytes you composed, or when an out-of-band disk edit was reconciled in before your write landed.",
-  ),
+  warnings: z
+    .array(AdvisoryWarningSchema)
+    .min(1)
+    .optional()
+    .describe(
+      "Advisory entries discriminated by `kind`. Write-integrity kinds — `content-divergence` (converged Y.Text didn't byte-match what you composed) and `disk-edit-reconciled` (an out-of-band disk edit was folded in before your write) — mean re-read the doc. The renderability kind `mermaid-parse-error` means the write landed but that fence will not render — fix it and re-edit.",
+    ),
 } as const;
 
 export function nestDocResult(

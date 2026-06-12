@@ -2524,6 +2524,16 @@ Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/v
 
 Copyright (c) Microsoft Corporation.
 
+### `@types/whatwg-mimetype@3.0.2`
+Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/whatwg-mimetype
+
+Copyright (c) Microsoft Corporation.
+
+### `@types/ws@8.18.1`
+Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/ws
+
+Copyright (c) Microsoft Corporation.
+
 ### `@types/yargs@17.0.35`
 Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/yargs
 
@@ -2693,6 +2703,11 @@ Copyright (c) Feross Aboukhadijeh, and other contributors.
 Homepage: https://github.com/brianloveswords/buffer-crc32
 
 Copyright (c) 2013-2024 Brian J. Brennan
+
+### `buffer-image-size@0.6.4`
+Homepage: https://github.com/evidentpoint/buffer-image-size
+
+_(LICENSE file present but no auto-extractable copyright line; refer to the package source for canonical attribution.)_
 
 ### `builder-util-runtime@9.6.0`
 Homepage: https://github.com/electron-userland/electron-builder
@@ -3448,6 +3463,11 @@ Copyright (c) GraphQL Contributors
 Homepage: https://github.com/pshihn/hachure-fill#readme
 
 Copyright (c) 2023 Preet Shihn
+
+### `happy-dom@20.10.2`
+Homepage: https://github.com/capricorn86/happy-dom
+
+Copyright (c) 2019 David Ortner (capricorn86)
 
 ### `has-flag@4.0.0`
 Homepage: https://github.com/sindresorhus/has-flag
@@ -5581,6 +5601,11 @@ Homepage: https://github.com/MattiasBuelens/web-streams-polyfill#readme
 
 Copyright (c) 2024 Mattias Buelens Copyright (c) 2016 Diwank Singh Tomer
 
+### `whatwg-mimetype@3.0.0`
+Homepage: https://github.com/jsdom/whatwg-mimetype
+
+_(LICENSE file present but no auto-extractable copyright line; refer to the package source for canonical attribution.)_
+
 ### `wrap-ansi@6.2.0`
 Homepage: https://github.com/chalk/wrap-ansi
 
@@ -5590,6 +5615,11 @@ Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com)
 Homepage: https://github.com/chalk/wrap-ansi
 
 Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+
+### `ws@8.21.0`
+Homepage: https://github.com/websockets/ws
+
+Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com> Copyright (c) 2013 Arnout Kazemier and contributors Copyright (c) 2016 Luigi Pinca and contributors
 
 ### `ws@8.20.0`
 Homepage: https://github.com/websockets/ws
@@ -6263,6 +6293,11 @@ Copyright (c) 2011 The Mozilla Foundation.
 Homepage: https://github.com/motdotla/dotenv#readme
 
 Copyright (c) 2015, Scott Motte
+
+### `entities@7.0.1`
+Homepage: https://github.com/fb55/entities
+
+Copyright (c) Felix Böhm
 
 ### `entities@6.0.1`
 Homepage: https://github.com/fb55/entities

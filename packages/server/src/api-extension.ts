@@ -248,6 +248,7 @@ import {
 } from './handoff-api.ts';
 import { handleHandoffDispatch } from './handoff-dispatch-api.ts';
 import { findHubCandidates } from './hub-candidates.ts';
+import { validateMermaidFences } from './mermaid-validator.ts';
 import {
   extractPageIcon,
   extractPageTitle,
@@ -3155,7 +3156,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           {
             timestamp,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(agentWriteWarning ? { warning: agentWriteWarning } : {}),
+            ...(agentWriteWarning
+              ? { warning: agentWriteWarning, warnings: [agentWriteWarning] }
+              : {}),
           },
           { handler: 'agent-write' },
         );
@@ -3320,6 +3323,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const hints = computeOrphanHints(resolvedDocName);
 
+        const renderWarnings = await validateMermaidFences(
+          session.dc.document.getText('source').toString(),
+          resolvedDocName,
+        );
+
         const subscriberCount = getSubscriberCount(resolvedDocName);
         const systemSubscriberCount = getSystemSubscriberCount();
 
@@ -3331,6 +3339,13 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
 
         const writeMdWarning = buildReconcileWarning(writeMdReconcile);
+        const writeMdDivergenceEntry =
+          writeDivergence !== undefined ? toContentDivergenceWarning(writeDivergence) : undefined;
+        const writeMdAdvisories = [
+          ...(writeMdDivergenceEntry ? [writeMdDivergenceEntry] : []),
+          ...(writeMdWarning ? [writeMdWarning] : []),
+          ...(renderWarnings ?? []),
+        ];
         successResponse(
           res,
           200,
@@ -3341,11 +3356,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             systemSubscriberCount,
             ...(hints ? { hints } : {}),
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(writeDivergence !== undefined
-              ? { warning: toContentDivergenceWarning(writeDivergence) }
+            ...(writeMdDivergenceEntry
+              ? { warning: writeMdDivergenceEntry }
               : writeMdWarning
                 ? { warning: writeMdWarning }
                 : {}),
+            ...(writeMdAdvisories.length > 0 ? { warnings: writeMdAdvisories } : {}),
           },
           { handler: 'agent-write-md' },
         );
@@ -3584,7 +3600,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             systemSubscriberCount,
             appliedKeys,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(fmWarning ? { warning: fmWarning } : {}),
+            ...(fmWarning ? { warning: fmWarning, warnings: [fmWarning] } : {}),
           },
           { handler: 'frontmatter-patch' },
         );
@@ -4624,7 +4640,19 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const { response: summaryResponse } = summaryResponseFields(normalizedSummary);
 
+        const renderWarnings = await validateMermaidFences(
+          session.dc.document.getText('source').toString(),
+          docName,
+        );
+
         const patchWarning = buildReconcileWarning(patchReconcile);
+        const patchDivergenceEntry =
+          patchDivergence !== undefined ? toContentDivergenceWarning(patchDivergence) : undefined;
+        const patchAdvisories = [
+          ...(patchDivergenceEntry ? [patchDivergenceEntry] : []),
+          ...(patchWarning ? [patchWarning] : []),
+          ...(renderWarnings ?? []),
+        ];
         successResponse(
           res,
           200,
@@ -4634,11 +4662,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             subscriberCount,
             systemSubscriberCount,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(patchDivergence !== undefined
-              ? { warning: toContentDivergenceWarning(patchDivergence) }
+            ...(patchDivergenceEntry
+              ? { warning: patchDivergenceEntry }
               : patchWarning
                 ? { warning: patchWarning }
                 : {}),
+            ...(patchAdvisories.length > 0 ? { warnings: patchAdvisories } : {}),
           },
           { handler: 'agent-patch' },
         );
@@ -5589,6 +5618,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
         }
 
+        const rollbackDivergenceEntry =
+          rollbackDivergence !== undefined
+            ? toContentDivergenceWarning(rollbackDivergence)
+            : undefined;
         successResponse(
           res,
           200,
@@ -5597,8 +5630,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             restoredFrom: commitSha,
             timestamp,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
-            ...(rollbackDivergence !== undefined
-              ? { warning: toContentDivergenceWarning(rollbackDivergence) }
+            ...(rollbackDivergenceEntry
+              ? { warning: rollbackDivergenceEntry, warnings: [rollbackDivergenceEntry] }
               : {}),
           },
           { handler: 'rollback' },

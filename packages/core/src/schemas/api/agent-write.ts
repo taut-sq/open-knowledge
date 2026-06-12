@@ -106,11 +106,32 @@ export const WriteWarningSchema = z.discriminatedUnion('kind', [
 ]);
 export type WriteWarning = z.infer<typeof WriteWarningSchema>;
 
+export const RenderWarningSchema = z
+  .object({
+    kind: z.literal('mermaid-parse-error'),
+    fenceIndex: z.number().int().positive(),
+    fenceFirstLine: z.string(),
+    message: z.string(),
+    line: z.number().int().positive().optional(),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type RenderWarning = z.infer<typeof RenderWarningSchema>;
+
+export const AdvisoryWarningSchema = z.discriminatedUnion('kind', [
+  ContentDivergenceWarningSchema,
+  DiskEditReconciledWarningSchema,
+  RenderWarningSchema,
+]);
+export type AdvisoryWarning = z.infer<typeof AdvisoryWarningSchema>;
+
+export const AdvisoryWarningsSchema = z.array(AdvisoryWarningSchema).min(1);
+
 export const AgentWriteSuccessSchema = z
   .object({
     timestamp: z.string().min(1),
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
+    warnings: AdvisoryWarningsSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentWriteSuccess = z.infer<typeof AgentWriteSuccessSchema>;
@@ -123,6 +144,7 @@ export const AgentWriteMdSuccessSchema = z
     hints: z.array(OrphanHintSchema).optional(),
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
+    warnings: AdvisoryWarningsSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentWriteMdSuccess = z.infer<typeof AgentWriteMdSuccessSchema>;
@@ -134,6 +156,7 @@ export const AgentPatchSuccessSchema = z
     systemSubscriberCount: z.number().int().nonnegative(),
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
+    warnings: AdvisoryWarningsSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentPatchSuccess = z.infer<typeof AgentPatchSuccessSchema>;
@@ -166,6 +189,7 @@ export const FrontmatterPatchSuccessSchema = z
     appliedKeys: z.array(z.string()),
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
+    warnings: AdvisoryWarningsSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type FrontmatterPatchSuccess = z.infer<typeof FrontmatterPatchSuccessSchema>;

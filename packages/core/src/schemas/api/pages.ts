@@ -1,7 +1,11 @@
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { z } from 'zod';
 import { agentIdentityFields, summaryField } from './_shared.ts';
-import { ContentDivergenceWarningSchema, SummaryResponseFieldSchema } from './agent-write.ts';
+import {
+  AdvisoryWarningsSchema,
+  ContentDivergenceWarningSchema,
+  SummaryResponseFieldSchema,
+} from './agent-write.ts';
 
 export const RenamedDocMappingSchema = z
   .object({
@@ -189,6 +193,7 @@ export const RollbackSuccessSchema = z
     timestamp: z.string().min(1),
     summary: SummaryResponseFieldSchema.optional(),
     warning: ContentDivergenceWarningSchema.optional(),
+    warnings: AdvisoryWarningsSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type RollbackSuccess = z.infer<typeof RollbackSuccessSchema>;

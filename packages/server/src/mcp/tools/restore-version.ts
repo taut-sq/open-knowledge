@@ -1,7 +1,7 @@
-import { WriteWarningSchema } from '@inkeep/open-knowledge-core';
+import { AdvisoryWarningSchema } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import type { AgentIdentity } from '../agent-identity.ts';
-import { formatContentDivergenceLine, parseContentDivergence } from './content-divergence.ts';
+import { formatAdvisoryLines, parseAdvisoryWarnings } from './advisory-warnings.ts';
 import { resolvePreviewUrlForTool } from './preview-url.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
 import {
@@ -30,7 +30,7 @@ export const DESCRIPTION = [
   '- `version` — The 40-character commit SHA to restore to. Copy it from the `history` tool (same field name there).',
   '- `summary` — Optional one-line summary (≤80 chars). Defaults to "Restored to <sha-short>". Avoid secrets or PII — persisted to git history.',
   '',
-  'A response may include `structuredContent.contentDivergence` when the restored `Y.Text` does not byte-match the target-version bytes. The restore still landed; re-read the doc with `exec("cat <document>")` to see what converged.',
+  'A response may include `structuredContent.warnings` (kind `content-divergence`) when the restored `Y.Text` does not byte-match the target-version bytes. The restore still landed; re-read the doc with `exec("cat <document>")` to see what converged.',
 ].join('\n');
 
 export interface RestoreVersionDeps {
@@ -63,9 +63,13 @@ export function register(server: ServerInstance, deps: RestoreVersionDeps): void
         previewUrl: previewUrlOutputField,
         previewUrlSource: previewUrlSourceField,
         summary: summaryOutputSchema.optional(),
-        contentDivergence: WriteWarningSchema.optional().describe(
-          'Present only when the restored Y.Text did not byte-match the target version.',
-        ),
+        warnings: z
+          .array(AdvisoryWarningSchema)
+          .min(1)
+          .optional()
+          .describe(
+            'Advisory entries (kind `content-divergence`): present only when the restored Y.Text did not byte-match the target version.',
+          ),
       }),
     },
     async (args: { document: string; version: string; summary?: string; cwd?: string }) => {
@@ -106,7 +110,7 @@ export function register(server: ServerInstance, deps: RestoreVersionDeps): void
           : undefined;
       const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
 
-      const contentDivergence = parseContentDivergence(result.warning);
+      const advisoryWarnings = parseAdvisoryWarnings(result.warnings);
 
       const author = typeof versionResult.author === 'string' ? versionResult.author : undefined;
       const timestamp =
@@ -116,8 +120,8 @@ export function register(server: ServerInstance, deps: RestoreVersionDeps): void
         `Restored "${docName}" to version ${args.version.slice(0, 8)}${provenance}. The change has been applied to all connected editors.`,
       ];
       if (summaryHint) textLines.push(summaryHint);
-      if (contentDivergence) {
-        textLines.push(formatContentDivergenceLine(contentDivergence));
+      if (advisoryWarnings) {
+        textLines.push(...formatAdvisoryLines(advisoryWarnings));
       }
 
       const preview = await resolvePreviewUrlForTool(
@@ -131,7 +135,7 @@ export function register(server: ServerInstance, deps: RestoreVersionDeps): void
         previewUrl: preview?.url ?? null,
         ...(preview ? { previewUrlSource: preview.source } : {}),
         ...(summaryResult ? { summary: summaryResult } : {}),
-        ...(contentDivergence ? { contentDivergence } : {}),
+        ...(advisoryWarnings ? { warnings: advisoryWarnings } : {}),
       });
     },
   );

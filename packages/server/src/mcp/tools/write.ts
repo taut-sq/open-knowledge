@@ -16,10 +16,10 @@ import { resolveTemplatesAvailable } from '../../content/templates-resolver.ts';
 import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
 import {
-  formatContentDivergenceBrief,
-  formatContentDivergenceLine,
-  parseContentDivergence,
-} from './content-divergence.ts';
+  formatAdvisoryBriefs,
+  formatAdvisoryLines,
+  parseAdvisoryWarnings,
+} from './advisory-warnings.ts';
 import { resolveWithinRoot } from './path-safety.ts';
 import { buildPreviewAttachWarning, resolvePreviewUrl, START_UI_TEXT_HINT } from './preview-url.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
@@ -61,6 +61,8 @@ const BASE_DESCRIPTION = [
   '- `asset` — Upload a binary (image/file) via the media route [Requires: Hocuspocus server]. `{ path: "<folder>/<file.ext>", content(base64) | source(local path) }`.',
   '- `documents` — Batch: `[{ path, content?|template?, frontmatter?, position?, summary? }, ...]` written in order; the response reports each.',
   '- `summary` — Optional one-line user-outcome (≤80 chars) for the timeline, for a single `document`/`folder`/`template`/`asset` write. For a `documents` batch, give each entry its own `summary` instead (a top-level `summary` is ignored on the batch path). Avoid secrets or PII — persisted to git history.',
+  '',
+  'Responses may include `structuredContent.document.warnings` (batch: per-entry under `documents[]`) — advisory entries discriminated by `kind`: `content-divergence` / `disk-edit-reconciled` (write-integrity — re-read the doc) and `mermaid-parse-error` (the write landed but that fence will not render — fix it and re-edit).',
 ].join('\n');
 
 export const DESCRIPTION = `${BASE_DESCRIPTION}\n${renderInventoryFooter()}`;
@@ -452,13 +454,13 @@ async function handleBatch(
   const docOut = results.map((r) => {
     if (!r.ok) return { docName: r.docName, ok: false as const, error: r.error };
     const preview = resolvePreviewUrl(r.docName, { lockDir });
-    const divergence = parseContentDivergence(r.raw.warning);
+    const warnings = parseAdvisoryWarnings(r.raw.warnings);
     return {
       docName: r.docName,
       ok: true as const,
       position: r.position,
       ...(preview ? { previewUrl: preview.url } : {}),
-      ...(divergence ? { contentDivergence: divergence } : {}),
+      ...(warnings ? { warnings } : {}),
     };
   });
   const okCount = docOut.filter((d) => d.ok).length;
@@ -470,10 +472,11 @@ async function handleBatch(
       return `No change to ${spec.path} — empty ${r.position}, document unchanged.`;
     }
     const d = docOut[i];
-    const base = `Wrote ${spec.path} (${r.position}).`;
-    return d?.ok && d.contentDivergence
-      ? `${base} ${formatContentDivergenceBrief(d.contentDivergence)}`
-      : base;
+    const baseParts = [`Wrote ${spec.path} (${r.position}).`];
+    if (d?.ok && d.warnings) {
+      baseParts.push(...formatAdvisoryBriefs(d.warnings));
+    }
+    return baseParts.join(' ');
   });
   const perDocNotes = documents.flatMap((spec, i) => {
     const r = results[i];
@@ -518,7 +521,7 @@ async function handleSingleDoc(
       ? (result.summary as { value: string; truncatedFrom?: number; hint?: string })
       : undefined;
   const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
-  const contentDivergence = parseContentDivergence(result.warning);
+  const advisoryWarnings = parseAdvisoryWarnings(result.warnings);
 
   const noOpNote = emptyAppendNoOpNote(w.position, spec.content);
   const lines: string[] = [
@@ -537,8 +540,8 @@ async function handleSingleDoc(
       if (hint.message) lines.push(hint.message);
     }
   }
-  if (contentDivergence) {
-    lines.push(formatContentDivergenceLine(contentDivergence));
+  if (advisoryWarnings) {
+    lines.push(...formatAdvisoryLines(advisoryWarnings));
   }
   const text = lines.join('\n');
 
@@ -548,14 +551,14 @@ async function handleSingleDoc(
     !noPreviewOnThisDoc &&
     !hints &&
     !summaryResult &&
-    !contentDivergence
+    !advisoryWarnings
   ) {
     return textResult(text);
   }
   const document: Record<string, unknown> = {};
   if (hints) document.hints = hints;
   if (summaryResult) document.summary = summaryResult;
-  if (contentDivergence) document.contentDivergence = contentDivergence;
+  if (advisoryWarnings) document.warnings = advisoryWarnings;
   const warning = noPreviewAnywhere ? buildPreviewAttachWarning(preview, autoOpen) : undefined;
   return textPlusStructured(text, nestDocResult(preview, warning, document));
 }
@@ -703,7 +706,7 @@ export function register(server: ServerInstance, deps: WriteDeps): void {
         documents: looseObjectArray
           .optional()
           .describe(
-            'Batch write: per-doc result `{ docName, ok, position?, previewUrl?, contentDivergence?, error? }`.',
+            'Batch write: per-doc result `{ docName, ok, position?, previewUrl?, warnings?, error? }`.',
           ),
         previewUrl: previewUrlOutputField.optional(),
         previewUrlSource: previewUrlSourceField,

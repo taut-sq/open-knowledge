@@ -125,8 +125,10 @@ const AUTHORING_FORMS: readonly AuthoringFormSeed[] = [
     fallbackDisplayName: 'Mermaid diagram',
     description: 'Flowchart / sequence / class / state / ER / gantt / pie diagram.',
     authoring: 'markdown',
-    example: '```mermaid\ngraph LR\n  A[Start] --> B[End]\n```',
-    guidance: 'Write a ` ```mermaid ` fenced block — it renders as a themed diagram.',
+    example:
+      '```mermaid\ngraph LR\n  A["Start (label with punctuation)"] --> B[End]\n```\n\n```mermaid\nsequenceDiagram\n    A->>B: request queued #59; retried\n    B-->>A: done\n```',
+    guidance:
+      'Write a ` ```mermaid ` fenced block — it renders as a themed diagram. Sharp edge 1: raw `;` and `#` END message/label text in sequence-family grammars — use commas, or the entity escapes `#59;` / `#35;`. Sharp edge 2: quote flowchart labels containing punctuation (`A["label (with) punctuation"]`). Feedback: parse failures come back as `warnings` entries (kind `mermaid-parse-error`) on write/edit — fix the fence and re-edit.',
   },
   {
     id: 'Math',
