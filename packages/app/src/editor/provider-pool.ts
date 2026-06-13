@@ -1,12 +1,9 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { LINEAGE_EPOCH_KEY, MarkdownManager } from '@inkeep/open-knowledge-core';
-import type {
-  HocuspocusAuthRejectionReason,
-  HocuspocusAuthToken,
-} from '@inkeep/open-knowledge-server';
+import type { HocuspocusAuthRejectionReason } from '@inkeep/open-knowledge-server';
 import { getSchema } from '@tiptap/core';
 import * as Y from 'yjs';
-import { browserClientVersionTokenFields } from '../lib/client-version';
+import { buildAuthToken } from '../lib/auth-token';
 import { readNumericOverride } from '../lib/perf/env-override';
 import { mark } from '../lib/perf/mark';
 import { emitColdMountChild } from '../lib/perf/otel-spans';
@@ -185,29 +182,6 @@ const MAX_BUFFER_BYTES = readNumericOverride('MAX_BUFFER_BYTES', 1 * 1024 * 1024
  * scope). If one moves, audit the other for sympathetic impact.
  */
 export const MAX_POOL = readNumericOverride('MAX_POOL', 10);
-
-export function buildAuthToken(
-  tabIdentity: { principalId: string; tabSessionId: string } | null,
-  expectedServerInstanceId: string | null,
-  expectedBranch: string | null = null,
-  expectedDocLineageEpoch: string | null = null,
-): string {
-  const claim: HocuspocusAuthToken = { ...browserClientVersionTokenFields() };
-  if (tabIdentity !== null) {
-    claim.principalId = tabIdentity.principalId;
-    claim.tabSessionId = tabIdentity.tabSessionId;
-  }
-  if (expectedServerInstanceId !== null && expectedServerInstanceId.length > 0) {
-    claim.expectedServerInstanceId = expectedServerInstanceId;
-  }
-  if (expectedBranch !== null && expectedBranch.length > 0) {
-    claim.expectedBranch = expectedBranch;
-  }
-  if (expectedDocLineageEpoch !== null && expectedDocLineageEpoch.length > 0) {
-    claim.expectedDocLineageEpoch = expectedDocLineageEpoch;
-  }
-  return JSON.stringify(claim);
-}
 
 /**
  * LRU pool of HocuspocusProvider instances. Plain TS class — not a React hook.

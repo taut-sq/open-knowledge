@@ -4,9 +4,10 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { PROTOCOL_VERSION } from '@inkeep/open-knowledge-core';
 import { parseHocuspocusAuthToken } from '@inkeep/open-knowledge-server';
 import * as Y from 'yjs';
+import { buildAuthToken } from '../lib/auth-token';
 import { __resetCardinalityWarnings, getCollector } from '../lib/perf/collector';
 import type { ClientPersistenceProvider } from './client-persistence';
-import { buildAuthToken, ProviderPool } from './provider-pool';
+import { ProviderPool } from './provider-pool';
 import {
   __resetSyncPromiseCache,
   __syncPromiseCacheSize,

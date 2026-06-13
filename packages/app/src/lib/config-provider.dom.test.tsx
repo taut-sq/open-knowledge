@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
 
-mock.module('@/editor/DocumentContext', () => ({
-  useDocumentContext: () => ({ collabUrl: null }),
-  DocumentProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
 mock.module('@/hooks/use-theme-bridge', () => ({
   useThemeBridge: () => {},
 }));
@@ -46,7 +41,7 @@ describe('ConfigProvider runtime (Tier-3)', () => {
 
   test('propagates the all-null value when collabUrl is null (cold-start window)', () => {
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl={null}>
         <Consumer />
       </ConfigProvider>,
     );

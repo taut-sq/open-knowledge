@@ -5,7 +5,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { CONFIG_DOC_NAME_OKIGNORE } from '@inkeep/open-knowledge-core';
 import * as Y from 'yjs';
-import { buildAuthToken } from '../../src/editor/provider-pool';
+import { buildAuthToken } from '../../src/lib/auth-token';
 import { createRestartableServer, pollUntil, waitForSync } from './test-harness';
 
 const cleanups: Array<() => Promise<void> | void> = [];

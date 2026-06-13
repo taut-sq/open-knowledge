@@ -15,9 +15,8 @@ import {
 import { useTheme } from 'next-themes';
 import { type ReactNode, useEffect, useState } from 'react';
 import * as Y from 'yjs';
-import { useDocumentContext } from '@/editor/DocumentContext';
-import { buildAuthToken } from '@/editor/provider-pool';
 import { useThemeBridge } from '@/hooks/use-theme-bridge';
+import { buildAuthToken } from './auth-token';
 import { ConfigContext, type ConfigContextValue } from './config-context';
 import { useServerInstanceId } from './server-instance-store';
 
@@ -98,8 +97,13 @@ function makeOkignoreBinding(collabUrl: string, serverInstanceId: string | null)
   return { binding, provider, cleanup };
 }
 
-export function ConfigProvider({ children }: { children: ReactNode }) {
-  const { collabUrl } = useDocumentContext();
+export function ConfigProvider({
+  collabUrl,
+  children,
+}: {
+  collabUrl: string | null;
+  children: ReactNode;
+}) {
   const serverInstanceId = useServerInstanceId();
   const [userState, setUserState] = useState<{
     binding: ConfigBinding;

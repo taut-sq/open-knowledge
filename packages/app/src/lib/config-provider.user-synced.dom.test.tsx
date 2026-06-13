@@ -91,11 +91,6 @@ function makeFakeOkignoreBinding(): OkignoreBinding {
   } as unknown as OkignoreBinding;
 }
 
-mock.module('@/editor/DocumentContext', () => ({
-  useDocumentContext: () => ({ collabUrl: 'ws://test.invalid' }),
-  DocumentProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
 mock.module('@/hooks/use-theme-bridge', () => ({
   useThemeBridge: (bridge: unknown, theme: string) => {
     useThemeBridgeCalls.push([bridge, theme]);
@@ -134,7 +129,7 @@ mock.module('@hocuspocus/provider', () => {
   return { HocuspocusProvider: FakeHocuspocusProvider };
 });
 
-mock.module('@/editor/provider-pool', () => ({
+mock.module('@/lib/auth-token', () => ({
   buildAuthToken: (...args: readonly unknown[]) => {
     buildAuthTokenCalls.push(args);
     return 'test-auth-token';
@@ -201,7 +196,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
 
   test('userSynced reads false until the binding fires its synced listener, then flips to true', () => {
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <UserSyncedConsumer />
       </ConfigProvider>,
     );
@@ -222,7 +217,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
     userHasSyncedSeed = true;
 
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <UserSyncedConsumer />
       </ConfigProvider>,
     );
@@ -232,7 +227,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
 
   test('opens user, project, and project-local bindings and exposes the merged context shape', async () => {
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <ConfigContextProbe />
       </ConfigProvider>,
     );
@@ -264,7 +259,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
 
   test('projectLocalSynced flips from its hasSynced seed and cleans up on unmount', async () => {
     const { unmount } = render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <ConfigContextProbe />
       </ConfigProvider>,
     );
@@ -304,7 +299,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
     mergedConfig = { appearance: {} };
 
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <ConfigContextProbe />
       </ConfigProvider>,
     );
@@ -321,7 +316,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
     setServerInstanceId('epoch-threading-test');
 
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <ConfigContextProbe />
       </ConfigProvider>,
     );
@@ -339,7 +334,7 @@ describe('ConfigProvider — userSynced behavioral wiring (Tier-3)', () => {
     const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
     render(
-      <ConfigProvider>
+      <ConfigProvider collabUrl="ws://test.invalid">
         <ConfigContextProbe />
       </ConfigProvider>,
     );

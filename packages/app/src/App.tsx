@@ -1,5 +1,5 @@
 import { mediaKindForSidebarAssetExtension, SHOW_INSTALL_SKILL } from '@inkeep/open-knowledge-core';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { CommandPalette } from '@/components/CommandPalette';
 import { ConnectingBanner } from '@/components/ConnectingBanner';
 import { CreateProjectMenuTrigger } from '@/components/CreateProjectMenuTrigger';
@@ -292,15 +292,20 @@ function NewItemShortcutHandler() {
   );
 }
 
+function ConfigProviderHost({ children }: { children: ReactNode }) {
+  const { collabUrl } = useDocumentContext();
+  return <ConfigProvider collabUrl={collabUrl}>{children}</ConfigProvider>;
+}
+
 export function App() {
   return (
     <ProfilerBoundary name="app">
       <DocumentProvider>
-        <ConfigProvider>
+        <ConfigProviderHost>
           <SingleFileModeProvider>
             <AppBody />
           </SingleFileModeProvider>
-        </ConfigProvider>
+        </ConfigProviderHost>
       </DocumentProvider>
     </ProfilerBoundary>
   );
