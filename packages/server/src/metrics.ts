@@ -241,6 +241,16 @@ export interface ReconciliationMetrics {
    *  indicates `parseWithFallback`'s paragraph fallback isn't catching some
    *  malformed-bytes class. */
   externalChangeHandlerErrors: number;
+  /** Disk-reconcile guard outcomes inside the server's own flush-commit
+   *  window. `reconcileOwnFlushSkips` counts agent writes where disk matched
+   *  the in-flight flush snapshot (guard skipped; the flush continuation owns
+   *  the base advance). `reconcileInFlightFallthroughs` counts the rare case
+   *  where a flush was in flight but disk held OTHER bytes — a genuinely
+   *  foreign edit landing inside the window, routed to the three-way merge.
+   *  Both bounded; growth in fallthroughs under zero external editors would
+   *  indicate the own-write discrimination is mis-matching. */
+  reconcileOwnFlushSkips: number;
+  reconcileInFlightFallthroughs: number;
   /** Y.Text-is-truth contract — count of persistence pre-write
    *  sanity-check cycles where `mdManager.serialize` itself threw, blocking
    *  the bridge invariant assertion from running. Distinct from
@@ -379,6 +389,8 @@ const counters: ReconciliationMetrics = {
   bridgeSplitBrainRederivesSuppressed: 0,
   persistenceReconciliationFailures: 0,
   externalChangeHandlerErrors: 0,
+  reconcileOwnFlushSkips: 0,
+  reconcileInFlightFallthroughs: 0,
   persistenceSanityCheckSerializeFailures: 0,
   deferredStoreFailures: 0,
   authRenameRedirectCount: 0,
@@ -534,6 +546,14 @@ export function incrementExternalChangeHandlerErrors(): void {
   counters.externalChangeHandlerErrors++;
 }
 
+export function incrementReconcileOwnFlushSkips(): void {
+  counters.reconcileOwnFlushSkips++;
+}
+
+export function incrementReconcileInFlightFallthroughs(): void {
+  counters.reconcileInFlightFallthroughs++;
+}
+
 export function incrementPersistenceSanityCheckSerializeFailures(): void {
   counters.persistenceSanityCheckSerializeFailures++;
 }
@@ -661,6 +681,8 @@ export function resetMetrics(): void {
   counters.bridgeSplitBrainRederivesSuppressed = 0;
   counters.persistenceReconciliationFailures = 0;
   counters.externalChangeHandlerErrors = 0;
+  counters.reconcileOwnFlushSkips = 0;
+  counters.reconcileInFlightFallthroughs = 0;
   counters.persistenceSanityCheckSerializeFailures = 0;
   counters.deferredStoreFailures = 0;
   counters.authRenameRedirectCount = 0;

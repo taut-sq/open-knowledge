@@ -1934,7 +1934,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       intendedBytes: reconcile.baseBytes,
       actualBytes: reconcile.diskBytes,
       byteDelta: reconcile.diskBytes - reconcile.baseBytes,
-      hint: 'An out-of-band edit was reconciled into this document before your edit was applied on top; the document now reflects that edit plus yours. Re-read it (e.g. `exec("cat <path>")`) to see the combined result before continuing.',
+      ...(reconcile.mergeOutcome ? { mergeOutcome: reconcile.mergeOutcome } : {}),
+      hint:
+        reconcile.mergeOutcome === 'merged'
+          ? 'An out-of-band edit was three-way merged into this document before your edit was applied on top; the merge may have interleaved content blocks. Re-read it (e.g. `exec("cat <path>")`) and review the combined result carefully before continuing.'
+          : 'An out-of-band edit was reconciled into this document before your edit was applied on top; the document now reflects that edit plus yours. Re-read it (e.g. `exec("cat <path>")`) to see the combined result before continuing.',
     };
   }
 

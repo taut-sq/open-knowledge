@@ -95,6 +95,7 @@ export const DiskEditReconciledWarningSchema = z
     intendedBytes: z.number().int().nonnegative(),
     actualBytes: z.number().int().nonnegative(),
     byteDelta: z.number().int(),
+    mergeOutcome: z.string().optional(),
     hint: z.string().optional(),
   })
   .loose() satisfies StandardSchemaV1;

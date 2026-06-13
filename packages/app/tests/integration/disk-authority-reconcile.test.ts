@@ -110,7 +110,7 @@ describe('PRD-6832 β L1: agent write reconciles a newer out-of-band disk edit',
     expect(after).toContain('native-body-line'); // out-of-band body edit preserved
   });
 
-  test('concurrent un-flushed CRDT edit: the L1 wholesale ingest drops it (current behavior, recorded honestly)', async () => {
+  test('concurrent un-flushed CRDT edit survives: L1 three-way merges disk + CRDT, agent edit lands on top (agent write first)', async () => {
     server = await createTestServer({ debounce: 300_000, maxDebounce: 600_000 });
     const { port, contentDir } = server;
     const docName = `reconcile-concurrent-${randomUUID()}`;
@@ -141,13 +141,170 @@ describe('PRD-6832 β L1: agent write reconciles a newer out-of-band disk edit',
         body: JSON.stringify({ docName, markdown: 'agent-line\n', position: 'append' }),
       });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { warning?: { kind?: string } };
+      const body = (await res.json()) as {
+        warning?: { kind?: string; mergeOutcome?: string };
+      };
       expect(body.warning?.kind).toBe('disk-edit-reconciled');
+      expect(body.warning?.mergeOutcome).toBe('merged');
 
       await pollUntil(() => serverYtext().includes('agent-line'));
       expect(serverYtext()).toContain('disk-oob-line');
+      expect(serverYtext()).toContain('crdt-unflushed-line');
 
-      expect(serverYtext()).not.toContain('crdt-unflushed-line');
+      await pollUntil(() => {
+        const d = readTestDoc(contentDir, docName);
+        return (
+          d.includes('agent-line') &&
+          d.includes('crdt-unflushed-line') &&
+          d.includes('disk-oob-line')
+        );
+      });
+    } finally {
+      for (const c of clients) {
+        await c.cleanup();
+      }
+    }
+  });
+
+  test('arrival-order independence: file-watcher merges first, agent write does not re-ingest and revert it', async () => {
+    server = await createTestServer({ debounce: 300_000, maxDebounce: 600_000 });
+    const { port, contentDir } = server;
+    const docName = `reconcile-watcher-first-${randomUUID()}`;
+    const filePath = join(contentDir, `${docName}.md`);
+
+    writeFileSync(filePath, '# Doc\n\nseed-body\n', 'utf-8');
+
+    let clients: TestClient[] = [];
+    try {
+      clients = await createTestClients(port, { count: 1, docName });
+      const client = clients[0];
+      if (!client) throw new Error('client setup failed');
+      await pollUntil(() => client.ytext.toString().includes('seed-body'));
+
+      client.doc.transact(() => {
+        client.ytext.insert(client.ytext.length, '\ncrdt-unflushed-line\n');
+      });
+      const serverYtext = () =>
+        server?.instance.hocuspocus.documents.get(docName)?.getText('source').toString() ?? '';
+      await pollUntil(() => serverYtext().includes('crdt-unflushed-line'));
+
+      writeFileSync(filePath, '# Doc\n\nseed-body\n\ndisk-oob-line\n', 'utf-8');
+      await pollUntil(() => serverYtext().includes('disk-oob-line'), 10_000);
+      expect(serverYtext()).toContain('crdt-unflushed-line');
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/agent-write-md`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docName, markdown: 'agent-line\n', position: 'append' }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { warning?: { kind?: string } };
+      expect(body.warning).toBeUndefined();
+
+      await pollUntil(() => serverYtext().includes('agent-line'));
+      expect(serverYtext()).toContain('disk-oob-line');
+      expect(serverYtext()).toContain('crdt-unflushed-line');
+
+      await pollUntil(() => {
+        const d = readTestDoc(contentDir, docName);
+        return (
+          d.includes('agent-line') &&
+          d.includes('crdt-unflushed-line') &&
+          d.includes('disk-oob-line')
+        );
+      });
+    } finally {
+      for (const c of clients) {
+        await c.cleanup();
+      }
+    }
+  });
+
+  test('overlapping-block conflict: agent write is refused 409 doc-in-conflict, neither side is silently dropped', async () => {
+    server = await createTestServer({ debounce: 300_000, maxDebounce: 600_000 });
+    const { port, contentDir } = server;
+    const docName = `reconcile-conflict-${randomUUID()}`;
+    const filePath = join(contentDir, `${docName}.md`);
+
+    writeFileSync(filePath, '# Doc\n\nshared-line\n', 'utf-8');
+
+    let clients: TestClient[] = [];
+    try {
+      clients = await createTestClients(port, { count: 1, docName });
+      const client = clients[0];
+      if (!client) throw new Error('client setup failed');
+      await pollUntil(() => client.ytext.toString().includes('shared-line'));
+
+      client.doc.transact(() => {
+        const text = client.ytext.toString();
+        const at = text.indexOf('shared-line') + 'shared-line'.length;
+        client.ytext.insert(at, ' crdt-version');
+      });
+      const serverYtext = () =>
+        server?.instance.hocuspocus.documents.get(docName)?.getText('source').toString() ?? '';
+      await pollUntil(() => serverYtext().includes('crdt-version'));
+
+      writeFileSync(filePath, '# Doc\n\nshared-line disk-version\n', 'utf-8');
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/agent-write-md`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docName, markdown: 'agent-line\n', position: 'append' }),
+      });
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as { type?: string };
+      expect(body.type).toBe('urn:ok:error:doc-in-conflict');
+
+      expect(serverYtext()).toContain('crdt-version');
+      expect(serverYtext()).not.toContain('agent-line');
+      expect(readTestDoc(contentDir, docName)).toContain('disk-version');
+    } finally {
+      for (const c of clients) {
+        await c.cleanup();
+      }
+    }
+  });
+
+  test('conflict markers on disk: L1 refuses to ingest them and the agent write is refused 409', async () => {
+    server = await createTestServer({ debounce: 300_000, maxDebounce: 600_000 });
+    const { port, contentDir } = server;
+    const docName = `reconcile-markers-${randomUUID()}`;
+    const filePath = join(contentDir, `${docName}.md`);
+
+    writeFileSync(filePath, '# Doc\n\nseed-body\n', 'utf-8');
+
+    let clients: TestClient[] = [];
+    try {
+      clients = await createTestClients(port, { count: 1, docName });
+      const client = clients[0];
+      if (!client) throw new Error('client setup failed');
+      await pollUntil(() => client.ytext.toString().includes('seed-body'));
+
+      client.doc.transact(() => {
+        client.ytext.insert(client.ytext.length, '\ncrdt-unflushed-line\n');
+      });
+      const serverYtext = () =>
+        server?.instance.hocuspocus.documents.get(docName)?.getText('source').toString() ?? '';
+      await pollUntil(() => serverYtext().includes('crdt-unflushed-line'));
+
+      writeFileSync(
+        filePath,
+        '# Doc\n\n<<<<<<< HEAD\nseed-body\n=======\nother-side\n>>>>>>> theirs\n',
+        'utf-8',
+      );
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/agent-write-md`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docName, markdown: 'agent-line\n', position: 'append' }),
+      });
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as { type?: string };
+      expect(body.type).toBe('urn:ok:error:doc-in-conflict');
+
+      expect(serverYtext()).not.toContain('<<<<<<<');
+      expect(serverYtext()).toContain('crdt-unflushed-line');
+      expect(serverYtext()).not.toContain('agent-line');
     } finally {
       for (const c of clients) {
         await c.cleanup();

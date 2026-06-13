@@ -1,0 +1,5 @@
+---
+"@inkeep/open-knowledge": patch
+---
+
+Agent writes no longer drop concurrent un-flushed collaborative edits when an out-of-band disk edit races them. The pre-write reconcile used to ingest the divergent disk content wholesale, reverting any CRDT edit still inside the persistence debounce window; it now routes through the same three-way merge the file watcher uses, so both the disk edit and the concurrent edit survive (the success response's `disk-edit-reconciled` warning gains a `mergeOutcome` field discriminating `clean` from `merged`). Overlapping-block conflicts and conflict-marker disk content now refuse the agent write with the standard 409 doc-in-conflict envelope instead of silently picking a winner. The file watcher's own merge now advances the reconciled base to the on-disk bytes rather than the memory-only merged content, so a subsequent agent write no longer misreads the merge as a fresh divergence and reverts it (arrival-order independence), and the merged content actually reaches disk on the next store.

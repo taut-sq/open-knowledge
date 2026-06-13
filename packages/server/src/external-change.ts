@@ -4,6 +4,7 @@ import {
   BridgeInvariantViolationError,
   BridgeMergeContentLossError,
   normalizeBridge,
+  prependFrontmatter,
   stripFrontmatter,
 } from '@inkeep/open-knowledge-core';
 import { formatReconcileSubject } from '@inkeep/open-knowledge-core/shadow-repo-layout';
@@ -14,13 +15,19 @@ import { isDocInConflict } from './conflict-errors.ts';
 import { recordContributor } from './contributor-tracker.ts';
 import { recordFrontmatterEditSurface } from './frontmatter-telemetry.ts';
 import { getLogger } from './logger.ts';
-import { incrementExternalChangeHandlerErrors } from './metrics.ts';
+import {
+  incrementExternalChangeHandlerErrors,
+  incrementReconcileInFlightFallthroughs,
+  incrementReconcileOwnFlushSkips,
+} from './metrics.ts';
 import {
   getReconciledBase,
   isWithinContentDir,
+  peekInFlightFlush,
   safeContentPath,
   setReconciledBase,
 } from './persistence.ts';
+import { reconcile } from './reconciliation.ts';
 import type { PairedWriteOrigin } from './server-observers.ts';
 import { FILE_SYSTEM_WRITER } from './shadow-repo.ts';
 
@@ -106,6 +113,7 @@ export interface ReconcileBeforeWriteResult {
   reconciled: boolean;
   baseBytes: number;
   diskBytes: number;
+  mergeOutcome?: 'clean' | 'merged';
 }
 
 const NOT_RECONCILED: ReconcileBeforeWriteResult = {
@@ -113,6 +121,14 @@ const NOT_RECONCILED: ReconcileBeforeWriteResult = {
   baseBytes: 0,
   diskBytes: 0,
 };
+
+export function serializeYDocSource(document: {
+  getText(name: string): { toString(): string };
+}): string {
+  const ytextSnapshot = document.getText('source').toString();
+  const { frontmatter, body } = stripFrontmatter(ytextSnapshot);
+  return prependFrontmatter(frontmatter, body);
+}
 
 export function reconcileDiskBeforeAgentWrite(
   hocuspocus: Hocuspocus,
@@ -148,16 +164,74 @@ export function reconcileDiskBeforeAgentWrite(
   let diskContent: string;
   try {
     diskContent = readFileSync(canonical, 'utf-8');
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | null)?.code;
+    if (code !== 'ENOENT') {
+      getLogger('reconcile').warn(
+        { docName, canonical, code },
+        `[reconcile] disk read failed for ${docName} (${code ?? 'unknown'}); skipping reconcile`,
+      );
+    }
     return NOT_RECONCILED;
   }
 
   if (normalizeBridge(diskContent) === normalizeBridge(base)) return NOT_RECONCILED;
 
-  applyExternalChange(hocuspocus, docName, diskContent, resolveEmbed);
-  return {
-    reconciled: true,
-    baseBytes: Buffer.byteLength(base, 'utf8'),
-    diskBytes: Buffer.byteLength(diskContent, 'utf8'),
-  };
+  const inFlightFlush = peekInFlightFlush(docName);
+  if (inFlightFlush !== undefined) {
+    if (normalizeBridge(diskContent) === inFlightFlush) {
+      incrementReconcileOwnFlushSkips();
+      getLogger('reconcile').debug(
+        { docName, diskBytes: diskContent.length },
+        `[reconcile] disk matches own in-flight flush for ${docName}; skipping reconcile`,
+      );
+      return NOT_RECONCILED;
+    }
+    incrementReconcileInFlightFallthroughs();
+    getLogger('reconcile').warn(
+      { docName, diskBytes: diskContent.length },
+      `[reconcile] in-flight flush present but disk differs from snapshot for ${docName}; falling through to merge`,
+    );
+  }
+
+  if (!document) return NOT_RECONCILED;
+
+  const ours = serializeYDocSource(document);
+
+  const outcome = reconcile({ docName, base, ours, theirs: diskContent });
+  getLogger('reconcile').info(
+    { docName, result: outcome.kind, baseBytes: base.length, diskBytes: diskContent.length },
+    `[reconcile] before-agent-write ${docName} result=${outcome.kind}`,
+  );
+
+  switch (outcome.kind) {
+    case 'noop':
+      return NOT_RECONCILED;
+
+    case 'conflicts':
+    case 'refused': {
+      const lifecycleMap = document.getMap('lifecycle');
+      lifecycleMap.set('status', 'conflict');
+      lifecycleMap.set(
+        'reason',
+        outcome.kind === 'refused' ? outcome.reason : 'reconcile-conflicts',
+      );
+      return NOT_RECONCILED;
+    }
+
+    case 'clean':
+    case 'merged': {
+      const ingest = outcome.kind === 'clean' ? diskContent : outcome.newContent;
+      applyExternalChange(hocuspocus, docName, ingest, resolveEmbed);
+      if (outcome.kind === 'merged') {
+        setReconciledBase(docName, diskContent);
+      }
+      return {
+        reconciled: true,
+        baseBytes: Buffer.byteLength(base, 'utf8'),
+        diskBytes: Buffer.byteLength(diskContent, 'utf8'),
+        mergeOutcome: outcome.kind,
+      };
+    }
+  }
 }

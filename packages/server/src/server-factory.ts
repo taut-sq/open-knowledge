@@ -15,8 +15,6 @@ import {
   humanFormat,
   type MarkdownManager,
   type Principal,
-  prependFrontmatter,
-  stripFrontmatter,
 } from '@inkeep/open-knowledge-core';
 import {
   readConfigSafely,
@@ -62,6 +60,7 @@ import {
   applyDiskContentToDoc,
   applyExternalChange,
   FILE_WATCHER_ORIGIN,
+  serializeYDocSource,
 } from './external-change.ts';
 import {
   assertNeverDiskEvent,
@@ -768,9 +767,7 @@ export function createServer(options: ServerOptions): ServerInstance {
   function serializeDoc(docName: string): string | null {
     const document = hocuspocus.documents.get(docName);
     if (!document) return null;
-    const ytextSnapshot = document.getText('source').toString();
-    const { frontmatter, body } = stripFrontmatter(ytextSnapshot);
-    return prependFrontmatter(frontmatter, body);
+    return serializeYDocSource(document);
   }
 
   const applyToDoc = (docName: string, content: string): void =>
@@ -921,7 +918,7 @@ export function createServer(options: ServerOptions): ServerInstance {
             case 'merged':
               try {
                 applyToDoc(docName, result.newContent);
-                setReconciledBase(docName, result.newContent);
+                setReconciledBase(docName, theirs);
                 incrementReconcile();
                 clearLifecycleConflict(document);
                 backlinkIndex.updateDocumentFromMarkdown(docName, theirs);

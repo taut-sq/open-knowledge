@@ -264,6 +264,12 @@ export function deleteReconciledBase(docName: string): void {
   reconciledBaseByBranch.get(activeBranch)?.delete(docName);
 }
 
+const inFlightFlushByDoc = new Map<string, string>();
+
+export function peekInFlightFlush(docName: string): string | undefined {
+  return inFlightFlushByDoc.get(docName);
+}
+
 let batchInProgress = false;
 
 export function setBatchInProgress(value: boolean): void {
@@ -714,6 +720,7 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
   }): Promise<void> {
     ensureHistograms();
     const started = Date.now();
+    let inFlightFlushValue: string | undefined;
     return withSpan(
       'persistence.onStoreDocument',
       { attributes: { 'doc.name': documentName } },
@@ -908,6 +915,9 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
           }
         }
 
+        inFlightFlushValue = normalizeBridge(markdown);
+        inFlightFlushByDoc.set(documentName, inFlightFlushValue);
+
         const requestedPath = safeContentPath(documentName, contentDir);
         await tracedMkdir(dirname(requestedPath), { recursive: true });
 
@@ -1054,6 +1064,12 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
         scheduleGitCommit();
       },
     ).finally(() => {
+      if (
+        inFlightFlushValue !== undefined &&
+        inFlightFlushByDoc.get(documentName) === inFlightFlushValue
+      ) {
+        inFlightFlushByDoc.delete(documentName);
+      }
       storeDurationHist?.record((Date.now() - started) / 1000);
     });
   }

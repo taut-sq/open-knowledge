@@ -71,6 +71,10 @@ import {
   type TestClient,
   type TestServer,
 } from '../integration/test-harness';
+import {
+  buildOracleEExpectations,
+  markerPrefixOf as prefixOf,
+} from './oracle-e-expectations.test-helper';
 
 function createPRNG(seed: number) {
   let state = seed | 0 || 1;
@@ -514,10 +518,6 @@ describe('bridge-convergence fuzzer (FR-17)', () => {
       );
 
       const livePrefixes = new Set<string>();
-      const prefixOf = (marker: string): string => {
-        const dashIdx = marker.indexOf('-');
-        return dashIdx === -1 ? marker : marker.slice(0, dashIdx + 1);
-      };
 
       let expectedBody = 'seed paragraph'; // post-seed, pre-op initial state
       const updateExpectedBody = (op: Op): void => {
@@ -566,9 +566,13 @@ describe('bridge-convergence fuzzer (FR-17)', () => {
       try {
         const ops = generateOps(rng, clientCount, opCount);
 
-        for (const op of ops) {
+        const notAppliedOpIndices = new Set<number>();
+        for (const [opIdx, op] of ops.entries()) {
           const applied = await applyOp(op, clients, server, docName);
-          if (!applied) continue;
+          if (!applied) {
+            notAppliedOpIndices.add(opIdx);
+            continue;
+          }
 
           if (
             op.kind === 'wysiwyg-type' ||
@@ -640,30 +644,7 @@ describe('bridge-convergence fuzzer (FR-17)', () => {
           );
         }
 
-        const preMarkerLines = new Map<string, string>(); // prefix → pre-patch line
-        const patches: Array<{ find: string; replace: string }> = [];
-        for (const op of ops) {
-          switch (op.kind) {
-            case 'wysiwyg-type':
-            case 'source-type':
-              preMarkerLines.set(prefixOf(op.marker), op.marker);
-              break;
-            case 'agent-write':
-              if (op.position === 'replace') preMarkerLines.clear();
-              preMarkerLines.set(prefixOf(op.marker), op.marker);
-              break;
-            case 'agent-patch':
-              patches.push({ find: op.find, replace: op.replace });
-              break;
-            case 'external-change':
-              preMarkerLines.clear();
-              preMarkerLines.set(prefixOf(op.marker), op.marker);
-              break;
-            case 'agent-undo':
-              preMarkerLines.clear();
-              break;
-          }
-        }
+        const { preMarkerLines, patches } = buildOracleEExpectations(ops, notAppliedOpIndices);
 
         if (preMarkerLines.size > 0) {
           const acceptableForPrefix = new Map<string, Set<string>>();
@@ -719,8 +700,9 @@ describe('bridge-convergence fuzzer (FR-17)', () => {
           if (missingContent.length > 0) {
             throw new Error(
               `Oracle (e) content-set violation — ${missingContent.length} marker prefixes ` +
-                `with no acceptable line form (zero tolerance: tail corruption that can't be ` +
-                `explained by any applied agent-patch).\n` +
+                `with no acceptable line form. Either content diverged in a way no applied ` +
+                `agent-patch explains, or the expectation walk demanded an op the run never ` +
+                `applied (check refusal counts before assuming corruption).\n` +
                 missingContent
                   .slice(0, 5)
                   .map(
