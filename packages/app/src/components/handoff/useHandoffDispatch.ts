@@ -110,6 +110,15 @@ export function buildSelectionHandoffInput(args: {
   };
 }
 
+export function buildSelectionOrDocHandoffInput(args: {
+  readonly docName: string | null;
+  readonly workspace: Workspace | null;
+  readonly instruction: string;
+  readonly selectionMarkdown: string;
+}): HandoffDispatchInput | null {
+  return buildSelectionHandoffInput(args) ?? buildHandoffInput(args);
+}
+
 export function openInstallUrl(target: TargetData): Promise<void> {
   return defaultOpenExternal(target.installUrl).then(() => undefined);
 }

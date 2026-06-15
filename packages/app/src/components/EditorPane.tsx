@@ -18,8 +18,7 @@ import { EditorArea } from './EditorArea';
 import { EditorHeader } from './EditorHeader';
 import { OpenInAgentMenuRequestProvider } from './handoff/OpenInAgentMenuRequestContext';
 import {
-  buildHandoffInput,
-  buildSelectionHandoffInput,
+  buildSelectionOrDocHandoffInput,
   type HandoffDispatchInput,
 } from './handoff/useHandoffDispatch';
 
@@ -85,13 +84,12 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
       <OpenInAgentMenuRequestProvider
         value={{
           openSelection(request) {
-            const input =
-              buildSelectionHandoffInput({
-                docName: request.docName,
-                workspace,
-                instruction: request.instruction,
-                selectionMarkdown: request.selectionMarkdown,
-              }) ?? buildHandoffInput({ docName: activeDocName, workspace });
+            const input = buildSelectionOrDocHandoffInput({
+              docName: request.docName ?? activeDocName,
+              workspace,
+              instruction: request.instruction,
+              selectionMarkdown: request.selectionMarkdown,
+            });
             if (input === null) {
               toast.error(t`Couldn't send the selection — please try again.`);
               return false;

@@ -965,6 +965,54 @@ describe('buildSelectionHandoffInput — selection-scoped helper', () => {
   });
 });
 
+describe('buildSelectionOrDocHandoffInput — selection/file fallback helper', () => {
+  test('prefers selection scope when the serialized selection is non-empty', async () => {
+    const { buildSelectionOrDocHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildSelectionOrDocHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'rewrite',
+      selectionMarkdown: 'selected passage',
+    });
+
+    expect(input?.docContext).toBeNull();
+    expect(input?.selection).toEqual({
+      relativePath: 'specs/foo/SPEC.md',
+      instruction: 'rewrite',
+      selectionMarkdown: 'selected passage',
+    });
+    expect(input?.docPath).toBe('/repo/specs/foo/SPEC.md');
+  });
+
+  test('falls back to file scope when the serialized selection is empty', async () => {
+    const { buildSelectionOrDocHandoffInput } = await import('./useHandoffDispatch');
+    const input = buildSelectionOrDocHandoffInput({
+      docName: 'specs/foo/SPEC',
+      workspace: { contentDir: '/repo', pathSeparator: '/' },
+      instruction: 'rewrite',
+      selectionMarkdown: '',
+    });
+
+    expect(input).toEqual({
+      docContext: { relativePath: 'specs/foo/SPEC.md' },
+      projectDir: '/repo',
+      docPath: '/repo/specs/foo/SPEC.md',
+    });
+  });
+
+  test('returns null when neither selection nor file scope can be built', async () => {
+    const { buildSelectionOrDocHandoffInput } = await import('./useHandoffDispatch');
+    expect(
+      buildSelectionOrDocHandoffInput({
+        docName: null,
+        workspace: { contentDir: '/repo', pathSeparator: '/' },
+        instruction: 'rewrite',
+        selectionMarkdown: '',
+      }),
+    ).toBeNull();
+  });
+});
+
 describe('runHandoffDispatch — selection scope', () => {
   function selectionInput(): HandoffDispatchInput {
     return {
