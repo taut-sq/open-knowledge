@@ -508,6 +508,11 @@ export interface OkDesktopBridge {
       entryPoint: EntryPoint;
       pendingDeepLinkTarget?: { kind: 'doc' | 'folder'; path: string };
       pendingBranch?: string | null;
+      pendingShareBranchSwitch?: {
+        share: OkSharePayloadFields;
+        projectPath: string;
+        currentBranch: string | null;
+      };
     }): Promise<void>;
     createNew(args: {
       parent: string;

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/plugin/no-raw-html-interactive-element: pre-rule backlog — Q2 card grid uses raw <button> awaiting shadcn migration; tracked at https://github.com/inkeep/open-knowledge/blob/main/biome-plugins/README.md#no-raw-html-interactive-elementgrit
 
+import { classifyBranchMatch } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -17,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  type HeadBranchInfo,
   type OkDesktopBridge,
   type OkLocalOpAuthStatusResponse,
   type OkShareReceivedPayload,
@@ -272,15 +274,36 @@ function ShareReceiveDialogInner({
         });
         console.log(formatReceiveLog({ folder_validate: result.kind }));
         if (result.kind === 'ok') {
+          const shareBranch = launcherMiss.share.branch;
+          let head: HeadBranchInfo = { currentBranch: null, headSha: null, detached: false };
+          try {
+            head = await bridge.project.readHeadBranch(folderPath);
+          } catch (err) {
+            console.warn(
+              '[receive] local-folder readHeadBranch failed',
+              err instanceof Error ? err.message : err,
+            );
+          }
+          const needsBranchSwitch = classifyBranchMatch(shareBranch, head) !== 'true';
           try {
             await bridge.project.open({
               path: folderPath,
               target: 'new-window',
               entryPoint: 'share-receive',
-              pendingDeepLinkTarget: {
-                kind: launcherMiss.share.target.kind,
-                path: shareTargetPath(launcherMiss.share.target),
-              },
+              ...(needsBranchSwitch
+                ? {
+                    pendingShareBranchSwitch: {
+                      share: launcherMiss.share,
+                      projectPath: folderPath,
+                      currentBranch: head.currentBranch,
+                    },
+                  }
+                : {
+                    pendingDeepLinkTarget: {
+                      kind: launcherMiss.share.target.kind,
+                      path: shareTargetPath(launcherMiss.share.target),
+                    },
+                  }),
             });
             store.dismiss();
           } catch (err) {

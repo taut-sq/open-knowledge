@@ -383,13 +383,190 @@ describe('ShareReceiveDialog runtime behavior', () => {
         'This folder is a clone of fork/repo, not inkeep/open-knowledge. Pick a different folder?',
       ),
     );
-    await waitFor(() =>
-      expect(bridge.project.open).toHaveBeenCalledWith({
-        entryPoint: 'share-receive',
-        path: '/right',
-        pendingDeepLinkTarget: { kind: 'doc', path: 'docs/guide.md' },
-        target: 'new-window',
-      }),
+    await waitFor(() => expect(bridge.project.readHeadBranch).toHaveBeenCalledWith('/right'));
+    await waitFor(() => {
+      const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+        path?: string;
+        pendingDeepLinkTarget?: unknown;
+        pendingShareBranchSwitch?: { projectPath?: string; currentBranch?: string | null };
+      };
+      expect(openArg.path).toBe('/right');
+      expect(openArg.pendingShareBranchSwitch?.currentBranch).toBe('main');
+      expect(openArg.pendingDeepLinkTarget).toBeUndefined();
+    });
+  });
+
+  test('I have it locally: branch mismatch routes to the branch-switch surface, not a plain open', async () => {
+    const bridge = createBridge();
+    const store = createTestStore(okPayload({ branch: 'feat/share' }));
+    bridge.__folderPicks.push('/local/clone');
+    bridge.__validationResults.push({
+      kind: 'ok',
+      gitRemoteUrl: 'https://github.com/inkeep/open-knowledge.git',
+    });
+
+    await renderDialog({ bridge, store });
+
+    expect(await screen.findByTestId('share-receive-dialog')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-receive-local'));
+
+    await waitFor(() => expect(bridge.project.readHeadBranch).toHaveBeenCalledWith('/local/clone'));
+
+    await waitFor(() => expect(bridge.project.open).toHaveBeenCalled());
+    const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+      path?: string;
+      pendingDeepLinkTarget?: unknown;
+      pendingShareBranchSwitch?: {
+        projectPath?: string;
+        currentBranch?: string | null;
+        share?: { owner?: string; repo?: string; branch?: string; target?: unknown };
+      };
+    };
+    expect(openArg.path).toBe('/local/clone');
+    expect(openArg.pendingShareBranchSwitch).toBeDefined();
+    expect(openArg.pendingShareBranchSwitch?.projectPath).toBe('/local/clone');
+    expect(openArg.pendingShareBranchSwitch?.currentBranch).toBe('main');
+    expect(openArg.pendingShareBranchSwitch?.share).toMatchObject({
+      owner: 'inkeep',
+      repo: 'open-knowledge',
+      branch: 'feat/share',
+      target: { kind: 'doc', docPath: 'docs/guide.md' },
+    });
+    expect(openArg.pendingDeepLinkTarget).toBeUndefined();
+    expect(store.dismiss).toHaveBeenCalled();
+  });
+
+  test('I have it locally: branch match opens directly without a branch-switch', async () => {
+    const bridge = createBridge();
+    const store = createTestStore(okPayload({ branch: 'main' }));
+    bridge.__folderPicks.push('/local/clone');
+    bridge.__validationResults.push({
+      kind: 'ok',
+      gitRemoteUrl: 'https://github.com/inkeep/open-knowledge.git',
+    });
+
+    await renderDialog({ bridge, store });
+
+    expect(await screen.findByTestId('share-receive-dialog')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-receive-local'));
+
+    await waitFor(() => expect(bridge.project.open).toHaveBeenCalled());
+    const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+      pendingDeepLinkTarget?: unknown;
+      pendingShareBranchSwitch?: unknown;
+    };
+    expect(openArg.pendingDeepLinkTarget).toEqual({ kind: 'doc', path: 'docs/guide.md' });
+    expect(openArg.pendingShareBranchSwitch).toBeUndefined();
+    expect(store.dismiss).toHaveBeenCalled();
+  });
+
+  test('I have it locally: detached HEAD with a share branch routes to the branch-switch surface', async () => {
+    const bridge = createBridge();
+    const store = createTestStore(okPayload({ branch: 'feat/share' }));
+    bridge.__folderPicks.push('/local/clone');
+    bridge.__validationResults.push({
+      kind: 'ok',
+      gitRemoteUrl: 'https://github.com/inkeep/open-knowledge.git',
+    });
+    bridge.project.readHeadBranch = mock(() =>
+      Promise.resolve({ currentBranch: null, detached: true, headSha: '1234567' }),
     );
+
+    await renderDialog({ bridge, store });
+
+    expect(await screen.findByTestId('share-receive-dialog')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-receive-local'));
+
+    await waitFor(() => expect(bridge.project.open).toHaveBeenCalled());
+    const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+      pendingDeepLinkTarget?: unknown;
+      pendingShareBranchSwitch?: {
+        currentBranch?: string | null;
+        share?: { branch?: string; target?: unknown };
+      };
+    };
+    expect(openArg.pendingShareBranchSwitch).toBeDefined();
+    expect(openArg.pendingShareBranchSwitch?.currentBranch).toBeNull();
+    expect(openArg.pendingShareBranchSwitch?.share).toMatchObject({
+      branch: 'feat/share',
+      target: { kind: 'doc', docPath: 'docs/guide.md' },
+    });
+    expect(openArg.pendingDeepLinkTarget).toBeUndefined();
+  });
+
+  test('I have it locally: unreadable HEAD (all-null sentinel) opens directly, no needless switch', async () => {
+    const bridge = createBridge();
+    const store = createTestStore(okPayload({ branch: 'feat/share' }));
+    bridge.__folderPicks.push('/local/clone');
+    bridge.__validationResults.push({
+      kind: 'ok',
+      gitRemoteUrl: 'https://github.com/inkeep/open-knowledge.git',
+    });
+    bridge.project.readHeadBranch = mock(() =>
+      Promise.resolve({ currentBranch: null, detached: false, headSha: null }),
+    );
+
+    await renderDialog({ bridge, store });
+
+    expect(await screen.findByTestId('share-receive-dialog')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-receive-local'));
+
+    await waitFor(() => expect(bridge.project.open).toHaveBeenCalled());
+    const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+      pendingDeepLinkTarget?: unknown;
+      pendingShareBranchSwitch?: unknown;
+    };
+    expect(openArg.pendingDeepLinkTarget).toEqual({ kind: 'doc', path: 'docs/guide.md' });
+    expect(openArg.pendingShareBranchSwitch).toBeUndefined();
+    expect(store.dismiss).toHaveBeenCalled();
+  });
+
+  test('I have it locally: share with no branch opens directly', async () => {
+    const bridge = createBridge();
+    const store = createTestStore(okPayload({ branch: '' }));
+    bridge.__folderPicks.push('/local/clone');
+    bridge.__validationResults.push({
+      kind: 'ok',
+      gitRemoteUrl: 'https://github.com/inkeep/open-knowledge.git',
+    });
+
+    await renderDialog({ bridge, store });
+
+    expect(await screen.findByTestId('share-receive-dialog')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-receive-local'));
+
+    await waitFor(() => expect(bridge.project.open).toHaveBeenCalled());
+    const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+      pendingDeepLinkTarget?: unknown;
+      pendingShareBranchSwitch?: unknown;
+    };
+    expect(openArg.pendingDeepLinkTarget).toEqual({ kind: 'doc', path: 'docs/guide.md' });
+    expect(openArg.pendingShareBranchSwitch).toBeUndefined();
+    expect(store.dismiss).toHaveBeenCalled();
+  });
+
+  test('I have it locally: readHeadBranch IPC rejection falls back to a plain open', async () => {
+    const bridge = createBridge();
+    const store = createTestStore(okPayload({ branch: 'feat/share' }));
+    bridge.__folderPicks.push('/local/clone');
+    bridge.__validationResults.push({
+      kind: 'ok',
+      gitRemoteUrl: 'https://github.com/inkeep/open-knowledge.git',
+    });
+    bridge.project.readHeadBranch = mock(() => Promise.reject(new Error('ipc channel closed')));
+
+    await renderDialog({ bridge, store });
+
+    expect(await screen.findByTestId('share-receive-dialog')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('share-receive-local'));
+
+    await waitFor(() => expect(bridge.project.open).toHaveBeenCalled());
+    const openArg = (bridge.project.open as ReturnType<typeof mock>).mock.calls.at(-1)?.[0] as {
+      pendingDeepLinkTarget?: unknown;
+      pendingShareBranchSwitch?: unknown;
+    };
+    expect(openArg.pendingDeepLinkTarget).toEqual({ kind: 'doc', path: 'docs/guide.md' });
+    expect(openArg.pendingShareBranchSwitch).toBeUndefined();
+    expect(store.dismiss).toHaveBeenCalled();
   });
 });

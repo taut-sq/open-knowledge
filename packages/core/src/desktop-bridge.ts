@@ -67,6 +67,11 @@ interface OkProjectOpenRequest {
   entryPoint: OkProjectEntryPoint;
   pendingDeepLinkTarget?: { kind: 'doc' | 'folder'; path: string };
   pendingBranch?: string | null;
+  pendingShareBranchSwitch?: {
+    share: OkSharePayloadFields;
+    projectPath: string;
+    currentBranch: string | null;
+  };
 }
 
 export type OkCheckTargetExistsResult = 'exists' | 'missing' | 'unreadable';

@@ -1867,12 +1867,27 @@ function registerIpcHandlers() {
         return undefined;
       }
     }
+    if (request.pendingShareBranchSwitch !== undefined && wm) {
+      const existing = wm.focusWindowForProject(request.path) as
+        | (BrowserWindowLike & { webContents: BrowserWindowLike['webContents'] })
+        | null;
+      if (existing) {
+        sendToRenderer(existing.webContents, 'ok:share:received', {
+          kind: 'project-branch-switch' as const,
+          share: request.pendingShareBranchSwitch.share,
+          projectPath: request.pendingShareBranchSwitch.projectPath,
+          currentBranch: request.pendingShareBranchSwitch.currentBranch,
+        });
+        return undefined;
+      }
+    }
     await openProjectOrFallbackToNavigator(
       request.path,
       request.entryPoint,
       request.pendingDeepLinkTarget,
       request.pendingBranch,
       request.pendingMultiCandidate,
+      request.pendingShareBranchSwitch,
     );
     return undefined;
   });

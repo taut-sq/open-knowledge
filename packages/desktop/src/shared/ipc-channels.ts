@@ -21,6 +21,7 @@ import type {
   OkLocalOpAuthReposResponse,
   OkLocalOpAuthStatusResponse,
   OkServerRestartOutcome,
+  OkSharePayloadFields,
   OkThemeSource,
   OkUpdateChannel,
   SeedApplyOptions,
@@ -67,6 +68,11 @@ interface ProjectOpenRequest {
   entryPoint: EntryPoint;
   pendingDeepLinkTarget?: { kind: 'doc' | 'folder'; path: string };
   pendingBranch?: string | null;
+  pendingShareBranchSwitch?: {
+    share: OkSharePayloadFields;
+    projectPath: string;
+    currentBranch: string | null;
+  };
   pendingMultiCandidate?: boolean;
 }
 
