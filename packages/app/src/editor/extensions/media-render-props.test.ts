@@ -68,4 +68,28 @@ describe('normalizeDocRelativeMediaRenderProps', () => {
       normalizeDocRelativeMediaRenderProps('audio', { src: './song.mp3' }, 'notes/today'),
     ).toEqual({ src: '/notes/song.mp3' });
   });
+
+  test('resolves relative PDF src against the current document directory', () => {
+    expect(
+      normalizeDocRelativeMediaRenderProps('Pdf', { src: './test.pdf' }, 'notes/today'),
+    ).toEqual({
+      src: '/notes/test.pdf',
+    });
+    expect(
+      normalizeDocRelativeMediaRenderProps('Pdf', { src: '../test.pdf' }, 'notes/archive/today'),
+    ).toEqual({ src: '/notes/test.pdf' });
+  });
+
+  test('resolves relative File src against the current document directory', () => {
+    expect(
+      normalizeDocRelativeMediaRenderProps('File', { src: './document.docx' }, 'notes/today'),
+    ).toEqual({ src: '/notes/document.docx' });
+    expect(
+      normalizeDocRelativeMediaRenderProps(
+        'File',
+        { src: '../archive.zip' },
+        'notes/archive/today',
+      ),
+    ).toEqual({ src: '/notes/archive.zip' });
+  });
 });

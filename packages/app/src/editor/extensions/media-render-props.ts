@@ -1,6 +1,13 @@
 import { normalizeDocRelativeAssetUrl } from '@inkeep/open-knowledge-core';
 
-const DOC_RELATIVE_SRC_COMPONENTS = new Set(['img', 'CommonMarkImage', 'video', 'audio']);
+const DOC_RELATIVE_SRC_COMPONENTS = new Set([
+  'img',
+  'CommonMarkImage',
+  'video',
+  'audio',
+  'Pdf',
+  'File',
+]);
 
 export function normalizeDocRelativeMediaRenderProps(
   descriptorName: string,
