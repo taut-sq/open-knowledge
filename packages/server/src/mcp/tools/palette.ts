@@ -16,7 +16,7 @@ export const DESCRIPTION = [
   'Three sections:',
   '- `components` — the **markdown-native forms** OK auto-promotes into themed canonical components at parse time. Write `> [!NOTE]` (not `<Callout>`), `<details>` (not `<Accordion>`), ` ```mermaid `, `$x$`. Each entry carries a copy-ready `example` + `guidance`.',
   '- `embedPatterns` — copy-ready ` ```html preview ` starters (chart, stat cards, custom SVG, interactive control) already wired to the theme tokens, so an embed tracks light/dark with no hand-picked colors.',
-  '- `tokens` — the CSS custom properties injected into every preview iframe; reference them as `var(--chart-1)`, `var(--foreground)`, … inside an `html preview` embed.',
+  '- `tokens` — the CSS custom properties injected into every preview iframe; reference them as `var(--chart-1)`, `var(--foreground)`, … inside an `html preview` embed. **Inside SVG, route theme tokens through `style="..."` rather than presentation attributes** — `<circle style="fill: var(--chart-1)">` works; `<circle fill="var(--chart-1)">` silently falls back to black in Safari / older Chromium because CSS `var()` is not a valid SVG `<paint>` value per the W3C spec.',
   '',
   'External resources load directly: the preview iframe has open network access, so an embed can load external stylesheets, `fetch` live data, or pull map tiles / remote images / web fonts over `https:`. The iframe is a sandboxed null-origin frame — an embed can reach the network but never the knowledge base, cookies, or auth.',
   '',

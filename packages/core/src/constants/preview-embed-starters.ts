@@ -47,12 +47,12 @@ const STAT_CARDS_HTML = `<div style="font-family:system-ui,sans-serif;padding:20
 
 const CUSTOM_SVG_HTML = `<div style="font-family:system-ui,sans-serif;padding:20px;display:flex;align-items:center;gap:20px;color:var(--foreground)">
   <svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="70 percent complete">
-    <circle cx="60" cy="60" r="46" fill="none" stroke="var(--border)" stroke-width="14" />
-    <circle cx="60" cy="60" r="46" fill="none" stroke="var(--chart-1)" stroke-width="14"
+    <circle cx="60" cy="60" r="46" stroke-width="14" style="fill: none; stroke: var(--border)" />
+    <circle cx="60" cy="60" r="46" stroke-width="14"
       stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="87"
-      transform="rotate(-90 60 60)" />
+      transform="rotate(-90 60 60)" style="fill: none; stroke: var(--chart-1)" />
     <text x="60" y="67" text-anchor="middle" font-size="22" font-weight="700"
-      fill="var(--foreground)">70%</text>
+      style="fill: var(--foreground)">70%</text>
   </svg>
   <div>
     <div style="font-weight:600;font-size:15px">Onboarding progress</div>
