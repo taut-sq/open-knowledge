@@ -19,16 +19,12 @@ It helps you:
 
 ## Clone an existing GitHub repository
 
-In the app, the **Clone from GitHub** card opens a clone dialog for interactive setup.
-
 <Steps>
 
 <Step>
     ### Open the clone dialog
 
-    From the Navigator window, select **Clone from GitHub**.
-
-    ![The Open Knowledge Navigator window with cards for Create new project, Open folder on disk, and Clone from GitHub](/screenshots/navigator-window.png)
+    From the Navigator window, click **Clone from GitHub**. You can open the navigator window from the editor by clicking on your project name in the bottom left and then clicking **Switch project**.
 </Step>
 
 <Step>
@@ -50,7 +46,13 @@ In the app, the **Clone from GitHub** card opens a clone dialog for interactive 
 </Step>
 </Steps>
 
-## Enable sync after cloning
+## Publish a local project
+
+You can publish your local project to GitHub directly from the Open Knowledge app by opening a folder or file and clicking the **Share** button in the top right of the editor.
+
+This will open a dialog where you can choose an owner and repository name. You can also choose to make the repository public or private.
+
+## Enable GitHub sync
 
 When you open a freshly cloned project, you will be prompted to enable sync. You can also toggle it from the project settings page at any time.
 
@@ -61,15 +63,6 @@ While sync is active, Open Knowledge:
 - Pushes those commits back to the remote so collaborators see your changes
 
 Pulls can overwrite uncommitted local file changes, so commit or discard work-in-progress before you enable sync.
-
-## Publish a local project
-
-You can publish your local project to GitHub directly from the Open Knowledge app by selecting a folder or file and clicking the *Share* button.
-
-This will open a dialog where you can choose an owner and repository name. You can also choose to make the repository public or private.
-
-
-![The publish dialog where you can choose an owner and repository name](/screenshots/repo-create.png)
 
 ## Authentication
 
@@ -82,8 +75,6 @@ The sync status indicator surfaces an auth-error state when stored credentials s
 ## Sync status and conflicts
 
 The sync status indicator in the editor shows the current state of the connection: how many commits you are ahead or behind the remote, when the last sync ran, whether sync is paused, and how many files have unresolved conflicts. You can also trigger an immediate sync from the same control instead of waiting for the next scheduled run.
-
-![The sync status popover in the editor showing the current state of the connection](/screenshots/sync-status-popover.png)
 
 ## Resolving a conflict
 
