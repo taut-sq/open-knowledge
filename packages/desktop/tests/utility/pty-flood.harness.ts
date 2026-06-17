@@ -1,3 +1,4 @@
+
 import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -241,11 +242,13 @@ async function runFloodScenario(opts: FloodOptions): Promise<FloodMetrics> {
     if (pump) clearInterval(pump);
     try {
       manager.kill({ windowId: 1, ptyId: PTY_ID });
-    } catch {}
+    } catch {
+    }
     bridge.reap();
     try {
       rmSync(tmp, { recursive: true, force: true });
-    } catch {}
+    } catch {
+    }
   }
 }
 

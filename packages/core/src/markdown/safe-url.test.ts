@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { isRelativeUrl, isSafeUrl, SAFE_URL_SCHEME_RE, SAFE_URL_SCHEMES } from './safe-url.ts';
 

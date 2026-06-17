@@ -1,3 +1,4 @@
+
 type RenameDestinationValidation = { kind: 'allow'; destinationPath: string } | { kind: 'block' };
 
 export function getFileExtension(path: string): string {

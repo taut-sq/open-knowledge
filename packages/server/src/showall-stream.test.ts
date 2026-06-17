@@ -235,6 +235,7 @@ describe('streamShowAllEntries — level-order emission (PRD-6858)', () => {
 });
 
 describe('streamShowAllEntries — cap accounting boundary quirks', () => {
+
   test('an excludable entry past the cap still reports truncated (cap checked before exclusion)', async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ok-showall-quirk-')));
     const CAP = 4;
@@ -308,6 +309,7 @@ describe('streamShowAllEntries — unreadable directory mid-queue', () => {
 });
 
 describe('streamShowAllEntries — .base/.canvas mediaKind', () => {
+
   test('.base and .canvas entries report mediaKind text in showAll output', async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ok-showall-mediakind-')));
     writeFileSync(join(dir, 'note.md'), '# Note\n');

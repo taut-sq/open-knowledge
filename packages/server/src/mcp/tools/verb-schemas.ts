@@ -1,3 +1,4 @@
+
 import { FrontmatterValueSchema } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 

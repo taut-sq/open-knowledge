@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { sharedExtensions } from '../extensions/shared.ts';
 import { MarkdownManager } from './index.ts';
@@ -114,6 +115,7 @@ describe('mdastToHtml — mdast Root → HTML', () => {
 });
 
 describe('custom-node regression gate — every promoted mdast type emits semantic HTML', () => {
+
   describe('(a) markdownToHtml string-entry — remark-plugin-produced types', () => {
     test('wikiLink bare target emits <a class="wiki-link">', () => {
       const html = markdownToHtml('[[Target]]');

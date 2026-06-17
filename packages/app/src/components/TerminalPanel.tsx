@@ -117,6 +117,7 @@ function TerminalSession({
 
     fit.fit();
 
+
     void (async () => {
       let result: Awaited<ReturnType<typeof bridge.terminal.create>>;
       try {

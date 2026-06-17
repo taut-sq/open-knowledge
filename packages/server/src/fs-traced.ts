@@ -1,3 +1,4 @@
+
 import type { RmOptions, WriteFileOptions } from 'node:fs';
 import {
   appendFileSync,
@@ -55,6 +56,7 @@ function byteLength(data: string | Uint8Array | ArrayBufferView): number {
   return data.byteLength ?? 0;
 }
 
+
 export async function tracedWriteFile(
   path: string,
   data: string | Uint8Array,
@@ -87,6 +89,7 @@ export async function tracedMkdir(
     return mkdir(path, options);
   });
 }
+
 
 export function tracedWriteFileSync(
   path: string,

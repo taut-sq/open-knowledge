@@ -10,6 +10,7 @@ import {
 } from './prompt-composer.ts';
 import type { HandoffPayload, HandoffTarget } from './types.ts';
 
+
 test('composeFilePrompt with autoOpen=true emits the file directive + Open-the-OK-editor trailer', () => {
   expect(composeFilePrompt('foo.md', true)).toBe(
     "Let's work on `foo.md` using Open Knowledge. Open the OK editor in web view.",
@@ -168,6 +169,7 @@ test('"in web view" qualifier rides the trailer only when autoOpen=true', () => 
   expect(composeEmptySpacePrompt(true)).toContain('in web view');
   expect(composeEmptySpacePrompt(false)).not.toContain('in web view');
 });
+
 
 const SELECTION_PROJECT_DIR = '/Users/test/Documents/projects/open-knowledge';
 

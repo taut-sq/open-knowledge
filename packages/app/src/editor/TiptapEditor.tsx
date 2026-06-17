@@ -128,7 +128,8 @@ function repairDetachedEditorContent(editor: Editor, portalTarget: HTMLElement):
 
   try {
     view.setProps({ nodeViews: {} });
-  } catch {}
+  } catch {
+  }
   editorWithContent.contentComponent = null;
   editorWithContent.isEditorContentInitialized = false;
   return true;
@@ -566,6 +567,7 @@ const TiptapEditorChrome: FC<TiptapEditorChromeProps> = ({
       editor.off('create', consume);
     };
   }, [editor, docName]);
+
 
   useEffect(() => {
     const activityMap = provider.document.getMap('agent-flash');

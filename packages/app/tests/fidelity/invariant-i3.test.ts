@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import * as fc from 'fast-check';
 import { block, headingWithMarks, markdownDoc, paragraphWithMarks } from './arbitraries';

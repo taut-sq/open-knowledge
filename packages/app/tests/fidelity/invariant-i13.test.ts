@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { normalizeBridge } from '@inkeep/open-knowledge-core';
 import type { JSONContent } from '@tiptap/core';
@@ -115,6 +116,7 @@ describe('I13 — NG12 probe cases: idempotent under synthetic prop edits', () =
     }
   });
 });
+
 
 interface IndentedJsxCase {
   name: string;
@@ -250,6 +252,7 @@ describe('I13 — string-attr entity divergence on the delegation path (PRD-7110
     expect(normalizeBridge(out)).toBe(normalizeBridge(source));
   });
 });
+
 
 interface DetailsCase {
   name: string;

@@ -1,3 +1,4 @@
+
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/button';
@@ -24,10 +25,12 @@ export function CopyButton({ copyContent }: { copyContent: string }) {
             if (resetRef.current !== null) clearTimeout(resetRef.current);
             resetRef.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
           },
-          () => {},
+          () => {
+          },
         );
       }
-    } catch {}
+    } catch {
+    }
   };
 
   return (

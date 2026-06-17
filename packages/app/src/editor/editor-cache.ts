@@ -1,3 +1,4 @@
+
 import type { EditorView } from '@codemirror/view';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type { RenamedDocMapping } from '@inkeep/open-knowledge-core';
@@ -106,6 +107,7 @@ interface MountCmParams {
   factory: CmFactory;
   sizeStats?: SizeStats;
 }
+
 
 const tiptapCache = new Map<string, TiptapCacheEntry>();
 const cmCache = new Map<string, CmCacheEntry>();
@@ -245,6 +247,7 @@ function tryCreateParkingNode(): HTMLElement | null {
   return el;
 }
 
+
 export function mountTiptapEditor(params: MountTiptapParams): TiptapCacheEntry {
   const { docName, container, factory, sizeStats } = params;
 
@@ -287,7 +290,8 @@ export function mountTiptapEditor(params: MountTiptapParams): TiptapCacheEntry {
     if (reuse.hadFocus) {
       try {
         reuse.editor.commands.focus();
-      } catch {}
+      } catch {
+      }
     }
     mark('ok/cache/reparent-end', {
       docName,
@@ -438,6 +442,7 @@ export function evictTiptapEditor(docName: string): boolean {
   return true;
 }
 
+
 export function mountCmEditor(params: MountCmParams): CmCacheEntry {
   const { docName, container, factory, sizeStats } = params;
 
@@ -465,6 +470,7 @@ export function mountCmEditor(params: MountCmParams): CmCacheEntry {
     };
   }
 
+
   const reuse = cmCache.get(docName);
   if (reuse) {
     mark('ok/cache/reparent-start', {
@@ -481,7 +487,8 @@ export function mountCmEditor(params: MountCmParams): CmCacheEntry {
     if (reuse.hadFocus) {
       try {
         reuse.view.focus();
-      } catch {}
+      } catch {
+      }
     }
     mark('ok/cache/reparent-end', {
       docName,
@@ -616,6 +623,7 @@ export function evictCmEditor(docName: string): boolean {
   return true;
 }
 
+
 function getTiptapEditorView(editor: Editor): { dom: HTMLElement; scrollDOM?: HTMLElement } | null {
   const view = (editor as unknown as { editorView?: { dom: HTMLElement; scrollDOM?: HTMLElement } })
     .editorView;
@@ -677,6 +685,7 @@ function findEvictable(lru: string[], mountingDocName: string): string | null {
   }
   return null;
 }
+
 
 export function setActivityMountList(docNames: readonly string[]): void {
   const prev = activityMountList;
@@ -757,6 +766,7 @@ export function subscribePoolEviction(pool: {
     }
   };
 }
+
 
 export function __getCacheSize(kind: 'tiptap' | 'cm'): number {
   return kind === 'tiptap' ? tiptapCache.size : cmCache.size;

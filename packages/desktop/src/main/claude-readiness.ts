@@ -1,3 +1,4 @@
+
 import type { ClaudeReadiness } from '../shared/bridge-contract.ts';
 import { getLogger } from './desktop-logger.ts';
 

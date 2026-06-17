@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from 'bun:test';
 import { MarkdownManager, sharedExtensions } from '@inkeep/open-knowledge-core';
 
@@ -20,6 +21,7 @@ function assertRoundTrip(input: string): void {
   const normalized = stripTrailingWhitespace(input);
   expect(output).toBe(normalized);
 }
+
 
 describe('entity bypass — literal chars survive round-trip', () => {
   test('ampersand in heading: # H&M Store', () => {
@@ -47,6 +49,7 @@ describe('entity bypass — literal chars survive round-trip', () => {
   });
 });
 
+
 describe('backslash escape — byte-identical round-trip', () => {
   test('\\* (escaped star)', () => {
     assertRoundTrip('text \\* more\n');
@@ -72,6 +75,7 @@ describe('backslash escape — byte-identical round-trip', () => {
     assertRoundTrip('text \\~ more\n');
   });
 });
+
 
 describe('remark-prosemirror version pin', () => {
   test('MarkdownManager has parse and serialize methods (unified pipeline)', () => {

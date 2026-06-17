@@ -24,6 +24,7 @@ import {
   shouldOpenInNewTab,
 } from '../internal-link-helpers';
 
+
 const PAGES_CACHE_TTL_MS = 5_000;
 
 let pagesCache: PageItem[] | null = null;
@@ -56,6 +57,7 @@ async function getHeadings(docName: string): Promise<HeadingEntry[]> {
     return [];
   }
 }
+
 
 const WIKI_LINK_RE = /\[\[[^\]]*?\]\]/g;
 const wikiLinkMark = Decoration.mark({ class: 'cm-wiki-link' });
@@ -150,7 +152,8 @@ const wikiLinkDecorations = ViewPlugin.fromClass(
         .then(() => {
           try {
             view.dispatch({});
-          } catch {}
+          } catch {
+          }
         })
         .catch((err) => {
           console.warn('[wiki-link-source] warmCache fetch failed:', err);
@@ -159,6 +162,7 @@ const wikiLinkDecorations = ViewPlugin.fromClass(
   },
   { decorations: (v) => v.decorations },
 );
+
 
 const WIKI_LINK_FULL_RE = /\[\[([^[\]|#]+?)(?:#([^\]|]+?))?(?:\|([^\]]+?))?\]\]/g;
 
@@ -211,6 +215,7 @@ const wikiLinkClickHandler = EditorView.domEventHandlers({
     return false;
   },
 });
+
 
 async function wikiLinkCompletionSource(
   context: CompletionContext,
@@ -276,6 +281,7 @@ async function wikiLinkCompletionSource(
   };
 }
 
+
 const wikiLinkTheme = EditorView.theme({
   '.cm-wiki-link': {
     color: 'oklch(52.7% 0.154 228.4)', // sky-700
@@ -286,6 +292,7 @@ const wikiLinkTheme = EditorView.theme({
     cursor: 'pointer',
   },
 });
+
 
 export function createWikiLinkSourceExtension(): Extension {
   return [

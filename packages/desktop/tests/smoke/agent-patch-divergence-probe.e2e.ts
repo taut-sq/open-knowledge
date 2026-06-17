@@ -1,3 +1,4 @@
+
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -164,6 +165,7 @@ async function executeRace(opts: {
     await wait(YDOC_POLL_INTERVAL_MS);
   }
 
+
   const raceFired = httpStatus === 200 && !cherryPresent;
   return {
     httpStatus,
@@ -237,6 +239,7 @@ async function setupElectron(
 }
 
 test.describe('PRD-6666 — agent-patch divergence (production-built Electron)', () => {
+
   test('Variant A — human types in SAME paragraph as agent find target', async ({
     captureStderrFor,
   }) => {
