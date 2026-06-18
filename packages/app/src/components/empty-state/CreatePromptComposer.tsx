@@ -145,7 +145,7 @@ export function CreatePromptComposer({ scenario, className }: CreatePromptCompos
         rows={4}
         placeholder={t`A team knowledge base, a personal wiki, project docs...`}
         aria-label={t`Describe the project you want to create`}
-        className="min-h-[112px] resize-none rounded-2xl border-0 bg-transparent px-4 py-3.5 text-sm leading-relaxed shadow-none focus-visible:border-0 focus-visible:ring-0"
+        className="min-h-[112px] resize-none rounded-2xl border-0 bg-transparent dark:bg-transparent px-4 py-3.5 text-sm leading-relaxed shadow-none focus-visible:border-0 focus-visible:ring-0"
       />
       {/* Footer row: starter-brief chips (prefill the field, no auto-create) on
           the left, the Create split button pinned right. Chips wrap among

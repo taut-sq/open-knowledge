@@ -4065,10 +4065,6 @@ msgstr "Open with AI {targetDisplayName}"
 msgid "Open with AI {targetDisplayName}, {hint}"
 msgstr "Open with AI {targetDisplayName}, {hint}"
 
-#: src/components/AssetPreview.tsx
-msgid "Open with built-in text editor"
-msgstr "Open with built-in text editor"
-
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
@@ -6052,6 +6048,10 @@ msgstr "Value is required"
 #: src/components/CommandPalette.tsx
 msgid "via {viaTags}"
 msgstr "via {viaTags}"
+
+#: src/components/AssetPreview.tsx
+msgid "View as text"
+msgstr "View as text"
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Visibility"

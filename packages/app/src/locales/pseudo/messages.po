@@ -4060,10 +4060,6 @@ msgstr ""
 msgid "Open with AI {targetDisplayName}, {hint}"
 msgstr ""
 
-#: src/components/AssetPreview.tsx
-msgid "Open with built-in text editor"
-msgstr ""
-
 #: src/lib/keyboard-shortcuts.ts
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr ""
@@ -6046,6 +6042,10 @@ msgstr ""
 
 #: src/components/CommandPalette.tsx
 msgid "via {viaTags}"
+msgstr ""
+
+#: src/components/AssetPreview.tsx
+msgid "View as text"
 msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx

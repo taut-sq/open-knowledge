@@ -59,7 +59,7 @@ describe('AssetPreview — text-viewer dispatch', () => {
     });
   });
 
-  test('clicking "Open with built-in text editor" flips into the text branch', () => {
+  test('clicking "View as text" flips into the text branch', () => {
     const { container } = render(<AssetPreview assetPath="docs/report.pdf" mediaKind={null} />);
     const btn = container.querySelector(
       '[data-testid="asset-preview-open-as-text"]',

@@ -68,15 +68,29 @@ export function AssetPreview({ assetPath, mediaKind }: AssetPreviewProps) {
           // biome-ignore lint/a11y/useMediaCaption: local preview files do not have sidecar captions.
           <audio src={src} controls className="w-full max-w-md" />
         ) : (
-          <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <div className="flex size-16 items-center justify-center rounded-md border bg-muted font-medium text-muted-foreground text-sm">
-              {extension}
+          <div className="flex max-w-sm flex-col items-center gap-8 text-center">
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center justify-center tracking-wide text-muted-foreground/80 text-2xs font-mono">
+                {extension}
+              </div>
+              <div className="max-w-full text-balance break-words tracking-tight font-light text-2xl">
+                {fileName}
+              </div>
             </div>
-            <div className="max-w-full break-words font-medium text-sm">{fileName}</div>
             <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setForceText(true)}
+                data-testid="asset-preview-open-as-text"
+                className="font-mono uppercase"
+              >
+                <Trans>View as text</Trans>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
+                className="font-mono uppercase"
                 onClick={() => {
                   void dispatchAssetClick({
                     url: src,
@@ -88,14 +102,6 @@ export function AssetPreview({ assetPath, mediaKind }: AssetPreviewProps) {
                 }}
               >
                 <Trans>Open file</Trans>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setForceText(true)}
-                data-testid="asset-preview-open-as-text"
-              >
-                <Trans>Open with built-in text editor</Trans>
               </Button>
             </div>
           </div>
