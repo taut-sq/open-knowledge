@@ -38,6 +38,7 @@ import {
   FoldVertical,
   Info,
   Pencil,
+  RefreshCw,
   SquarePen,
   Trash2,
   TriangleAlert,
@@ -183,6 +184,7 @@ import {
 } from '@/lib/file-tree-menu-action-events';
 import { parseServerResponse, parseSuccessOrWarn } from '@/lib/parse-server-response';
 import { createRefreshScheduler } from '@/lib/refresh-scheduler';
+import { getRelaunchInFlightSnapshot, useRelaunchInFlight } from '@/lib/relaunch-store';
 import {
   consumeShowAllStream,
   isNdjsonResponse,
@@ -330,6 +332,8 @@ const FILE_TREE_ROOT_DROP_CSS = `
 const FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR = 'data-ok-external-file-drop-target';
 const FILE_TREE_EXTERNAL_FILE_DROP_ROOT_ATTR = 'data-ok-external-file-drop-root-target';
 const FILE_TREE_EXTERNAL_FILE_DROP_BUSY_PATH = '__external-file-drop__';
+
+const CONNECTIVITY_RECONNECT_RETRY_MS = 2000;
 const FILE_TREE_EXTERNAL_FILE_DROP_CSS = `
   [data-type="item"][${FILE_TREE_EXTERNAL_FILE_DROP_TARGET_ATTR}="true"] {
     background: color-mix(in oklab, var(--color-primary) 10%, transparent);
@@ -1103,6 +1107,9 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const [documents, setDocuments] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+  const relaunchInFlight = useRelaunchInFlight();
+  const connectivityRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [truncatedShownCount, setTruncatedShownCount] = useState<number | null>(null);
   const [busyPath, setBusyPath] = useState<string | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<FileTreeDeleteRequest | null>(null);
@@ -1205,6 +1212,48 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
   const handleDropCompleteRef = useRef<(event: FileTreeDropResult) => void>(() => {});
   const activeTargetRef = useRef(activeTarget);
   const [emptyExternalFileDropActive, setEmptyExternalFileDropActive] = useState(false);
+
+  function clearConnectivityRetry() {
+    if (connectivityRetryTimerRef.current !== null) {
+      clearTimeout(connectivityRetryTimerRef.current);
+      connectivityRetryTimerRef.current = null;
+    }
+  }
+  function noteConnectivityRecovered() {
+    clearConnectivityRetry();
+    setReconnecting(false);
+  }
+  function reportServerReachableError(title: string) {
+    noteConnectivityRecovered();
+    setError(title);
+  }
+  function reportConnectivityFailure() {
+    clearConnectivityRetry();
+    if (getRelaunchInFlightSnapshot()) {
+      setError(null);
+      setReconnecting(true);
+      connectivityRetryTimerRef.current = setTimeout(() => {
+        connectivityRetryTimerRef.current = null;
+        refreshDocsScheduleRef.current?.();
+      }, CONNECTIVITY_RECONNECT_RETRY_MS);
+      return;
+    }
+    setReconnecting(false);
+    setError(t`Could not reach server`);
+  }
+
+  const isFirstRelaunchEffectRunRef = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relaunchInFlight is a transition trigger, not a read — the body calls the hoisted scheduler ref only. Sibling pattern at the showHiddenFiles / showAllFiles flip effects below.
+  useEffect(() => {
+    if (isFirstRelaunchEffectRunRef.current) {
+      isFirstRelaunchEffectRunRef.current = false;
+      return;
+    }
+    refreshDocsScheduleRef.current?.();
+  }, [relaunchInFlight]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount/unmount-only; see comment above.
+  useEffect(() => clearConnectivityRetry, []);
 
   useEffect(() => {
     if (loading || documents.length === 0) return;
@@ -1461,13 +1510,13 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     }
     if (controller.signal.aborted || generation !== lazyChildFetchGenerationRef.current) return;
     if (result.kind === 'network-error') {
-      setError(t`Could not reach server`);
+      reportConnectivityFailure();
       console.warn('[FileTree] lazy folder children fetch failed:', folderTreePath, result.cause);
       return;
     }
     if (result.kind === 'http-error') {
       console.warn('[FileTree] lazy folder children http error:', folderTreePath, result.title);
-      setError(result.title);
+      reportServerReachableError(result.title);
       return;
     }
     const bypassClientDotDrop = showHiddenFilesRef.current || showAllFilesRef.current;
@@ -1477,6 +1526,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       spliceLazyFolderChildren(prev, folderTreePath, children, recentLocalAddsRef.current),
     );
     setError(null);
+    noteConnectivityRecovered();
     if (result.truncated) setTruncatedShownCount(result.entries.length);
   }
 
@@ -1751,6 +1801,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: this is a once-per-`t` mount-lifecycle setup (it wires the refresh scheduler + listeners). The connectivity helpers it calls (reportConnectivityFailure / noteConnectivityRecovered) only touch refs + stable setters and close over the same `t` already in deps, so listing them would re-create the scheduler every render for no behavioral gain.
   useEffect(() => {
     let active = true;
     let refreshController: AbortController | null = null;
@@ -1781,18 +1832,19 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
             spliceLazyFolderChildren(prev, '', serverEntries, recentLocalAddsRef.current),
           );
           setError(null);
+          noteConnectivityRecovered();
           setTruncatedShownCount(truncated ? entries.length : null);
           revalidateExpandedLazyDirsRef.current();
         } else {
           const parsed = await parseServerResponse(res, t`Failed to load documents`);
           if (!active) return;
           if (!parsed.ok) {
-            setError(parsed.title);
+            reportServerReachableError(parsed.title);
             setTruncatedShownCount(null);
           } else {
             const success = DocumentListSuccessSchema.safeParse(parsed.body);
             if (!success.success) {
-              setError(t`Documents response did not match expected shape.`);
+              reportServerReachableError(t`Documents response did not match expected shape.`);
               setTruncatedShownCount(null);
             } else {
               const bypassClientDotDrop = showHiddenFilesRef.current || showAll;
@@ -1813,6 +1865,7 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
                 setDocuments(merged);
               }
               setError(null);
+              noteConnectivityRecovered();
               setTruncatedShownCount(
                 showAll && success.data.truncated === true ? success.data.documents.length : null,
               );
@@ -1823,7 +1876,11 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       } catch (err) {
         if (controller.signal.aborted) return;
         if (active) {
-          setError(err instanceof ShowAllStreamError ? err.message : t`Could not reach server`);
+          if (err instanceof ShowAllStreamError) {
+            reportServerReachableError(err.message);
+          } else {
+            reportConnectivityFailure();
+          }
         }
         console.warn('[FileTree] fetch failed:', err);
       }
@@ -3246,11 +3303,28 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
     return <FileTreeSkeleton />;
   }
 
+  const reconnectNotice = reconnecting
+    ? relaunchInFlight
+      ? t`Relaunching to install the update…`
+      : t`Reconnecting…`
+    : null;
+
   if (documents.length === 0) {
+    if (reconnectNotice !== null) {
+      return (
+        <div className="flex flex-1 items-center justify-center py-8">
+          <span role="status" className="select-none text-sidebar-foreground/50 text-sm">
+            {reconnectNotice}
+          </span>
+        </div>
+      );
+    }
     if (error) {
       return (
         <div className="flex flex-1 items-center justify-center py-8">
-          <span className="select-none text-sidebar-foreground/50 text-sm">{error}</span>
+          <span role="alert" className="select-none text-sidebar-foreground/50 text-sm">
+            {error}
+          </span>
         </div>
       );
     }
@@ -3295,9 +3369,13 @@ export function FileTree({ ref }: { ref?: Ref<FileTreeHandle | null> }) {
       <div ref={fileTreeHostRef} className="flex min-h-0 flex-1 flex-col">
         <PierreFileTree
           header={
-            (error || truncationNotice !== null) && (
+            (error || reconnectNotice !== null || truncationNotice !== null) && (
               <>
-                {error && <FileTreeHeaderNotice kind="error">{error}</FileTreeHeaderNotice>}
+                {reconnectNotice !== null ? (
+                  <FileTreeHeaderNotice kind="reconnecting">{reconnectNotice}</FileTreeHeaderNotice>
+                ) : (
+                  error && <FileTreeHeaderNotice kind="error">{error}</FileTreeHeaderNotice>
+                )}
                 {truncationNotice !== null && (
                   <FileTreeHeaderNotice kind="info">{truncationNotice}</FileTreeHeaderNotice>
                 )}
@@ -3499,8 +3577,14 @@ function FileTreeSkeleton() {
   );
 }
 
-function FileTreeHeaderNotice({ kind, children }: { kind: 'error' | 'info'; children: ReactNode }) {
-  const Icon = kind === 'error' ? TriangleAlert : Info;
+function FileTreeHeaderNotice({
+  kind,
+  children,
+}: {
+  kind: 'error' | 'info' | 'reconnecting';
+  children: ReactNode;
+}) {
+  const Icon = kind === 'error' ? TriangleAlert : kind === 'reconnecting' ? RefreshCw : Info;
   return (
     <span
       role={kind === 'error' ? 'alert' : 'status'}
@@ -3509,7 +3593,13 @@ function FileTreeHeaderNotice({ kind, children }: { kind: 'error' | 'info'; chil
         kind === 'error' ? 'text-destructive' : 'text-muted-foreground',
       )}
     >
-      <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          'mt-0.5 size-3.5 shrink-0',
+          kind === 'reconnecting' && 'animate-spin motion-reduce:animate-none',
+        )}
+      />
       <span className="min-w-0">{children}</span>
     </span>
   );

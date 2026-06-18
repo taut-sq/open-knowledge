@@ -250,6 +250,9 @@ mock.module('@pierre/trees/react', () => ({
 }));
 
 const { FileTree } = await import('./FileTree');
+const { attachRelaunchStateSubscribers, resetRelaunchStoreForTest } = await import(
+  '@/lib/relaunch-store'
+);
 
 describe('FileTree showAll lazy root seed', () => {
   let consoleWarnSpy: ReturnType<typeof spyOn>;
@@ -782,5 +785,125 @@ describe('FileTree showAll scoped refresh', () => {
     releaseChildren();
     await waitFor(() => expect(model.items.has('team/renamed.md')).toBe(true));
     expect(model.items.has('team/notes.md')).toBe(false);
+  });
+});
+
+describe('FileTree relaunch-aware reconnect (desktop auto-update)', () => {
+  let consoleWarnSpy: ReturnType<typeof spyOn>;
+  let fireRelaunching: () => void;
+  let fireRelaunchFailed: () => void;
+  let detachRelaunch: () => void;
+
+  beforeEach(() => {
+    mergedConfig = { appearance: { sidebar: { showAllFiles: true } } };
+    showAllResponseFactory = () =>
+      jsonResponse({ documents: [docEntry('README')], truncated: false });
+    responseByUrl = new Map();
+    fetchUrls.length = 0;
+    model.items.clear();
+    model.listeners.clear();
+    model.focusedPath = null;
+    model.selectedPaths = [];
+    globalThis.fetch = makeFetchMock() as unknown as typeof fetch;
+    consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    fireRelaunching = () => {};
+    fireRelaunchFailed = () => {};
+    detachRelaunch = attachRelaunchStateSubscribers({
+      onUpdateRelaunching: (cb: (info: { version: string }) => void) => {
+        fireRelaunching = () => cb({ version: '9.9.9' });
+        return () => {};
+      },
+      onUpdateRelaunchFailed: (cb: (info: { version: string; message?: string }) => void) => {
+        fireRelaunchFailed = () => cb({ version: '9.9.9', message: 'aborted' });
+        return () => {};
+      },
+    } as unknown as Parameters<typeof attachRelaunchStateSubscribers>[0]);
+  });
+
+  afterEach(() => {
+    cleanup();
+    detachRelaunch();
+    resetRelaunchStoreForTest();
+    consoleWarnSpy.mockRestore();
+  });
+
+  test('shows a calm relaunch notice instead of the red error while a relaunch is in flight', async () => {
+    render(<FileTree />);
+    await waitFor(() => expect(model.items.size).toBe(1));
+
+    showAllResponseFactory = () => {
+      throw new TypeError('Failed to fetch');
+    };
+    fireRelaunching();
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent ?? '').toContain(
+        'Relaunching to install the update',
+      ),
+    );
+    expect(screen.queryByText('Could not reach server')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('self-heals when the relaunch aborts and the server returns', async () => {
+    render(<FileTree />);
+    await waitFor(() => expect(model.items.size).toBe(1));
+
+    showAllResponseFactory = () => {
+      throw new TypeError('Failed to fetch');
+    };
+    fireRelaunching();
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent ?? '').toContain(
+        'Relaunching to install the update',
+      ),
+    );
+
+    showAllResponseFactory = () =>
+      jsonResponse({ documents: [docEntry('README'), docEntry('AFTER')], truncated: false });
+    fireRelaunchFailed();
+
+    await waitFor(() => expect(model.items.has('AFTER.md')).toBe(true));
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Could not reach server')).toBeNull();
+  });
+
+  test('falls back to the honest error when reachability fails with no relaunch underway', async () => {
+    render(<FileTree />);
+    await waitFor(() => expect(model.items.size).toBe(1));
+
+    showAllResponseFactory = () => {
+      throw new TypeError('Failed to fetch');
+    };
+    emitDocumentsChanged(['files']);
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent ?? '').toContain('Could not reach server'),
+    );
+    expect(screen.queryByText('Relaunching to install the update…')).toBeNull();
+  });
+
+  test('a lazy folder-children fetch failure during a relaunch shows the calm notice', async () => {
+    fireRelaunching();
+    showAllResponseFactory = () =>
+      jsonResponse({
+        documents: [folderEntry('team', true), docEntry('README')],
+        truncated: false,
+      });
+    responseByUrl.set(lazyDirUrl('team'), () => {
+      throw new TypeError('Failed to fetch');
+    });
+    render(<FileTree />);
+    await waitFor(() => expect(model.items.has('team/')).toBe(true));
+
+    model.getItem('team/')?.expand();
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent ?? '').toContain(
+        'Relaunching to install the update',
+      ),
+    );
+    expect(screen.queryByText('Could not reach server')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

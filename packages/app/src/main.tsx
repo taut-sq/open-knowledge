@@ -26,6 +26,7 @@ import {
   installColdMountInstrumentation,
   shouldInstallColdMountInstrumentation,
 } from '@/lib/perf/cold-mount-instrumentation';
+import { installRelaunchStateBridge } from '@/lib/relaunch-store';
 import { installShareReceivedListener } from '@/lib/share/receive-store';
 import { seedInitialDocHashFromWindow } from '@/lib/single-file-initial-doc';
 import { installUpdateNoticesBridge } from '@/lib/update-notices-store';
@@ -50,6 +51,8 @@ if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
 }
 
 installUpdateNoticesBridge();
+
+installRelaunchStateBridge();
 
 if (typeof window !== 'undefined') {
   installDeepLinkListener({ bridge: window.okDesktop });
