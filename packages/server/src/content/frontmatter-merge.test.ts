@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { dropEmpties, mergePatch } from './frontmatter-merge.ts';
+import { mergePatch } from './frontmatter-merge.ts';
 
 describe('mergePatch — write path (scalars + arrays REPLACE; empties drop)', () => {
   test('scalars in patch replace existing', () => {
@@ -46,33 +46,5 @@ describe('mergePatch — write path (scalars + arrays REPLACE; empties drop)', (
       { status: 'review', owners: ['alice'], team: '' },
     );
     expect(merged).toEqual({ status: 'review', owners: ['alice'] });
-  });
-});
-
-describe('dropEmpties — submit-time normalization', () => {
-  test('drops null / undefined / empty string / empty array', () => {
-    const cleaned = dropEmpties({
-      keep: 'value',
-      a: null,
-      b: undefined,
-      c: '',
-      d: [],
-      e: 0,
-      f: false,
-      g: ['x'],
-    });
-    expect(cleaned).toEqual({ keep: 'value', e: 0, f: false, g: ['x'] });
-  });
-
-  test('preserves nested objects (treated as scalars)', () => {
-    const cleaned = dropEmpties({ meta: { a: 1 }, empty: '' });
-    expect(cleaned).toEqual({ meta: { a: 1 } });
-  });
-
-  test('returns a fresh object (does not mutate)', () => {
-    const input = { a: 'x', b: '' };
-    const cleaned = dropEmpties(input);
-    expect(input).toEqual({ a: 'x', b: '' });
-    expect(cleaned).not.toBe(input);
   });
 });

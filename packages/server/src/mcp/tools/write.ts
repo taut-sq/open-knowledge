@@ -1,15 +1,19 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import {
+  type FrontmatterMap,
   type FrontmatterPatch,
   normalizeBridge,
+  parseFrontmatterYaml,
   renderInventoryFooter,
+  serializeFrontmatterMap,
   stripFrontmatter,
+  unwrapFrontmatterFences,
+  withFences,
 } from '@inkeep/open-knowledge-core';
-import { stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
 import { resolveContentDir, resolveLockDir } from '../../config/paths.ts';
-import { dropEmpties } from '../../content/frontmatter-merge.ts';
+import { mergePatch } from '../../content/frontmatter-merge.ts';
 import { parentFolderOf } from '../../content/nested-folder-rules.ts';
 import { applySubstitution, todayIsoUtc } from '../../content/substitution.ts';
 import { resolveTemplatesAvailable } from '../../content/templates-resolver.ts';
@@ -132,10 +136,28 @@ function extensionIgnoredNote(
   return `Note: "${docName}" already exists as \`${docName}${existingExt}\`, so the requested \`${requestedExt}\` extension was not applied — the write went to \`${docName}${existingExt}\`. Changing a doc's on-disk extension in place isn't available via the MCP today.`;
 }
 
-function composeWithFrontmatter(frontmatter: FrontmatterPatch, body: string): string {
-  const cleaned = dropEmpties(frontmatter as Record<string, unknown>);
-  if (Object.keys(cleaned).length === 0) return body;
-  return `---\n${stringifyYaml(cleaned)}---\n${body}`;
+export function composeWithFrontmatter(
+  frontmatter: FrontmatterPatch,
+  body: string,
+): { ok: true; markdown: string } | { ok: false; error: string } {
+  const { frontmatter: embeddedFenced, body: cleanBody } = stripFrontmatter(body);
+
+  let base: FrontmatterMap = {};
+  if (embeddedFenced !== '') {
+    const parsed = parseFrontmatterYaml(unwrapFrontmatterFences(embeddedFenced));
+    if (parsed.map === null) {
+      return {
+        ok: false,
+        error: `EMBEDDED_FRONTMATTER_MALFORMED — \`content\` opens with a \`---\` block whose YAML failed to parse (${parsed.parseError}), so it can't be merged with the \`frontmatter\` param. Fix the embedded YAML, or supply the frontmatter only via the \`frontmatter\` param (not also inline in \`content\`).`,
+      };
+    }
+    base = parsed.map;
+  }
+
+  const merged = mergePatch(base, frontmatter as Record<string, unknown>) as FrontmatterMap;
+  const yamlBody = serializeFrontmatterMap(merged);
+  if (yamlBody === '') return { ok: true, markdown: cleanBody };
+  return { ok: true, markdown: withFences(yamlBody) + cleanBody };
 }
 
 async function writeOneDoc(
@@ -219,10 +241,12 @@ async function writeOneDoc(
     });
     effectivePosition = 'replace';
   } else if (hasFrontmatter) {
-    effectiveMarkdown = composeWithFrontmatter(
+    const composed = composeWithFrontmatter(
       spec.frontmatter as FrontmatterPatch,
       effectiveMarkdown,
     );
+    if (!composed.ok) return { docName, ok: false, error: composed.error };
+    effectiveMarkdown = composed.markdown;
     effectivePosition = 'replace';
   }
 
