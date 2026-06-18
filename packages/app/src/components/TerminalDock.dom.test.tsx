@@ -55,7 +55,7 @@ mock.module('./TerminalGate', () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test stub
   TerminalGate: (props: any) => {
     lastTerminalPanelProps = props;
-    return <span data-testid="terminal-panel" tabIndex={-1} />;
+    return <span data-testid="terminal-panel" className="xterm-helper-textarea" tabIndex={-1} />;
   },
 }));
 
@@ -68,10 +68,35 @@ mock.module('@/lib/terminal-height-store', () => ({
 
 const { TerminalDock } = await import('./TerminalDock');
 
-const bridge = {} as OkDesktopBridge;
+function makeBridge() {
+  const menuHandlers: Array<(action: string) => void> = [];
+  const viewMenuPushes: Array<{ terminalLive?: boolean }> = [];
+  const bridge = {
+    onMenuAction(cb: (action: string) => void) {
+      menuHandlers.push(cb);
+      return () => {
+        const index = menuHandlers.indexOf(cb);
+        if (index >= 0) menuHandlers.splice(index, 1);
+      };
+    },
+    editor: {
+      notifyViewMenuStateChanged(state: { terminalLive?: boolean }) {
+        viewMenuPushes.push(state);
+      },
+    },
+  } as unknown as OkDesktopBridge;
+  return {
+    bridge,
+    viewMenuPushes,
+    dispatchMenuAction(action: string) {
+      for (const cb of menuHandlers) cb(action);
+    },
+  };
+}
 
 function renderDock(visible: boolean) {
   const onVisibleChange = mock((_v: boolean) => {});
+  const { bridge, viewMenuPushes, dispatchMenuAction } = makeBridge();
   const ui = (v: boolean) => (
     <TerminalDock bridge={bridge} visible={v} onVisibleChange={onVisibleChange}>
       <div data-testid="editor-child" />
@@ -81,6 +106,8 @@ function renderDock(visible: boolean) {
   return {
     ...utils,
     onVisibleChange,
+    viewMenuPushes,
+    dispatchMenuAction,
     rerender: (v: boolean) => utils.rerender(ui(v)),
   };
 }
@@ -184,6 +211,17 @@ describe('TerminalDock', () => {
     expect(document.activeElement).toBe(editorRegion());
   });
 
+  test('focuses the terminal on reveal so the user can type immediately', () => {
+    const view = renderDock(true);
+    const term = screen.getByTestId('terminal-panel');
+
+    act(() => view.rerender(false));
+    expect(document.activeElement).toBe(editorRegion());
+
+    act(() => view.rerender(true));
+    expect(document.activeElement).toBe(term);
+  });
+
   test('does not pass an Escape handler to the gate — Escape reaches the shell, ⌘J is the exit', () => {
     renderDock(true);
     screen.getByTestId('terminal-panel'); // mounted
@@ -199,5 +237,50 @@ describe('TerminalDock', () => {
 
     expect(view.onVisibleChange).toHaveBeenCalledWith(false);
     expect(document.activeElement).toBe(editorRegion());
+  });
+
+  test('the trash/kill affordance unmounts the terminal, hides the dock, and returns focus', () => {
+    const view = renderDock(true);
+    act(() => screen.getByTestId('terminal-panel').focus());
+
+    act(() => lastTerminalPanelProps?.onKill?.());
+
+    expect(screen.queryByTestId('terminal-panel')).toBeNull();
+    expect(view.onVisibleChange).toHaveBeenCalledWith(false);
+    expect(document.activeElement).toBe(editorRegion());
+    expect(view.viewMenuPushes.at(-1)).toEqual({ terminalLive: false });
+  });
+
+  test('reopening after a kill spawns a fresh terminal — unlike collapse, the session is gone', () => {
+    const view = renderDock(true);
+
+    act(() => lastTerminalPanelProps?.onKill?.());
+    act(() => view.rerender(false));
+    expect(screen.queryByTestId('terminal-panel')).toBeNull();
+
+    act(() => view.rerender(true));
+    expect(screen.getByTestId('terminal-panel')).toBeTruthy();
+  });
+
+  test('the Terminal menu "Kill Terminal" action unmounts the terminal and hides the dock', () => {
+    const view = renderDock(true);
+    expect(screen.getByTestId('terminal-panel')).toBeTruthy();
+
+    act(() => view.dispatchMenuAction('kill-terminal'));
+
+    expect(screen.queryByTestId('terminal-panel')).toBeNull();
+    expect(view.onVisibleChange).toHaveBeenCalledWith(false);
+    expect(view.viewMenuPushes.at(-1)).toEqual({ terminalLive: false });
+  });
+
+  test('reports terminal liveness to the View menu — true once mounted, false after a kill', () => {
+    const view = renderDock(false);
+    expect(view.viewMenuPushes.at(-1)).toEqual({ terminalLive: false });
+
+    act(() => view.rerender(true));
+    expect(view.viewMenuPushes.at(-1)).toEqual({ terminalLive: true });
+
+    act(() => view.dispatchMenuAction('kill-terminal'));
+    expect(view.viewMenuPushes.at(-1)).toEqual({ terminalLive: false });
   });
 });

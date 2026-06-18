@@ -17,7 +17,7 @@ export function TerminalRefusalNotice({ reason, onClose }: TerminalRefusalNotice
   return (
     <div
       role="alert"
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#1e1e1e]/90 p-6 text-center text-[#d4d4d4]"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 p-6 text-center text-foreground"
     >
       <p className="max-w-sm text-sm">{message}</p>
       {onClose ? (

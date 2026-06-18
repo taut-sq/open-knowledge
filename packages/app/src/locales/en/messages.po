@@ -440,6 +440,7 @@ msgid "A network problem or GitHub outage interrupted the clone."
 msgstr "A network problem or GitHub outage interrupted the clone."
 
 #: src/components/settings/SettingsDialogErrorBoundary.tsx
+#: src/components/TerminalGate.tsx
 msgid "A newer version may have been deployed since this tab opened."
 msgstr "A newer version may have been deployed since this tab opened."
 
@@ -2996,6 +2997,10 @@ msgstr "Key ending in {keyHint}"
 msgid "Keyboard shortcuts available in the editor and workspace."
 msgstr "Keyboard shortcuts available in the editor and workspace."
 
+#: src/components/TerminalPanel.tsx
+msgid "Kill Terminal"
+msgstr "Kill Terminal"
+
 #: src/editor/extensions/WikiLinkPropPanel.tsx
 msgid "Label <0>(optional display text)</0>"
 msgstr "Label <0>(optional display text)</0>"
@@ -4469,6 +4474,7 @@ msgstr "Release notes"
 
 #: src/components/EditorActivityPool.tsx
 #: src/components/settings/SettingsDialogErrorBoundary.tsx
+#: src/components/TerminalGate.tsx
 msgid "Reload"
 msgstr "Reload"
 
@@ -5176,6 +5182,10 @@ msgstr "Something went wrong opening \"{docName}\"."
 msgid "Something went wrong opening this file (HTTP {status})."
 msgstr "Something went wrong opening this file (HTTP {status})."
 
+#: src/components/TerminalGate.tsx
+msgid "Something went wrong starting the terminal."
+msgstr "Something went wrong starting the terminal."
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Source editing"
 msgstr "Source editing"
@@ -5482,6 +5492,10 @@ msgstr "Terminal access isn't enabled for this project."
 msgid "Terminal disabled"
 msgstr "Terminal disabled"
 
+#: src/components/TerminalGate.tsx
+msgid "Terminal failed to load"
+msgstr "Terminal failed to load"
+
 #: src/components/settings/TerminalSection.tsx
 #: src/components/TerminalGate.tsx
 msgid "Terminal settings not loaded yet — try again in a moment."
@@ -5546,10 +5560,6 @@ msgstr "The repository is private and your GitHub account doesn't have access to
 #: src/components/ShareReceiveDialog.tsx
 msgid "The repository was moved, renamed, or deleted."
 msgstr "The repository was moved, renamed, or deleted."
-
-#: src/components/TerminalGate.tsx
-msgid "The terminal is not enabled for this project."
-msgstr "The terminal is not enabled for this project."
 
 #: src/components/TerminalGate.tsx
 msgid "The terminal is turned off for this project. Turn it back on to run commands here."

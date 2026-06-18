@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -9,8 +9,6 @@ type Writer = ((enabled: boolean) => { ok: true } | { ok: false; error: string }
 let consentState: ConsentState = { enabled: false, synced: true };
 let writerImpl: Writer = null;
 const writerCalls: boolean[] = [];
-// biome-ignore lint/suspicious/noExplicitAny: captured mock-component props
-let consentDialogProps: Record<string, any> | null = null;
 
 mock.module('@lingui/react/macro', () => ({
   Trans: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -29,17 +27,13 @@ mock.module('@/hooks/use-terminal-enabled', () => ({
   useTerminalEnabledWriter: () => writerImpl,
 }));
 
-mock.module('@/components/TerminalConsentDialog', () => ({
-  // biome-ignore lint/suspicious/noExplicitAny: test stub
-  TerminalConsentDialog: (props: any) => {
-    consentDialogProps = props;
-    return props.open ? <div data-testid="consent-dialog" /> : null;
-  },
-}));
-
 const { TerminalSection } = await import('./TerminalSection');
 
-describe('TerminalSection (Settings revoke toggle)', () => {
+function switchChecked(): string | null {
+  return (screen.getByRole('switch') as HTMLButtonElement).getAttribute('aria-checked');
+}
+
+describe('TerminalSection (Settings opt-out toggle)', () => {
   beforeEach(() => {
     consentState = { enabled: false, synced: true };
     writerImpl = (enabled) => {
@@ -47,46 +41,39 @@ describe('TerminalSection (Settings revoke toggle)', () => {
       return { ok: true };
     };
     writerCalls.length = 0;
-    consentDialogProps = null;
   });
   afterEach(() => cleanup());
 
-  test('reflects the granted state as a checked switch', () => {
-    consentState = { enabled: true, synced: true };
+  test('the default (never-chosen) state reads as on', () => {
+    consentState = { enabled: null, synced: true };
     render(<TerminalSection />);
-    expect((screen.getByRole('switch') as HTMLButtonElement).getAttribute('aria-checked')).toBe(
-      'true',
-    );
+    expect(switchChecked()).toBe('true');
   });
 
-  test('on → off revokes immediately via writer(false), no dialog', async () => {
+  test('the granted state reads as on', () => {
+    consentState = { enabled: true, synced: true };
+    render(<TerminalSection />);
+    expect(switchChecked()).toBe('true');
+  });
+
+  test('an explicit opt-out reads as off', () => {
+    consentState = { enabled: false, synced: true };
+    render(<TerminalSection />);
+    expect(switchChecked()).toBe('false');
+  });
+
+  test('on → off opts out immediately via writer(false)', async () => {
     consentState = { enabled: true, synced: true };
     render(<TerminalSection />);
     await userEvent.click(screen.getByRole('switch'));
     expect(writerCalls).toEqual([false]);
-    expect(screen.queryByTestId('consent-dialog')).toBeNull();
   });
 
-  test('off → on opens the consent dialog and does not write until accepted', async () => {
+  test('off → on re-enables directly via writer(true), no dialog', async () => {
     consentState = { enabled: false, synced: true };
     render(<TerminalSection />);
     await userEvent.click(screen.getByRole('switch'));
-
-    expect(consentDialogProps?.open).toBe(true);
-    expect(writerCalls).toEqual([]);
-
-    act(() => consentDialogProps?.onAccept());
     expect(writerCalls).toEqual([true]);
-  });
-
-  test('off → on then decline leaves the shell off (no write)', async () => {
-    consentState = { enabled: false, synced: true };
-    render(<TerminalSection />);
-    await userEvent.click(screen.getByRole('switch'));
-    act(() => consentDialogProps?.onDecline());
-
-    expect(writerCalls).toEqual([]);
-    expect(consentDialogProps?.open).toBe(false);
   });
 
   test('the toggle is disabled until the project-local binding is ready', () => {

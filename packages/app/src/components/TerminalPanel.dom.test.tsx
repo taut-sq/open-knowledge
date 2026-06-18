@@ -49,6 +49,7 @@ class MockTerminal {
 let lastTerm: MockTerminal | null = null;
 let lastFit: MockFitAddon | null = null;
 let webglThrows = false;
+let mockResolvedTheme: string | undefined = 'dark';
 
 let roCallback: (() => void) | null = null;
 let lastRO: MockResizeObserver | null = null;
@@ -68,6 +69,9 @@ mock.module('@xterm/addon-webgl', () => ({ WebglAddon: MockWebglAddon }));
 mock.module('@xterm/addon-web-links', () => ({ WebLinksAddon: MockWebLinksAddon }));
 mock.module('@xterm/addon-unicode11', () => ({ Unicode11Addon: MockUnicode11Addon }));
 mock.module('@xterm/xterm/css/xterm.css', () => ({}));
+mock.module('next-themes', () => ({
+  useTheme: () => ({ resolvedTheme: mockResolvedTheme }),
+}));
 
 type CreateResult =
   | { ok: true; ptyId: string }
@@ -116,6 +120,7 @@ function makeBridge(createResult: CreateResult, preflight: ClaudeReadiness = WIR
 }
 
 const { TerminalPanel } = await import('./TerminalPanel');
+const { XTERM_DARK_THEME, XTERM_LIGHT_THEME } = await import('./terminal-theme');
 
 describe('TerminalPanel', () => {
   beforeEach(() => {
@@ -124,6 +129,7 @@ describe('TerminalPanel', () => {
     lastRO = null;
     roCallback = null;
     webglThrows = false;
+    mockResolvedTheme = 'dark';
     (globalThis as { ResizeObserver: unknown }).ResizeObserver = MockResizeObserver;
   });
   afterEach(() => {
@@ -433,5 +439,57 @@ describe('TerminalPanel', () => {
     act(() => pushExit({ ptyId: 'pty-1', exitCode: 0, signal: null }));
     await waitFor(() => expect(screen.queryByText(/isn't installed or on your PATH/)).toBeNull());
     expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  test('renders a kill control with an accessible name that invokes onKill when clicked', async () => {
+    const onKill = mock(() => {});
+    const { bridge } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} onKill={onKill} />);
+
+    const kill = await screen.findByRole('button', { name: 'Kill Terminal' });
+    fireEvent.click(kill);
+    expect(onKill).toHaveBeenCalledTimes(1);
+  });
+
+  test('omits the kill control when no onKill is provided', async () => {
+    const { bridge } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(lastTerm).not.toBeNull());
+    expect(screen.queryByRole('button', { name: 'Kill Terminal' })).toBeNull();
+  });
+
+  test('constructs xterm with the palette for the resolved app theme', async () => {
+    mockResolvedTheme = 'light';
+    const { bridge } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(lastTerm).not.toBeNull());
+    expect(lastTerm?.options.theme).toBe(XTERM_LIGHT_THEME);
+
+    cleanup();
+    lastTerm = null;
+    mockResolvedTheme = 'dark';
+    const second = makeBridge({ ok: true, ptyId: 'pty-2' });
+    render(<TerminalPanel bridge={second.bridge} />);
+    await waitFor(() => expect(lastTerm).not.toBeNull());
+    expect(lastTerm?.options.theme).toBe(XTERM_DARK_THEME);
+  });
+
+  test('re-skins the live terminal on a theme switch without respawning the PTY', async () => {
+    mockResolvedTheme = 'dark';
+    const { bridge, terminal } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    const { rerender } = render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(terminal.create).toHaveBeenCalledTimes(1));
+
+    const term = lastTerm;
+    expect(term?.options.theme).toBe(XTERM_DARK_THEME);
+
+    mockResolvedTheme = 'light';
+    rerender(<TerminalPanel bridge={bridge} />);
+
+    await waitFor(() => expect(lastTerm?.options.theme).toBe(XTERM_LIGHT_THEME));
+    expect(lastTerm).toBe(term);
+    expect(term?.dispose).not.toHaveBeenCalled();
+    expect(terminal.create).toHaveBeenCalledTimes(1);
+    expect(terminal.kill).not.toHaveBeenCalled();
   });
 });

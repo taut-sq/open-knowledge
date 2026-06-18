@@ -1082,3 +1082,55 @@ describe('runHandoffDispatch — selection scope', () => {
     });
   });
 });
+
+describe('composeTerminalLaunchPrompt — docked-terminal launcher always suppresses the trailer', () => {
+  test('file scope omits the "Open the OK editor in web view." trailer', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt({
+      docContext: { relativePath: 'notes/today.md' },
+      projectDir: '/proj',
+      docPath: '/proj/notes/today.md',
+    });
+    expect(out).toBe("Let's work on `notes/today.md` using Open Knowledge.");
+    expect(out).not.toContain('Open the OK editor');
+  });
+
+  test('folder scope omits the trailer', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt({
+      docContext: null,
+      folderRelativePath: 'specs/foo',
+      projectDir: '/proj',
+      docPath: '',
+    });
+    expect(out).toBe("Let's work on the `specs/foo` folder using Open Knowledge.");
+    expect(out).not.toContain('Open the OK editor');
+  });
+
+  test('project / empty-space scope omits the trailer', async () => {
+    const { composeTerminalLaunchPrompt } = await import('./useHandoffDispatch');
+    const out = composeTerminalLaunchPrompt({
+      docContext: null,
+      projectDir: '/proj',
+      docPath: '',
+    });
+    expect(out).toBe("Let's work on this project using Open Knowledge.");
+    expect(out).not.toContain('Open the OK editor');
+  });
+
+  test('terminal launch drops the trailer while the web deep-link handoff retains it for the same input', async () => {
+    const { composeTerminalLaunchPrompt, selectScopedPrompt } = await import(
+      './useHandoffDispatch'
+    );
+    const input = {
+      docContext: { relativePath: 'notes/today.md' },
+      projectDir: '/proj',
+      docPath: '/proj/notes/today.md',
+    };
+    const terminalPrompt = composeTerminalLaunchPrompt(input);
+    const webHandoffPrompt = selectScopedPrompt(input, 'claude-code', true);
+
+    expect(terminalPrompt).not.toContain('Open the OK editor');
+    expect(webHandoffPrompt).toContain('Open the OK editor in web view.');
+  });
+});

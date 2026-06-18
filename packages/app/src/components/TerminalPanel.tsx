@@ -7,13 +7,17 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
+import { Trash2 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import type { ClaudeReadiness, OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import { cn } from '@/lib/utils';
 import { ClaudeReadinessBanner } from './ClaudeReadinessBanner';
 import type { TerminalLaunchIntent } from './EditorPane';
 import { type TerminalExitInfo, TerminalExitNotice } from './TerminalExitNotice';
 import { TerminalRefusalNotice } from './TerminalRefusalNotice';
+import { xtermThemeForMode } from './terminal-theme';
 
 interface TerminalPanelProps {
   /** Desktop bridge — the panel is rendered only on the Electron host, where
@@ -21,6 +25,7 @@ interface TerminalPanelProps {
   readonly bridge: OkDesktopBridge;
   readonly className?: string;
   readonly onClose?: () => void;
+  readonly onKill?: () => void;
   readonly onExit?: (info: { readonly exitCode: number; readonly signal: number | null }) => void;
   readonly launch?: TerminalLaunchIntent | null;
 }
@@ -29,6 +34,7 @@ export function TerminalPanel({
   bridge,
   className,
   onClose,
+  onKill,
   onExit,
   launch = null,
 }: TerminalPanelProps) {
@@ -37,16 +43,36 @@ export function TerminalPanel({
   return (
     <section
       aria-label={t`Terminal`}
-      className={cn('relative h-full w-full overflow-hidden bg-[#1e1e1e]', className)}
+      className={cn(
+        'relative flex h-full w-full flex-col overflow-hidden bg-background',
+        className,
+      )}
     >
-      <TerminalSession
-        key={restartKey}
-        bridge={bridge}
-        onClose={onClose}
-        onExit={onExit}
-        onRestart={() => setRestartKey((k) => k + 1)}
-        launch={launch}
-      />
+      {onKill ? (
+        <div className="flex shrink-0 items-center justify-end border-border border-b px-1.5 py-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={t`Kill Terminal`}
+            className="size-6"
+            onClick={onKill}
+          >
+            <Trash2 aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
+      ) : null}
+      {/* Positioning context for the session's absolute exit/refusal notices, so
+          they cover the canvas area and not the kill control above. */}
+      <div className="relative min-h-0 flex-1">
+        <TerminalSession
+          key={restartKey}
+          bridge={bridge}
+          onClose={onClose}
+          onExit={onExit}
+          onRestart={() => setRestartKey((k) => k + 1)}
+          launch={launch}
+        />
+      </div>
     </section>
   );
 }
@@ -70,6 +96,9 @@ function TerminalSession({
 }: TerminalSessionProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const onExitRef = useRef(onExit);
+  const { resolvedTheme } = useTheme();
+  const termRef = useRef<Terminal | null>(null);
+  const initialResolvedThemeRef = useRef(resolvedTheme);
   const [status, setStatus] = useState<SessionStatus>('starting');
   const [readiness, setReadiness] = useState<ClaudeReadiness | null>(null);
   const [preflightDone, setPreflightDone] = useState(false);
@@ -99,8 +128,9 @@ function TerminalSession({
       cursorBlink: true,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
       fontSize: 13,
-      theme: { background: '#1e1e1e', foreground: '#d4d4d4' },
+      theme: xtermThemeForMode(initialResolvedThemeRef.current),
     });
+    termRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new Unicode11Addon());
@@ -123,7 +153,11 @@ function TerminalSession({
         result = await bridge.terminal.create({ cols: term.cols, rows: term.rows });
       } catch (err) {
         if (cancelled) return;
-        setExitInfo({ exitCode: 1, signal: null, error: (err as Error).message });
+        setExitInfo({
+          exitCode: 1,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
         setStatus('exited');
         return;
       }
@@ -185,6 +219,7 @@ function TerminalSession({
     return () => {
       cancelled = true;
       ptyIdRef.current = null;
+      termRef.current = null;
       observer?.disconnect();
       unsubData?.();
       unsubExit?.();
@@ -195,6 +230,12 @@ function TerminalSession({
           .catch((err) => console.warn('[terminal] kill on unmount failed:', err));
     };
   }, [bridge]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (term === null) return;
+    term.options.theme = xtermThemeForMode(resolvedTheme);
+  }, [resolvedTheme]);
 
   useEffect(() => {
     if (launch === null) return;

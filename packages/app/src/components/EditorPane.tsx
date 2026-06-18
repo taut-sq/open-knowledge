@@ -84,6 +84,8 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
     return bridge.onMenuAction((action) => {
       if (action === 'toggle-terminal') {
         setTerminalVisible((visible) => !visible);
+      } else if (action === 'new-terminal') {
+        setTerminalVisible(true);
       }
     });
   }, []);
@@ -106,6 +108,10 @@ export function EditorPane({ onOpenSearch }: EditorPaneProps = {}) {
       setTerminalLaunch((prev) => ({ prompt, nonce: (prev?.nonce ?? 0) + 1 }));
     });
   }, []);
+
+  useEffect(() => {
+    if (!terminalVisible) setTerminalLaunch(null);
+  }, [terminalVisible]);
 
   useEffect(() => {
     if (window.okDesktop == null) return;

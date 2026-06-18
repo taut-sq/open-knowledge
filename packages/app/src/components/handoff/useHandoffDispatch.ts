@@ -196,6 +196,10 @@ export function selectScopedPrompt(
   return composeEmptySpacePrompt(autoOpen);
 }
 
+export function composeTerminalLaunchPrompt(input: HandoffDispatchInput): string {
+  return selectScopedPrompt(input, 'claude-code', false);
+}
+
 export async function runHandoffDispatch(
   target: HandoffTarget,
   input: HandoffDispatchInput,

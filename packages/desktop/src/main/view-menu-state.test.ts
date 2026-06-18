@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mergeViewMenuState } from './view-menu-state';
 
-describe('mergeViewMenuState — two-publisher non-clobbering contract', () => {
+describe('mergeViewMenuState — multi-publisher non-clobbering contract', () => {
   const initial = {
     showHiddenFiles: false,
     showAllFiles: false,
@@ -65,5 +65,19 @@ describe('mergeViewMenuState — two-publisher non-clobbering contract', () => {
     expect(afterEditorPane.docPanelVisible).toBe(false);
     expect(afterEditorPane.sidebarVisible).toBe(false);
     expect(afterEditorPane.showHiddenFiles).toBe(true);
+  });
+
+  test('TerminalDock push (terminalLive only) composes with the other publishers without clobbering', () => {
+    const afterEditorPane = mergeViewMenuState(initial, { terminalVisible: true });
+    const afterTerminalDock = mergeViewMenuState(afterEditorPane, { terminalLive: true });
+
+    expect(afterTerminalDock.terminalLive).toBe(true);
+    expect(afterTerminalDock.terminalVisible).toBe(true);
+    expect(afterTerminalDock.docPanelVisible).toBe(true);
+    expect(afterTerminalDock.sidebarVisible).toBe(true);
+
+    const afterToggleHide = mergeViewMenuState(afterTerminalDock, { terminalVisible: false });
+    expect(afterToggleHide.terminalLive).toBe(true);
+    expect(afterToggleHide.terminalVisible).toBe(false);
   });
 });

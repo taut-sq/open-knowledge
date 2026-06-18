@@ -10,8 +10,6 @@ let consentState: ConsentState = { enabled: null, synced: true };
 let writerImpl: Writer = null;
 const writerCalls: boolean[] = [];
 const toastErrors: string[] = [];
-// biome-ignore lint/suspicious/noExplicitAny: captured mock-component props
-let consentDialogProps: Record<string, any> | null = null;
 
 mock.module('@lingui/react/macro', () => ({
   Trans: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -30,15 +28,13 @@ mock.module('@/hooks/use-terminal-enabled', () => ({
   useTerminalEnabledWriter: () => writerImpl,
 }));
 
+// biome-ignore lint/suspicious/noExplicitAny: captured mock-component props, asserted structurally
+let lastPanelProps: Record<string, any> | null = null;
 mock.module('./TerminalPanel', () => ({
-  TerminalPanel: () => <span data-testid="terminal-panel" />,
-}));
-
-mock.module('./TerminalConsentDialog', () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test stub
-  TerminalConsentDialog: (props: any) => {
-    consentDialogProps = props;
-    return props.open ? <div data-testid="consent-dialog" /> : null;
+  TerminalPanel: (props: any) => {
+    lastPanelProps = props;
+    return <span data-testid="terminal-panel" />;
   },
 }));
 
@@ -46,8 +42,12 @@ const { TerminalGate } = await import('./TerminalGate');
 
 const bridge = {} as OkDesktopBridge;
 
-function renderGate(visible = true) {
-  return render(<TerminalGate bridge={bridge} visible={visible} />);
+function renderGate() {
+  return render(<TerminalGate bridge={bridge} />);
+}
+
+function notice() {
+  return screen.queryByRole('region', { name: 'Terminal disabled' });
 }
 
 describe('TerminalGate', () => {
@@ -59,87 +59,78 @@ describe('TerminalGate', () => {
     };
     writerCalls.length = 0;
     toastErrors.length = 0;
-    consentDialogProps = null;
+    lastPanelProps = null;
   });
   afterEach(() => cleanup());
 
-  test('enabled === true mounts the terminal (shell spawns); no consent dialog', async () => {
+  test('default (enabled === null) mounts the terminal — available with no dialog', async () => {
+    consentState = { enabled: null, synced: true };
+    renderGate();
+    expect(await screen.findByTestId('terminal-panel')).toBeTruthy();
+    expect(notice()).toBeNull();
+  });
+
+  test('forwards onClose, onKill, and the launch intent to the mounted terminal panel', async () => {
+    const onClose = mock(() => {});
+    const onKill = mock(() => {});
+    const launch = { prompt: 'work on docs/notes', nonce: 1 };
+    consentState = { enabled: null, synced: true };
+    render(<TerminalGate bridge={bridge} onClose={onClose} onKill={onKill} launch={launch} />);
+    await screen.findByTestId('terminal-panel');
+    expect(lastPanelProps?.onClose).toBe(onClose);
+    expect(lastPanelProps?.onKill).toBe(onKill);
+    expect(lastPanelProps?.launch).toBe(launch);
+  });
+
+  test('enabled === true mounts the terminal', async () => {
     consentState = { enabled: true, synced: true };
     renderGate();
     expect(await screen.findByTestId('terminal-panel')).toBeTruthy();
-    expect(screen.queryByTestId('consent-dialog')).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Terminal disabled' })).toBeNull();
+    expect(notice()).toBeNull();
   });
 
-  test('enabled === null on first open shows the JIT consent dialog; no shell', () => {
-    consentState = { enabled: null, synced: true };
-    renderGate(true);
+  test('enabled === false shows the not-enabled notice; no shell', () => {
+    consentState = { enabled: false, synced: true };
+    renderGate();
+    expect(screen.getByRole('region', { name: 'Terminal disabled' })).toBeTruthy();
     expect(screen.queryByTestId('terminal-panel')).toBeNull();
-    expect(consentDialogProps?.open).toBe(true);
   });
 
-  test('null but not yet synced does not flash the dialog (cold start)', () => {
+  test('does not flash the shell before the binding syncs (cold start)', () => {
     consentState = { enabled: null, synced: false };
-    renderGate(true);
-    expect(consentDialogProps?.open).toBe(false);
-  });
-
-  test('null while hidden does not open the dialog', () => {
-    consentState = { enabled: null, synced: true };
-    renderGate(false);
-    expect(consentDialogProps?.open).toBe(false);
-  });
-
-  test('accepting consent grants via the writer (terminal.enabled := true)', () => {
-    consentState = { enabled: null, synced: true };
-    renderGate(true);
-    act(() => consentDialogProps?.onAccept());
-    expect(writerCalls).toEqual([true]);
-  });
-
-  test('declining shows the not-enabled state and never spawns', () => {
-    consentState = { enabled: null, synced: true };
-    renderGate(true);
-    act(() => consentDialogProps?.onDecline());
-
-    expect(screen.getByRole('region', { name: 'Terminal disabled' })).toBeTruthy();
+    renderGate();
     expect(screen.queryByTestId('terminal-panel')).toBeNull();
-    expect(consentDialogProps?.open).toBe(false);
-    expect(writerCalls).toEqual([]);
+    expect(notice()).toBeNull();
   });
 
-  test('enabled === false shows the not-enabled notice; no shell, no auto-dialog', () => {
+  test('re-enabling from the notice grants via the writer, then mounts the terminal', async () => {
     consentState = { enabled: false, synced: true };
-    renderGate(true);
-    expect(screen.getByRole('region', { name: 'Terminal disabled' })).toBeTruthy();
-    expect(screen.queryByTestId('terminal-panel')).toBeNull();
-    expect(consentDialogProps?.open).toBe(false);
-  });
-
-  test('re-enabling from a revoked notice reopens consent (re-consent on re-enable)', () => {
-    consentState = { enabled: false, synced: true };
-    renderGate(true);
+    const view = render(<TerminalGate bridge={bridge} />);
     act(() => screen.getByRole('button', { name: 'Enable terminal' }).click());
-    expect(consentDialogProps?.open).toBe(true);
+    expect(writerCalls).toEqual([true]);
+    consentState = { enabled: true, synced: true };
+    view.rerender(<TerminalGate bridge={bridge} />);
+    expect(await screen.findByTestId('terminal-panel')).toBeTruthy();
+    expect(notice()).toBeNull();
   });
 
-  test('accept with no writer yet surfaces an actionable toast, no crash', () => {
-    consentState = { enabled: null, synced: true };
+  test('re-enable with no writer yet surfaces an actionable toast, no crash', () => {
+    consentState = { enabled: false, synced: true };
     writerImpl = null;
-    renderGate(true);
-    act(() => consentDialogProps?.onAccept());
+    renderGate();
+    act(() => screen.getByRole('button', { name: 'Enable terminal' }).click());
     expect(writerCalls).toEqual([]);
     expect(toastErrors.length).toBe(1);
   });
 
-  test('a writer that fails to persist consent surfaces a toast and never mounts the shell', () => {
-    consentState = { enabled: null, synced: true };
+  test('a writer that fails to persist surfaces a toast and never mounts the shell', () => {
+    consentState = { enabled: false, synced: true };
     writerImpl = (enabled) => {
       writerCalls.push(enabled);
       return { ok: false, error: 'ENOSPC: no space left on device' };
     };
-    renderGate(true);
-    act(() => consentDialogProps?.onAccept());
+    renderGate();
+    act(() => screen.getByRole('button', { name: 'Enable terminal' }).click());
 
     expect(writerCalls).toEqual([true]);
     expect(toastErrors.length).toBe(1);

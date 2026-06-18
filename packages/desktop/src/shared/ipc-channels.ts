@@ -252,6 +252,7 @@ export interface EditorViewMenuStateSnapshot {
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
   readonly terminalVisible?: boolean;
+  readonly terminalLive?: boolean;
 }
 
 export interface RequestChannels {

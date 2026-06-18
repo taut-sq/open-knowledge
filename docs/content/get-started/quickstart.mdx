@@ -1,10 +1,11 @@
 ---
 title: Quickstart
-description: Setup your agent maintained knowledge base in less than five minutes.
+description: Set up your agent-maintained knowledge base in less than five minutes.
 ---
 <Callout type="info" title="Prerequisites">
   - **macOS.** Windows and Linux are not yet supported. If you are using Linux or an Intel-based Mac, you can use the [CLI](/docs/reference/cli) instead.
-  - **`git`.** Open Knowledge initializes a git repo for your project (used for the timeline and recovery features). Pre-installed via Xcode Command Line Tools on most macOS machines; install with `xcode-select --install` if missing.
+  - **Node.js ≥24.** Open Knowledge requires Node.js 24 or higher. Download from [nodejs.org](https://nodejs.org/en/download/).
+  - **`git`.** Open Knowledge initializes a git repo for your project (used for the timeline and recovery features). Install from [git-scm.com](https://git-scm.com/install/mac).
 </Callout>
 
 <Steps>
@@ -13,7 +14,7 @@ description: Setup your agent maintained knowledge base in less than five minute
 
 ### Install the desktop app
 
-Click the below button to download the latest version of the Open Knowledge desktop app for macOS.
+Download the latest version of the Open Knowledge desktop app for macOS.
 
 <DownloadButton href="https://github.com/inkeep/open-knowledge/releases/latest/download/Open-Knowledge-arm64.dmg" label="Download for macOS" />
 
@@ -21,57 +22,35 @@ Click the below button to download the latest version of the Open Knowledge desk
 
 <Step>
 
-### Open or create an Open Knowledge project
+### Create a new project
 
-Choose how you want to start, then follow that path through the rest of this guide. You can switch anytime; your choice carries over to the prompts below.
-
-<Tabs groupId="ok-start-route" persist className="ok-route-tabs" items={['Tech IPOs KB Example', 'Your own repo', 'New project']}>
-
-<Tab>
-
-**Recommended: the fastest way to explore, with no setup and no files of your own.** Our example knowledge base is a collection of notes on notable tech IPOs happening this year.
-
-<CtaButton href="https://openknowledge.ai/d/AWh0dHBzOi8vZ2l0aHViLmNvbS9pbmtlZXAvdGVjaC1pcG9zL2Jsb2IvbWFpbi9SRUFETUUubWQ" label="Open inkeep/tech-ipos-kb-example" />
-
-- Click **Open inkeep/tech-ipos-kb-example** button above.
-- Follow the prompts to open the example repo in the Open Knowledge app.
-
-</Tab>
-
-<Tab>
-
-Point Open Knowledge at a code repository you already work in to organize your technical specs; they live in git, right next to the code they describe.
-
-- Open the Open Knowledge app and click **Pick Existing Project**.
-- Choose your repo (or a `docs/` or `specs/` folder inside it).
-- Working off GitHub? **Clone from GitHub** pulls it down first.
-
-</Tab>
-
-<Tab>
-
-Starting from scratch? Build a brand-new, empty knowledge base.
-
-- Open the Open Knowledge app.
-- Click **Create New Project** to scaffold a fresh, empty knowledge base.
-
-</Tab>
-
-</Tabs>
-
-<Callout type="info">
-  Whichever route you pick, the first-launch consent dialog detects every MCP-capable editor on your machine (Claude, Claude Desktop, Cursor, Codex) and offers to wire them up to Open Knowledge.
-</Callout>
+- Open the Open Knowledge app and click **Create New Project**.
+- Click **Browse** to select the destination folder for your new project.
+- Continue with the default settings and click **Create**.
 
 </Step>
 
 <Step>
 
-### Open the project in your AI Agent
+### Initialize a knowledge base
 
-With Open Knowledge app open, click the **Open with AI** button and select your preferred agent from the list. This dispatches the current file, folder, or project to your chosen agent with a starter prompt. 
+From your newly created project, select **Knowledge base** from the landing page, leave **Project root** selected, and click **Initialize**.
 
-![The Open with AI button in the Open Knowledge app, showing the agent picker with Claude, Codex, and Cursor](/screenshots/open-with-ai.png)
+</Step>
+
+<Step>
+
+### Open the knowledge base in your AI agent
+
+Click the **Open with AI** button in the top right and select your preferred agent from the list. This dispatches the current project to your chosen agent with a starter prompt. Your agent harness may take a few seconds to load the project.
+
+In the agent's chat window, add the following to the starter prompt to get started or use a topic of your choice:
+
+<CopyPrompt>Create a knowledge base about Large Language Models. Include an overview page and separate pages for three key concepts.</CopyPrompt>
+
+<Callout type="info">
+  To avoid having to approve all Open Knowledge tool calls, set your agent to auto-mode, full-access, or an equivalent setting.
+</Callout>
 
 <Callout type="info">
   If your agent prompts you to approve a new MCP server (Cursor does this), approve `open-knowledge`.
@@ -81,70 +60,30 @@ With Open Knowledge app open, click the **Open with AI** button and select your 
 
 <Step>
 
-Opening a project initializes the Open Knowledge MCP tools for that project. From then on, your agent prefers Open Knowledge's tool wrappers over its built-in file operations, so its edits keep your front matter consistent and your links intact.
+### Watch your agent work
+
+If you are working with Cursor, Codex or Claude Desktop, your agent will open the Open Knowledge editor in an embedded window. Otherwise, your agent will open the Open Knowledge editor in your system browser.
+
+You will see your agent's icon in the top right of the editor window. Click on the icon to see the agent's [activity](/docs/features/agent-activity) across files in the knowledge base.
+
+If the agent icon is greyed out, your agent may not have started writing yet. Wait a few seconds and check again.
 
 </Step>
 
 <Step>
 
-### Ask the agent to edit a doc
-
-Add your own instructions to steer the agent. These starters match the path you picked above (switch tabs to change it). Click any prompt to copy it.
-
-<Tabs groupId="ok-start-route" persist className="ok-route-tabs" items={['Tech IPOs KB Example', 'Your own repo', 'New project']}>
-
-<Tab>
-
-Explore the example knowledge base of notable tech IPOs:
-
-<CopyPrompt>Create a report on which IPO topics are trending on Hacker News this month.</CopyPrompt>
-
-<CopyPrompt>Update the SpaceX note with the latest news about its IPO.</CopyPrompt>
-
-<CopyPrompt>What references are there to under or overvaluation?</CopyPrompt>
-
-<CopyPrompt>Update the historical IPO prices to account for inflation.</CopyPrompt>
-
-</Tab>
-
-<Tab>
-
-Turn your codebase into living technical specs the agent can read and maintain:
-
-<CopyPrompt>Read through this codebase and draft a technical spec for the most complex module: an overview, the architecture, key files, and open questions, all linked from a specs index page.</CopyPrompt>
-
-<CopyPrompt>Organize my existing specs into a linked index grouped by area, and flag any that have drifted out of sync with the current code.</CopyPrompt>
-
-<CopyPrompt>Document the architecture of this repo: create an overview page that links to a page per major module describing its responsibilities and entry points.</CopyPrompt>
-
-</Tab>
-
-<Tab>
-
-Hand the agent a topic for your empty project. Try a fan wiki about something you love:
-
-<CopyPrompt>Build a fan wiki about Avatar: The Last Airbender. Start with an overview page, then add cross-linked pages for the main characters, the four nations, notable episodes, and a timeline of major events.</CopyPrompt>
-
-<CopyPrompt>Build an in-depth knowledge base about the evolution of prequel vs sequel memes over the span of several decades. Start with an overview page, then add cross-linked pages for each era, the defining meme formats, the films and franchises that spawned them, and a timeline tracing how the rivalry evolved.</CopyPrompt>
-
-<CopyPrompt>Build a knowledge wiki about the different types of flightless birds. Start with an overview page, then add cross-linked pages for each major group (ratites like ostriches, emus, and kiwis; penguins; and flightless rails), the regions they live in, and a timeline of how flightlessness evolved.</CopyPrompt>
-
-</Tab>
-
-</Tabs>
-
-</Step>
-
-<Step>
-
-### Look around
+### Explore the knowledge base
 
 The editor's sidebar shows every doc in your knowledge base. Each doc has:
 
 - A WYSIWYG body and a source-mode toggle
 - A frontmatter panel for properties
-- A timeline of recent edits with per-burst diffs and selective rollback
-- Backlinks to other docs that reference it and a graph view to see doc connectivity
+
+When viewing a document, check out the right side pane for:
+- An outline of the document's structure
+- A list of incoming and outgoing links to other docs
+- A graph view of the document's links in the knowledge base
+- A [timeline](/docs/features/timeline-and-recovery) of recent edits with per-burst diffs and selective rollback
 
 Right-click anywhere in the sidebar (empty space, a folder, or a file) to create, reveal, rename, hide, delete (to Trash), and **Open with AI**. The full feature tour is under [Features](/docs/features/editor).
 
@@ -154,6 +93,6 @@ Right-click anywhere in the sidebar (empty space, a folder, or a file) to create
 
 ## What's next
 
-- Per-editor setup details: [Integrations](/docs/integrations/claude-code)
-- Tools the agent has access to: [MCP](/docs/reference/mcp)
+- Syncing your knowledge base to GitHub: [Syncing](/docs/features/github-sync)
+- Define folders and templates: [Folders and templates](/docs/advanced/folders-and-templates)
 - Configure Open Knowledge: [Configuration](/docs/reference/configuration)

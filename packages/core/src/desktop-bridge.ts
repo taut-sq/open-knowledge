@@ -40,7 +40,9 @@ type OkMenuAction =
   | 'expand-all-tree'
   | 'collapse-all-tree'
   | 'toggle-doc-panel'
-  | 'toggle-terminal';
+  | 'toggle-terminal'
+  | 'new-terminal'
+  | 'kill-terminal';
 
 type OkUnsubscribe = () => void;
 
@@ -380,6 +382,7 @@ interface OkEditorViewMenuStateSnapshot {
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
   readonly terminalVisible?: boolean;
+  readonly terminalLive?: boolean;
 }
 
 export interface OkSharingStatusResult {

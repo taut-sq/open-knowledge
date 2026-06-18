@@ -440,6 +440,7 @@ let editorViewMenuState: EditorViewMenuStateSnapshot = {
   sidebarVisible: true,
   docPanelVisible: true,
   terminalVisible: false,
+  terminalLive: false,
 };
 
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL ?? null;
@@ -1259,11 +1260,14 @@ async function runApplicationMenuRefresh(): Promise<void> {
     sidebarVisible: editorViewMenuState.sidebarVisible,
     docPanelVisible: editorViewMenuState.docPanelVisible,
     terminalVisible: editorViewMenuState.terminalVisible,
+    terminalLive: editorViewMenuState.terminalLive,
     onToggleShowHiddenFiles: () => sendMenuActionToFocused('toggle-show-hidden-files'),
     onToggleShowAllFiles: () => sendMenuActionToFocused('toggle-show-all-files'),
     onToggleSidebar: () => sendMenuActionToFocused('toggle-sidebar'),
     onToggleDocPanel: () => sendMenuActionToFocused('toggle-doc-panel'),
     onToggleTerminal: () => sendMenuActionToFocused('toggle-terminal'),
+    onNewTerminal: () => sendMenuActionToFocused('new-terminal'),
+    onKillTerminal: () => sendMenuActionToFocused('kill-terminal'),
     onExpandAll: () => sendMenuActionToFocused('expand-all-tree'),
     onCollapseAll: () => sendMenuActionToFocused('collapse-all-tree'),
     spellCheckEnabled: appState.spellCheckEnabled,

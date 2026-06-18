@@ -438,7 +438,7 @@ describe('M1 smoke', () => {
     expect(desktopMembers.size).toBeGreaterThan(0);
     expect(coreMembers.size).toBeGreaterThan(0);
     expect(appMembers.size).toBeGreaterThan(0);
-    expect(desktopMembers.size).toBe(25);
+    expect(desktopMembers.size).toBe(27);
     expect(desktopMembers).toEqual(coreMembers);
     expect(desktopMembers).toEqual(appMembers);
   });

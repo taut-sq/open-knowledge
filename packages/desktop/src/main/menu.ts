@@ -44,6 +44,9 @@ export interface MenuDeps {
   onToggleDocPanel?(): void;
   terminalVisible?: boolean;
   onToggleTerminal?(): void;
+  onNewTerminal?(): void;
+  onKillTerminal?(): void;
+  terminalLive?: boolean;
   canExpandAll?: boolean;
   canCollapseAll?: boolean;
   onExpandAll?(): void;
@@ -333,6 +336,22 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
         { role: 'zoomOut' },
         { type: 'separator' },
         { role: 'togglefullscreen' },
+      ],
+    },
+
+    {
+      label: 'Terminal',
+      submenu: [
+        {
+          label: 'New Terminal',
+          enabled: deps.onNewTerminal !== undefined,
+          click: () => deps.onNewTerminal?.(),
+        },
+        {
+          label: 'Kill Terminal',
+          enabled: deps.onKillTerminal !== undefined && deps.terminalLive === true,
+          click: () => deps.onKillTerminal?.(),
+        },
       ],
     },
 

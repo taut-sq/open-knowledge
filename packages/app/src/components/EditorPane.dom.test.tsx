@@ -47,13 +47,19 @@ mock.module('./EditorArea', () => ({
   EditorArea: ({
     terminalBridge,
     terminalVisible,
+    terminalLaunch,
   }: {
     terminalBridge?: unknown;
     terminalVisible?: boolean;
+    terminalLaunch?: { nonce: number } | null;
   }) => (
     <div data-testid="editor-area">
       {terminalBridge != null ? (
-        <div data-testid="terminal-dock" data-visible={String(terminalVisible)} />
+        <div
+          data-testid="terminal-dock"
+          data-visible={String(terminalVisible)}
+          data-launch-nonce={terminalLaunch ? String(terminalLaunch.nonce) : 'none'}
+        />
       ) : null}
     </div>
   ),
@@ -210,6 +216,42 @@ describe('EditorPane terminal dock wiring', () => {
     act(() => desk.dispatchMenuAction('toggle-terminal'));
     expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('false');
     expect(desk.viewMenuPushes.at(-1)).toEqual({ terminalVisible: false });
+  });
+
+  test('desktop: hiding the terminal clears the launch intent so a reopen is blank (regression)', async () => {
+    const desk = makeOkDesktopStub();
+    (window as { okDesktop?: unknown }).okDesktop = desk.stub;
+    const { requestTerminalLaunch } = await import('./handoff/terminal-launch-events');
+    await renderEditorPane();
+
+    const dock = () => screen.getByTestId('terminal-dock');
+    expect(dock().getAttribute('data-launch-nonce')).toBe('none');
+
+    act(() => requestTerminalLaunch('work on docs/notes'));
+    expect(dock().getAttribute('data-visible')).toBe('true');
+    expect(dock().getAttribute('data-launch-nonce')).toBe('1');
+
+    act(() => desk.dispatchMenuAction('toggle-terminal'));
+    expect(dock().getAttribute('data-visible')).toBe('false');
+    expect(dock().getAttribute('data-launch-nonce')).toBe('none');
+
+    act(() => desk.dispatchMenuAction('new-terminal'));
+    expect(dock().getAttribute('data-visible')).toBe('true');
+    expect(dock().getAttribute('data-launch-nonce')).toBe('none');
+  });
+
+  test('desktop: new-terminal menu action opens the dock and stays open on repeat (not a toggle)', async () => {
+    const desk = makeOkDesktopStub();
+    (window as { okDesktop?: unknown }).okDesktop = desk.stub;
+    await renderEditorPane();
+
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('false');
+
+    act(() => desk.dispatchMenuAction('new-terminal'));
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('true');
+
+    act(() => desk.dispatchMenuAction('new-terminal'));
+    expect(screen.getByTestId('terminal-dock').getAttribute('data-visible')).toBe('true');
   });
 
   test('desktop: an unrelated menu action does not toggle the terminal', async () => {

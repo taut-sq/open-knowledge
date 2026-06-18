@@ -435,6 +435,7 @@ msgid "A network problem or GitHub outage interrupted the clone."
 msgstr ""
 
 #: src/components/settings/SettingsDialogErrorBoundary.tsx
+#: src/components/TerminalGate.tsx
 msgid "A newer version may have been deployed since this tab opened."
 msgstr ""
 
@@ -2991,6 +2992,10 @@ msgstr ""
 msgid "Keyboard shortcuts available in the editor and workspace."
 msgstr ""
 
+#: src/components/TerminalPanel.tsx
+msgid "Kill Terminal"
+msgstr ""
+
 #: src/editor/extensions/WikiLinkPropPanel.tsx
 msgid "Label <0>(optional display text)</0>"
 msgstr ""
@@ -4464,6 +4469,7 @@ msgstr ""
 
 #: src/components/EditorActivityPool.tsx
 #: src/components/settings/SettingsDialogErrorBoundary.tsx
+#: src/components/TerminalGate.tsx
 msgid "Reload"
 msgstr ""
 
@@ -5171,6 +5177,10 @@ msgstr ""
 msgid "Something went wrong opening this file (HTTP {status})."
 msgstr ""
 
+#: src/components/TerminalGate.tsx
+msgid "Something went wrong starting the terminal."
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Source editing"
 msgstr ""
@@ -5477,6 +5487,10 @@ msgstr ""
 msgid "Terminal disabled"
 msgstr ""
 
+#: src/components/TerminalGate.tsx
+msgid "Terminal failed to load"
+msgstr ""
+
 #: src/components/settings/TerminalSection.tsx
 #: src/components/TerminalGate.tsx
 msgid "Terminal settings not loaded yet — try again in a moment."
@@ -5540,10 +5554,6 @@ msgstr ""
 
 #: src/components/ShareReceiveDialog.tsx
 msgid "The repository was moved, renamed, or deleted."
-msgstr ""
-
-#: src/components/TerminalGate.tsx
-msgid "The terminal is not enabled for this project."
 msgstr ""
 
 #: src/components/TerminalGate.tsx

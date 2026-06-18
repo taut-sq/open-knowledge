@@ -11,7 +11,7 @@ import {
   TerminalLaunchProvider,
 } from '@/components/handoff/TerminalLaunchContext';
 import { requestTerminalLaunch } from '@/components/handoff/terminal-launch-events';
-import { selectScopedPrompt } from '@/components/handoff/useHandoffDispatch';
+import { composeTerminalLaunchPrompt } from '@/components/handoff/useHandoffDispatch';
 import { InstallInClaudeDesktopDialog } from '@/components/InstallInClaudeDesktopDialog';
 import { McpConsentDialog } from '@/components/McpConsentDialog';
 import { isNewItemShortcut, NewItemDialog } from '@/components/NewItemDialog';
@@ -30,7 +30,6 @@ import {
   useDocumentTransition,
 } from '@/editor/DocumentContext';
 import { fetchApiConfig } from '@/lib/api-config';
-import { useConfigContext } from '@/lib/config-context';
 import { ConfigProvider } from '@/lib/config-provider';
 import { assetPathFromHash, docNameFromHash, isContentRootHash } from '@/lib/doc-hash';
 import { mark, ProfilerBoundary } from '@/lib/perf';
@@ -323,13 +322,11 @@ function AppBody() {
   const isElectronHost = typeof window !== 'undefined' && window.okDesktop != null;
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const singleFile = useSingleFileMode();
-  const { merged } = useConfigContext();
-  const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
 
   const terminalLaunch: TerminalLaunchContextValue | null = desktopBridge
     ? {
         launchInTerminal: (input) => {
-          requestTerminalLaunch(selectScopedPrompt(input, 'claude-code', autoOpen));
+          requestTerminalLaunch(composeTerminalLaunchPrompt(input));
         },
       }
     : null;

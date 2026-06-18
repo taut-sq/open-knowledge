@@ -59,6 +59,27 @@ export function TerminalDock({
     if (visible) setMounted(true);
   }, [visible]);
 
+  function killTerminal() {
+    setMounted(false);
+    onVisibleChange(false);
+    editorRegionRef.current?.focus();
+  }
+
+  const killTerminalRef = useRef(killTerminal);
+  useEffect(() => {
+    killTerminalRef.current = killTerminal;
+  });
+
+  useEffect(() => {
+    return bridge.onMenuAction((action) => {
+      if (action === 'kill-terminal') killTerminalRef.current();
+    });
+  }, [bridge]);
+
+  useEffect(() => {
+    bridge.editor.notifyViewMenuStateChanged({ terminalLive: mounted });
+  }, [bridge, mounted]);
+
   useEffect(() => {
     const panel = panelRef.current;
     if (panel == null) return;
@@ -74,6 +95,12 @@ export function TerminalDock({
     const panelEl = document.getElementById(TERMINAL_PANEL_ID);
     if (!panelEl?.contains(document.activeElement)) return;
     editorRegionRef.current?.focus();
+  }, [isCollapsed]);
+
+  useLayoutEffect(() => {
+    if (isCollapsed) return;
+    const panelEl = document.getElementById(TERMINAL_PANEL_ID);
+    panelEl?.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus();
   }, [isCollapsed]);
 
   return (
@@ -138,12 +165,12 @@ export function TerminalDock({
         {mounted ? (
           <TerminalGate
             bridge={bridge}
-            visible={visible}
             launch={launch}
             onClose={() => {
               onVisibleChange(false);
               editorRegionRef.current?.focus();
             }}
+            onKill={killTerminal}
           />
         ) : null}
       </ResizablePanel>
