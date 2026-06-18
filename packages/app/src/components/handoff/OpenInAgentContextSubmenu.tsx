@@ -1,12 +1,7 @@
-import {
-  composeFilePrompt,
-  type HandoffOutcome,
-  type HandoffTarget,
-  type InstallState,
-} from '@inkeep/open-knowledge-core';
+import type { HandoffOutcome, HandoffTarget, InstallState } from '@inkeep/open-knowledge-core';
 import { t } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles, SquareTerminal } from 'lucide-react';
+import { Sparkles, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   DropdownMenuItem,
@@ -16,9 +11,8 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu.tsx';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
-import { useConfigContext } from '@/lib/config-context';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
-import { dispatchClaudeWebFallback, TargetIcon } from './OpenInAgentMenuItem';
+import { TargetIcon } from './OpenInAgentMenuItem';
 import { useTerminalLaunch } from './TerminalLaunchContext';
 import type { HandoffDispatchInput } from './useHandoffDispatch';
 
@@ -36,50 +30,33 @@ interface OpenInAgentContextSubmenuProps {
    *  `useInstalledAgents()` call so every file row shares one coordinator. */
   readonly installStates: Record<HandoffTarget, InstallState>;
   /** Host classifier — left in the prop signature for consumers that already
-   *  thread it; v1 doesn't use it because uninstalled rows aren't rendered.
+   *  thread it; uninstalled rows aren't rendered so it isn't read here.
    *  Web-host Cursor uses the same probe + filter as every other target now
-   *  that `cursor-two-step.ts` has a `/api/spawn-cursor` fetch fallback
-   *  (PR #625). */
+   *  that `cursor-two-step.ts` has a `/api/spawn-cursor` fetch fallback. */
   readonly isElectronHost: boolean;
   readonly dispatch: (
     target: HandoffTarget,
     input: HandoffDispatchInput,
   ) => Promise<HandoffOutcome>;
-  /** Whether to render the "Open in claude.ai →" web-fallback row when Claude
-   *  is not installed. Defaults to `true` (file-row surface — the cloud URL
-   *  carries the per-file prompt). Folder + empty-space mounts pass `false`:
-   *  the claude.ai URL has no `folder=` companion param, so the cloud agent
-   *  would receive a prompt with no project grounding. Hiding the row beats
-   *  rendering a degraded path. */
-  readonly webFallbackVisible?: boolean;
 }
 
 export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps): ReactNode {
   const { t } = useLingui();
   const isEmbedded = useIsEmbedded();
-  const { merged } = useConfigContext();
   const terminalLaunch = useTerminalLaunch();
-  const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
   if (isEmbedded) return null;
-  const { input, installStates, dispatch, webFallbackVisible = true } = props;
+  const { input, installStates, dispatch } = props;
   const inputMissing = input === null;
   const hint = contextRowHint(inputMissing);
 
   const installedTargets = VISIBLE_TARGETS.filter(
     (target) => installStates[target.id]?.installed === true,
   );
+  const probePending = VISIBLE_TARGETS.some(
+    (target) => installStates[target.id]?.installed == null,
+  );
 
-  const claudeInstalled = installStates['claude-code']?.installed === true;
-
-  const prompt =
-    input !== null && input.docContext !== null
-      ? composeFilePrompt(input.docContext.relativePath, autoOpen)
-      : '';
-
-  const handleClaudeWebFallback = (): void => {
-    if (input === null) return;
-    void dispatchClaudeWebFallback(prompt);
-  };
+  const showEmptyHint = installedTargets.length === 0 && terminalLaunch === null;
 
   return (
     <DropdownMenuSub>
@@ -115,20 +92,13 @@ export function OpenInAgentContextSubmenu(props: OpenInAgentContextSubmenuProps)
             </DropdownMenuItem>
           );
         })}
-        {webFallbackVisible && !claudeInstalled ? (
-          <DropdownMenuItem
-            onSelect={handleClaudeWebFallback}
-            disabled={inputMissing}
-            data-testid="file-tree-open-in-claude-web-fallback"
-            aria-label={t`Open in claude.ai, opens in browser with prompt pre-filled`}
-          >
-            <ExternalLink className="size-4" aria-hidden="true" />
-            <span className="flex-1">
-              <Trans>Open in claude.ai →</Trans>
-            </span>
-            <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-              <Trans>opens in browser</Trans>
-            </span>
+        {showEmptyHint ? (
+          <DropdownMenuItem disabled data-testid="file-tree-open-in-empty">
+            {probePending ? (
+              <Trans>Checking for installed agents</Trans>
+            ) : (
+              <Trans>No installed agents found</Trans>
+            )}
           </DropdownMenuItem>
         ) : null}
         {terminalLaunch !== null ? (

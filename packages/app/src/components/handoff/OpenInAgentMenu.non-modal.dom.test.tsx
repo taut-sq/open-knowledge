@@ -21,9 +21,6 @@ if (globalWithDomShims.ResizeObserver === undefined) {
   globalWithDomShims.ResizeObserver = NoopResizeObserver;
 }
 
-mock.module('@/lib/config-context', () => ({
-  useConfigContext: () => ({ merged: null }),
-}));
 mock.module('./useInstalledAgents', () => ({
   useInstalledAgents: () => ({ states: {}, refresh: () => {} }),
 }));

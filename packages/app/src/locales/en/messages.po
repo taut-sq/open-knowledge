@@ -357,10 +357,6 @@ msgstr "{userName} · {tabCount, plural, one {# tab} other {# tabs}}"
 msgid "{userName}, {tabCount, plural, one {# concurrent tab} other {# concurrent tabs}}"
 msgstr "{userName}, {tabCount, plural, one {# concurrent tab} other {# concurrent tabs}}"
 
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "{webFallbackLabel}, opens in browser with prompt pre-filled"
-msgstr "{webFallbackLabel}, opens in browser with prompt pre-filled"
-
 #: src/components/EditorFooter.tsx
 msgid "{words, plural, one {word} other {words}}"
 msgstr "{words, plural, one {word} other {words}}"
@@ -930,6 +926,7 @@ msgid "Checkbox"
 msgstr "Checkbox"
 
 #: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
 msgid "Checking for installed agents"
 msgstr "Checking for installed agents"
@@ -1555,10 +1552,6 @@ msgstr "Couldn't load templates"
 #: src/components/TrashFailureModal.tsx
 msgid "Couldn't move to Trash"
 msgstr "Couldn't move to Trash"
-
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Couldn't open {CLAUDE_WEB_FALLBACK_LABEL} in your browser."
-msgstr "Couldn't open {CLAUDE_WEB_FALLBACK_LABEL} in your browser."
 
 #: src/components/DocumentErrorBoundary.tsx
 msgid "Couldn't open document"
@@ -3567,6 +3560,7 @@ msgid "No Incoming"
 msgstr "No Incoming"
 
 #: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
 msgid "No installed agents found"
 msgstr "No installed agents found"
@@ -3877,19 +3871,6 @@ msgstr "Open graph"
 msgid "Open in {shareBranch}"
 msgstr "Open in {shareBranch}"
 
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Open in claude.ai →"
-msgstr "Open in claude.ai →"
-
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-msgid "Open in claude.ai, opens in browser with prompt pre-filled"
-msgstr "Open in claude.ai, opens in browser with prompt pre-filled"
-
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Open in current branch"
 msgstr "Open in current branch"
@@ -4038,10 +4019,6 @@ msgstr "Open with built-in text editor"
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Opened {displayName} in your browser."
-msgstr "Opened {displayName} in your browser."
-
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr "Opening..."
@@ -4053,16 +4030,6 @@ msgstr "Opens a folder picker to choose where to clone the repository."
 #: src/components/LinksPanel.tsx
 msgid "Opens in a new tab"
 msgstr "Opens in a new tab"
-
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-msgid "opens in browser"
-msgstr "opens in browser"
-
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "opens in browser with prompt pre-filled"
-msgstr "opens in browser with prompt pre-filled"
 
 #: src/components/EmptyEditorState.tsx
 msgid "or start from scratch <0/>"

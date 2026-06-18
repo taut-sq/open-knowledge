@@ -79,7 +79,6 @@ let sidebarSearchThrows = false;
 let projectPatchResult: { ok: true } | { ok: false; error: unknown } = { ok: true };
 let openInAgentSubmenuProps: Array<{
   input: unknown;
-  webFallbackVisible: boolean;
 }> = [];
 let toastSuccesses: unknown[][] = [];
 let toastErrors: unknown[][] = [];
@@ -178,14 +177,9 @@ mock.module('@/components/UpdateNotices', () => ({
 }));
 
 mock.module('@/components/handoff/OpenInAgentEmptySpaceSubmenu', () => ({
-  OpenInAgentEmptySpaceSubmenu: (props: { input: unknown; webFallbackVisible: boolean }) => {
+  OpenInAgentEmptySpaceSubmenu: (props: { input: unknown }) => {
     openInAgentSubmenuProps.push(props);
-    return (
-      <div
-        data-testid="open-in-agent-empty-space-submenu"
-        data-web-fallback-visible={String(props.webFallbackVisible)}
-      />
-    );
+    return <div data-testid="open-in-agent-empty-space-submenu" />;
   },
 }));
 
@@ -555,7 +549,6 @@ describe('FileSidebar runtime behavior', () => {
       appearance: { sidebar: { showAllFiles: false } },
     });
 
-    expect(openInAgentSubmenuProps.at(-1)?.webFallbackVisible).toBe(false);
     expect(openInAgentSubmenuProps.at(-1)?.input).toEqual({
       docContext: null,
       docPath: '',

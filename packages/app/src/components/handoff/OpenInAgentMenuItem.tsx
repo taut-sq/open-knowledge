@@ -1,7 +1,6 @@
 import {
   AGENT_ICON_COLORS,
   AGENT_ICON_COLORS_DARK,
-  buildClaudeAiWebUrl,
   type InstallState,
   type TargetData,
 } from '@inkeep/open-knowledge-core';
@@ -9,7 +8,6 @@ import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
 import { useTheme } from 'next-themes';
 import type { CSSProperties, ReactNode, SVGProps } from 'react';
-import { toast as sonnerToast } from 'sonner';
 import { ClaudeIcon } from '@/components/icons/claude';
 import { CodexBrandIcon } from '@/components/icons/codex';
 import { CursorIcon } from '@/components/icons/cursor';
@@ -69,14 +67,13 @@ interface DisabledTooltip {
    *  hint text rendered inline on the trigger row). */
   readonly message: string;
   readonly installAction: RowAffordance;
-  readonly webFallback?: RowAffordance;
 }
 
 interface RowState {
   readonly enabled: boolean;
-  /** When non-null, render a submenu with install + (Claude only) web-fallback
-   *  affordances instead of a plain disabled item. The `message` field doubles
-   *  as the short right-aligned status hint for the trigger row. */
+  /** When non-null, render a submenu with the install affordance instead of a
+   *  plain disabled item. The `message` field doubles as the short
+   *  right-aligned status hint for the trigger row. */
   readonly tooltip: DisabledTooltip | null;
 }
 
@@ -110,14 +107,6 @@ export function computeRowState(args: {
         label: t`Install ${brand} →`,
         url: target.installUrl,
       },
-      ...(target.hasWebFallback
-        ? {
-            webFallback: {
-              label: t`Open in claude.ai →`,
-              url: '',
-            },
-          }
-        : {}),
     };
     return { enabled: false, tooltip };
   }
@@ -125,53 +114,20 @@ export function computeRowState(args: {
   return { enabled: true, tooltip: null };
 }
 
-export function computeWebFallbackUrl(prompt: string): string {
-  return buildClaudeAiWebUrl(prompt);
-}
-
-export function successToastForWebFallback(displayName: string): string {
-  return t`Opened ${displayName} in your browser.`;
-}
-
-const CLAUDE_WEB_FALLBACK_LABEL = 'claude.ai';
-
-export async function dispatchClaudeWebFallback(
-  prompt: string,
-  openExternal: typeof defaultOpenExternal = defaultOpenExternal,
-): Promise<void> {
-  const url = buildClaudeAiWebUrl(prompt);
-  const outcome = await openExternal(url);
-  if (outcome.ok) {
-    sonnerToast.success(successToastForWebFallback(CLAUDE_WEB_FALLBACK_LABEL));
-  } else {
-    sonnerToast.error(t`Couldn't open ${CLAUDE_WEB_FALLBACK_LABEL} in your browser.`);
-  }
-}
-
 interface OpenInAgentMenuItemProps {
   readonly target: TargetData;
   readonly installState: InstallState;
   readonly isElectronHost: boolean;
-  readonly prompt: string;
   /** Fired only when the row is enabled and the user selects it. The hook
    *  layer (`useHandoffDispatch`) handles toast + telemetry. */
   readonly onSelect: () => void;
   readonly openExternal?: typeof defaultOpenExternal;
-  /** Test seam — fires after a successful web-fallback click so the caller can
-   *  surface a toast. Defaults to a no-op; production callers will wire sonner. */
-  readonly onWebFallbackSuccess?: (target: TargetData) => void;
-  /** Test seam — fires after a failed web-fallback click (popup-blocker,
-   *  exotic browser, DOM-less environment). Parallel to onWebFallbackSuccess
-   *  so the caller can surface a sonner error toast. Defaults to a no-op. */
-  readonly onWebFallbackError?: (target: TargetData, reason: string) => void;
 }
 
 export function OpenInAgentMenuItem(props: OpenInAgentMenuItemProps): ReactNode {
   const { t } = useLingui();
-  const { target, installState, isElectronHost, prompt, onSelect } = props;
+  const { target, installState, isElectronHost, onSelect } = props;
   const openExternal = props.openExternal ?? defaultOpenExternal;
-  const onWebFallbackSuccess = props.onWebFallbackSuccess ?? (() => {});
-  const onWebFallbackError = props.onWebFallbackError ?? (() => {});
 
   const { displayName: targetDisplayName } = target;
   const rowState = computeRowState({ target, installState, isElectronHost });
@@ -180,18 +136,6 @@ export function OpenInAgentMenuItem(props: OpenInAgentMenuItemProps): ReactNode 
   const handleInstallClick = () => {
     if (!rowState.tooltip) return;
     void openExternal(rowState.tooltip.installAction.url);
-  };
-
-  const handleWebFallbackClick = () => {
-    void (async () => {
-      const url = computeWebFallbackUrl(prompt);
-      const outcome = await openExternal(url);
-      if (outcome.ok) {
-        onWebFallbackSuccess(target);
-      } else {
-        onWebFallbackError(target, outcome.detail ?? outcome.reason);
-      }
-    })();
   };
 
   if (rowState.enabled) {
@@ -231,7 +175,6 @@ export function OpenInAgentMenuItem(props: OpenInAgentMenuItemProps): ReactNode 
   const accessibleLabel = hint
     ? t`Open with AI ${targetDisplayName}, ${hint}`
     : t`Open with AI ${targetDisplayName}`;
-  const webFallbackLabel = rowState.tooltip.webFallback?.label ?? '';
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger
@@ -264,18 +207,6 @@ export function OpenInAgentMenuItem(props: OpenInAgentMenuItemProps): ReactNode 
         >
           <span>{rowState.tooltip.installAction.label}</span>
         </DropdownMenuItem>
-        {rowState.tooltip.webFallback ? (
-          <DropdownMenuItem
-            onSelect={handleWebFallbackClick}
-            data-testid={`open-in-agent-web-fallback-${target.id}`}
-            aria-label={t`${webFallbackLabel}, opens in browser with prompt pre-filled`}
-          >
-            <span className="flex-1">{rowState.tooltip.webFallback.label}</span>
-            <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-              {t`opens in browser with prompt pre-filled`}
-            </span>
-          </DropdownMenuItem>
-        ) : null}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

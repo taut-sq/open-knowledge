@@ -59,11 +59,9 @@ function installStates(
 async function renderSubmenu({
   input = readyInput,
   states = installStates(),
-  webFallbackVisible,
 }: {
   input?: HandoffDispatchInput | null;
   states?: Record<HandoffTarget, InstallState>;
-  webFallbackVisible?: boolean;
 } = {}) {
   const { OpenInAgentEmptySpaceSubmenu } = await import('./OpenInAgentEmptySpaceSubmenu');
   const dispatchCalls: Array<{ input: HandoffDispatchInput; target: HandoffTarget }> = [];
@@ -78,12 +76,7 @@ async function renderSubmenu({
         <button type="button">Project files</button>
       </ContextMenuTrigger>
       <ContextMenuContent forceMount={true}>
-        <OpenInAgentEmptySpaceSubmenu
-          dispatch={dispatch}
-          input={input}
-          installStates={states}
-          webFallbackVisible={webFallbackVisible}
-        />
+        <OpenInAgentEmptySpaceSubmenu dispatch={dispatch} input={input} installStates={states} />
       </ContextMenuContent>
     </ContextMenu>,
   );
@@ -109,7 +102,7 @@ describe('OpenInAgentEmptySpaceSubmenu runtime behavior', () => {
   afterEach(() => cleanup());
 
   test('renders as a ContextMenu submenu, filters visible installed targets, and dispatches rows', async () => {
-    const { dispatchCalls } = await renderSubmenu({ webFallbackVisible: false });
+    const { dispatchCalls } = await renderSubmenu();
     const trigger = await openEmptySpaceSubmenu();
 
     expect(trigger.getAttribute('data-slot')).toBe('context-menu-sub-trigger');
@@ -137,24 +130,14 @@ describe('OpenInAgentEmptySpaceSubmenu runtime behavior', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  test('defaults the Claude web fallback on but hides the whole submenu when nothing can render', async () => {
-    await renderSubmenu({
-      states: installStates({
-        codex: { installed: false, lastChecked: 1 },
-        cursor: { installed: false, lastChecked: 1 },
-      }),
-    });
-    await openEmptySpaceSubmenu();
-    expect(screen.getByTestId('empty-space-open-in-claude-web-fallback')).toBeTruthy();
-    cleanup();
-
+  test('hides the whole submenu when nothing can render (no installed targets, no terminal launcher)', async () => {
     await renderSubmenu({
       states: installStates({
         'claude-code': { installed: false, lastChecked: 1 },
+        'claude-cowork': { installed: false, lastChecked: 1 },
         codex: { installed: false, lastChecked: 1 },
         cursor: { installed: false, lastChecked: 1 },
       }),
-      webFallbackVisible: false,
     });
     expect(screen.queryByRole('menuitem', { name: 'Open with AI' }) === null).toBe(true);
   });

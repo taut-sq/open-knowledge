@@ -732,7 +732,6 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             input={emptySpaceHandoffInput}
             installStates={handoffInstallStates}
             dispatch={dispatchHandoff}
-            webFallbackVisible={false}
           />
           <ContextMenuItem
             disabled={!workspace}

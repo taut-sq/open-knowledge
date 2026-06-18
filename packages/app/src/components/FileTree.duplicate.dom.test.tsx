@@ -317,13 +317,8 @@ mock.module('./handoff/useHandoffDispatch', () => ({
 }));
 
 mock.module('./handoff/OpenInAgentContextSubmenu', () => ({
-  OpenInAgentContextSubmenu: ({ webFallbackVisible }: { webFallbackVisible?: boolean }) => (
-    <button
-      type="button"
-      role="menuitem"
-      data-testid="file-tree-menu-open-in-agent"
-      data-web-fallback-visible={String(webFallbackVisible)}
-    >
+  OpenInAgentContextSubmenu: () => (
+    <button type="button" role="menuitem" data-testid="file-tree-menu-open-in-agent">
       Open with AI
     </button>
   ),

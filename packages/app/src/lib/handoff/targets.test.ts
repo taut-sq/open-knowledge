@@ -25,16 +25,6 @@ describe('KNOWN_TARGETS', () => {
     expect(cursor?.schemes).toEqual(['cursor:']);
   });
 
-  test('only claude-cowork + claude-code set hasWebFallback (PQ6 secondary affordance)', () => {
-    for (const t of KNOWN_TARGETS) {
-      if (t.id === 'claude-cowork' || t.id === 'claude-code') {
-        expect(t.hasWebFallback).toBe(true);
-      } else {
-        expect(t.hasWebFallback).toBeFalsy();
-      }
-    }
-  });
-
   test('every target has an https install URL', () => {
     for (const t of KNOWN_TARGETS) {
       expect(t.installUrl.startsWith('https://')).toBe(true);

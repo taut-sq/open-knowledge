@@ -753,7 +753,6 @@ function FileTreeMenu({
               installStates={handoff.installStates}
               isElectronHost={handoff.isElectronHost}
               dispatch={handoff.dispatch}
-              webFallbackVisible={false}
             />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
@@ -901,7 +900,6 @@ function FileTreeMenu({
                 installStates={handoff.installStates}
                 isElectronHost={handoff.isElectronHost}
                 dispatch={handoff.dispatch}
-                webFallbackVisible={true}
               />
             )}
             <DropdownMenuSub>

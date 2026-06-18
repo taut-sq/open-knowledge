@@ -14,8 +14,6 @@ describe('OpenInAgentMenuItem module surface', () => {
     expect(typeof mod.OpenInAgentMenuItem).toBe('function');
     expect(typeof mod.computeRowState).toBe('function');
     expect(typeof mod.computeRowHint).toBe('function');
-    expect(typeof mod.computeWebFallbackUrl).toBe('function');
-    expect(typeof mod.successToastForWebFallback).toBe('function');
     expect(typeof mod.OK_DESKTOP_INSTALL_URL).toBe('string');
     expect(mod.OK_DESKTOP_INSTALL_URL.startsWith('https://')).toBe(true);
   });
@@ -101,16 +99,6 @@ describe('computeRowState — Cursor parity with other targets (no host short-ci
     expect(state.tooltip?.installAction.url).toBe('https://cursor.com/');
   });
 
-  test('Cursor disabled-tooltip has NO web-fallback affordance (only Claude rows have one)', async () => {
-    const { computeRowState } = await import('./OpenInAgentMenuItem');
-    const state = computeRowState({
-      target: targetById('cursor'),
-      installState: { installed: false },
-      isElectronHost: false,
-    });
-    expect(state.tooltip?.webFallback).toBeUndefined();
-  });
-
   test('Cursor on Electron-host with installed:true is enabled', async () => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const state = computeRowState({
@@ -123,7 +111,7 @@ describe('computeRowState — Cursor parity with other targets (no host short-ci
   });
 });
 
-describe('computeRowState — branch 1: pre-probe (AC8)', () => {
+describe('computeRowState — branch 1: pre-probe', () => {
   test.each([
     ['claude-cowork' as const, true],
     ['claude-code' as const, true],
@@ -145,8 +133,8 @@ describe('computeRowState — branch 1: pre-probe (AC8)', () => {
   });
 });
 
-describe('computeRowState — branch 3: not installed', () => {
-  test('Codex disabled tooltip — install affordance only, no web fallback', async () => {
+describe('computeRowState — branch 3: not installed → install affordance only', () => {
+  test('Codex disabled tooltip — install affordance', async () => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const state = computeRowState({
       target: targetById('codex'),
@@ -157,10 +145,9 @@ describe('computeRowState — branch 3: not installed', () => {
     expect(state.tooltip?.message).toBe('Requires Codex Desktop.');
     expect(state.tooltip?.installAction.label).toBe('Install Codex Desktop →');
     expect(state.tooltip?.installAction.url).toBe('https://openai.com/codex');
-    expect(state.tooltip?.webFallback).toBeUndefined();
   });
 
-  test('Claude Cowork disabled tooltip — install + web-fallback affordance', async () => {
+  test('Claude Cowork disabled tooltip — install affordance', async () => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const state = computeRowState({
       target: targetById('claude-cowork'),
@@ -171,11 +158,9 @@ describe('computeRowState — branch 3: not installed', () => {
     expect(state.tooltip?.message).toBe('Requires Claude Desktop.');
     expect(state.tooltip?.installAction.label).toBe('Install Claude Desktop →');
     expect(state.tooltip?.installAction.url).toBe('https://claude.com/download');
-    expect(state.tooltip?.webFallback).toBeDefined();
-    expect(state.tooltip?.webFallback?.label).toBe('Open in claude.ai →');
   });
 
-  test('Claude disabled tooltip — install + web-fallback affordance', async () => {
+  test('Claude disabled tooltip — install affordance', async () => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const state = computeRowState({
       target: targetById('claude-code'),
@@ -183,10 +168,10 @@ describe('computeRowState — branch 3: not installed', () => {
       isElectronHost: true,
     });
     expect(state.enabled).toBe(false);
-    expect(state.tooltip?.webFallback?.label).toBe('Open in claude.ai →');
+    expect(state.tooltip?.installAction.label).toBe('Install Claude Desktop →');
   });
 
-  test('Cursor (Electron) disabled tooltip — install affordance only, no web fallback', async () => {
+  test('Cursor (Electron) disabled tooltip — install affordance', async () => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const state = computeRowState({
       target: targetById('cursor'),
@@ -197,7 +182,6 @@ describe('computeRowState — branch 3: not installed', () => {
     expect(state.tooltip?.message).toBe('Requires Cursor.');
     expect(state.tooltip?.installAction.label).toBe('Install Cursor →');
     expect(state.tooltip?.installAction.url).toBe('https://cursor.com/');
-    expect(state.tooltip?.webFallback).toBeUndefined();
   });
 });
 
@@ -222,7 +206,7 @@ describe('computeRowState — branch 4: installed → enabled', () => {
     ['claude-cowork' as const],
     ['claude-code' as const],
     ['codex' as const],
-  ])('row %s on web with installed:true is enabled (only Cursor is web-host disabled)', async (id) => {
+  ])('row %s on web with installed:true is enabled', async (id) => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const state = computeRowState({
       target: targetById(id),
@@ -234,50 +218,8 @@ describe('computeRowState — branch 4: installed → enabled', () => {
   });
 });
 
-describe('computeWebFallbackUrl — wraps buildClaudeAiWebUrl', () => {
-  test('round-trips a simple prompt', async () => {
-    const { computeWebFallbackUrl } = await import('./OpenInAgentMenuItem');
-    const url = computeWebFallbackUrl('hello world');
-    expect(url).toBe('https://claude.ai/new?q=hello%20world');
-  });
-
-  test('encodes the OK-composed prompt template', async () => {
-    const { computeWebFallbackUrl } = await import('./OpenInAgentMenuItem');
-    const prompt =
-      'Open Knowledge doc: specs/foo/SPEC.md. Use the open-knowledge MCP tool for backlinks and related context.';
-    const url = computeWebFallbackUrl(prompt);
-    expect(url.startsWith('https://claude.ai/new?q=')).toBe(true);
-    const q = url.slice('https://claude.ai/new?q='.length);
-    expect(decodeURIComponent(q)).toBe(prompt);
-  });
-
-  test('survives unicode + percent + space + em-dash without corruption', async () => {
-    const { computeWebFallbackUrl } = await import('./OpenInAgentMenuItem');
-    const prompt = 'café — 100%';
-    const url = computeWebFallbackUrl(prompt);
-    const q = url.slice('https://claude.ai/new?q='.length);
-    expect(decodeURIComponent(q)).toBe(prompt);
-  });
-});
-
-describe('successToastForWebFallback — distinct from dispatch toast copy', () => {
-  test('matches the agreed copy for each Claude target', async () => {
-    const { successToastForWebFallback } = await import('./OpenInAgentMenuItem');
-    expect(successToastForWebFallback('Claude Cowork')).toBe(
-      'Opened Claude Cowork in your browser.',
-    );
-    expect(successToastForWebFallback('Claude')).toBe('Opened Claude in your browser.');
-  });
-
-  test('explicitly differs from `Opened in <name>.` (dispatch copy) — fallback signals web', async () => {
-    const { successToastForWebFallback } = await import('./OpenInAgentMenuItem');
-    const message = successToastForWebFallback('Claude Cowork');
-    expect(message).not.toBe('Opened in Claude Cowork.');
-  });
-});
-
 describe('install-state cardinality used by the dropdown', () => {
-  test('every KNOWN_TARGETS entry maps to one of the three branches under any install state', async () => {
+  test('every KNOWN_TARGETS entry maps to one of the branches under any install state', async () => {
     const { computeRowState } = await import('./OpenInAgentMenuItem');
     const installStates: ReadonlyArray<InstallState> = [
       { installed: null },

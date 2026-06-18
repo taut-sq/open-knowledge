@@ -1,12 +1,11 @@
-import {
-  composeFilePrompt,
-  type HandoffOutcome,
-  type HandoffTarget,
-  type InstallState,
-  type TargetData,
+import type {
+  HandoffOutcome,
+  HandoffTarget,
+  InstallState,
+  TargetData,
 } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles, SquareTerminal } from 'lucide-react';
+import { Sparkles, SquareTerminal } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -18,18 +17,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
-import { useConfigContext } from '@/lib/config-context';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
-import {
-  dispatchClaudeWebFallback,
-  OpenInAgentMenuItem,
-  successToastForWebFallback,
-} from './OpenInAgentMenuItem';
+import { OpenInAgentMenuItem } from './OpenInAgentMenuItem';
 import { useTerminalLaunch } from './TerminalLaunchContext';
 import { type HandoffDispatchInput, useHandoffDispatch } from './useHandoffDispatch';
 import { useInstalledAgents } from './useInstalledAgents';
-
-export { successToastForWebFallback };
 
 interface OpenInAgentMenuProps {
   /** Active doc context. When `null`, the trigger renders disabled (nothing
@@ -47,7 +39,6 @@ interface OpenInAgentMenuContentProps {
     input: HandoffDispatchInput,
   ) => Promise<HandoffOutcome>;
   readonly isElectronHost: boolean;
-  readonly autoOpen: boolean;
   readonly align?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly className?: string;
 }
@@ -57,17 +48,11 @@ function OpenInAgentMenuContent({
   states,
   dispatch,
   isElectronHost,
-  autoOpen,
   align = 'end',
   className = 'min-w-[220px]',
 }: OpenInAgentMenuContentProps): ReactNode {
   const { t } = useLingui();
   const terminalLaunch = useTerminalLaunch();
-  const isSelectionScope = Boolean(input?.selection);
-  const prompt =
-    input !== null && input.docContext !== null
-      ? composeFilePrompt(input.docContext.relativePath, autoOpen)
-      : '';
 
   const handleSelect = (target: TargetData): void => {
     if (input === null) return;
@@ -79,12 +64,7 @@ function OpenInAgentMenuContent({
   );
   const probePending = VISIBLE_TARGETS.some((target) => states[target.id]?.installed == null);
 
-  const claudeInstalled = states['claude-code']?.installed === true;
-
-  const handleClaudeWebFallback = (): void => {
-    if (input === null) return;
-    void dispatchClaudeWebFallback(prompt);
-  };
+  const showEmptyHint = installedTargets.length === 0 && terminalLaunch === null;
 
   return (
     <DropdownMenuContent align={align} className={className} data-testid="open-in-agent-menu">
@@ -96,34 +76,17 @@ function OpenInAgentMenuContent({
             target={target}
             installState={installState}
             isElectronHost={isElectronHost}
-            prompt={prompt}
             onSelect={() => handleSelect(target)}
           />
         );
       })}
-      {isSelectionScope && installedTargets.length === 0 ? (
-        <DropdownMenuItem disabled data-testid="open-in-agent-selection-empty">
+      {showEmptyHint ? (
+        <DropdownMenuItem disabled data-testid="open-in-agent-empty">
           {probePending ? (
             <Trans>Checking for installed agents</Trans>
           ) : (
             <Trans>No installed agents found</Trans>
           )}
-        </DropdownMenuItem>
-      ) : null}
-      {!claudeInstalled && !isSelectionScope ? (
-        <DropdownMenuItem
-          onSelect={handleClaudeWebFallback}
-          disabled={input === null}
-          data-testid="open-in-agent-claude-web-fallback"
-          aria-label={t`Open in claude.ai, opens in browser with prompt pre-filled`}
-        >
-          <ExternalLink className="size-4" aria-hidden="true" />
-          <span className="flex-1">
-            <Trans>Open in claude.ai →</Trans>
-          </span>
-          <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-            <Trans>opens in browser</Trans>
-          </span>
         </DropdownMenuItem>
       ) : null}
       {terminalLaunch !== null ? (
@@ -152,8 +115,6 @@ function OpenInAgentMenuContent({
 export function OpenInAgentMenu({ input, open, onOpenChange }: OpenInAgentMenuProps): ReactNode {
   const { states, refresh } = useInstalledAgents();
   const { dispatch } = useHandoffDispatch();
-  const { merged } = useConfigContext();
-  const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
   const [internalOpen, setInternalOpen] = useState(false);
   const sawPointerDownRef = useRef(false);
   const isEmbedded = useIsEmbedded();
@@ -207,7 +168,6 @@ export function OpenInAgentMenu({ input, open, onOpenChange }: OpenInAgentMenuPr
         states={states}
         dispatch={dispatch}
         isElectronHost={isElectronHost}
-        autoOpen={autoOpen}
       />
     </DropdownMenu>
   );

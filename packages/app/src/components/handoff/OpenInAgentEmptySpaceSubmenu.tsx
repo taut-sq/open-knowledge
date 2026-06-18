@@ -1,12 +1,7 @@
-import {
-  composeFilePrompt,
-  type HandoffOutcome,
-  type HandoffTarget,
-  type InstallState,
-} from '@inkeep/open-knowledge-core';
+import type { HandoffOutcome, HandoffTarget, InstallState } from '@inkeep/open-knowledge-core';
 import { t } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
-import { ExternalLink, Sparkles, SquareTerminal } from 'lucide-react';
+import { Sparkles, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   ContextMenuItem,
@@ -16,9 +11,8 @@ import {
   ContextMenuSubTrigger,
 } from '@/components/ui/context-menu';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
-import { useConfigContext } from '@/lib/config-context';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
-import { dispatchClaudeWebFallback, TargetIcon } from './OpenInAgentMenuItem';
+import { TargetIcon } from './OpenInAgentMenuItem';
 import { useTerminalLaunch } from './TerminalLaunchContext';
 import type { HandoffDispatchInput } from './useHandoffDispatch';
 
@@ -43,21 +37,14 @@ interface OpenInAgentEmptySpaceSubmenuProps {
     target: HandoffTarget,
     input: HandoffDispatchInput,
   ) => Promise<HandoffOutcome>;
-  /** Show the "Open in claude.ai →" web-fallback row when Claude Desktop
-   *  isn't installed. Default `true` matches the file-surface convention;
-   *  folder + empty-space surfaces pass `false` — the claude.ai web URL has
-   *  no companion `folder=` param to ground the cloud agent. */
-  readonly webFallbackVisible?: boolean;
 }
 
 export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenuProps): ReactNode {
   const { t } = useLingui();
   const isEmbedded = useIsEmbedded();
-  const { merged } = useConfigContext();
   const terminalLaunch = useTerminalLaunch();
-  const autoOpen = merged?.appearance?.preview?.autoOpen ?? true;
   if (isEmbedded) return null;
-  const { input, installStates, dispatch, webFallbackVisible = true } = props;
+  const { input, installStates, dispatch } = props;
   const inputMissing = input === null;
   const hint = emptySpaceRowHint(inputMissing);
 
@@ -65,21 +52,8 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
     (target) => installStates[target.id]?.installed === true,
   );
 
-  const claudeInstalled = installStates['claude-code']?.installed === true;
-
-  const prompt =
-    input !== null && input.docContext !== null
-      ? composeFilePrompt(input.docContext.relativePath, autoOpen)
-      : '';
-
-  const handleClaudeWebFallback = (): void => {
-    if (input === null) return;
-    void dispatchClaudeWebFallback(prompt);
-  };
-
-  const fallbackRowVisible = webFallbackVisible && !claudeInstalled;
   const terminalRowVisible = terminalLaunch !== null;
-  if (installedTargets.length === 0 && !fallbackRowVisible && !terminalRowVisible) {
+  if (installedTargets.length === 0 && !terminalRowVisible) {
     return null;
   }
 
@@ -117,22 +91,6 @@ export function OpenInAgentEmptySpaceSubmenu(props: OpenInAgentEmptySpaceSubmenu
             </ContextMenuItem>
           );
         })}
-        {webFallbackVisible && !claudeInstalled ? (
-          <ContextMenuItem
-            onSelect={handleClaudeWebFallback}
-            disabled={inputMissing}
-            data-testid="empty-space-open-in-claude-web-fallback"
-            aria-label={t`Open in claude.ai, opens in browser with prompt pre-filled`}
-          >
-            <ExternalLink className="size-4" aria-hidden="true" />
-            <span className="flex-1">
-              <Trans>Open in claude.ai →</Trans>
-            </span>
-            <span aria-hidden="true" className="ml-2 text-muted-foreground text-xs">
-              <Trans>opens in browser</Trans>
-            </span>
-          </ContextMenuItem>
-        ) : null}
         {terminalLaunch !== null ? (
           <>
             <ContextMenuSeparator />

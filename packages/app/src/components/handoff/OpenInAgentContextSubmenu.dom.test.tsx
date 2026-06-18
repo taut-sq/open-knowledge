@@ -60,11 +60,9 @@ function installStates(
 async function renderSubmenu({
   input = readyInput,
   states = installStates(),
-  webFallbackVisible,
 }: {
   input?: HandoffDispatchInput | null;
   states?: Record<HandoffTarget, InstallState>;
-  webFallbackVisible?: boolean;
 } = {}) {
   const { OpenInAgentContextSubmenu } = await import('./OpenInAgentContextSubmenu');
   const dispatchCalls: Array<{ input: HandoffDispatchInput; target: HandoffTarget }> = [];
@@ -81,7 +79,6 @@ async function renderSubmenu({
           input={input}
           installStates={states}
           isElectronHost={true}
-          webFallbackVisible={webFallbackVisible}
         />
       </DropdownMenuContent>
     </DropdownMenu>,
@@ -107,7 +104,7 @@ describe('OpenInAgentContextSubmenu runtime behavior', () => {
     expect(screen.getByTestId('file-tree-open-in-codex')).toBeTruthy();
     expect(screen.queryByTestId('file-tree-open-in-claude-cowork') === null).toBe(true);
     expect(screen.queryByTestId('file-tree-open-in-cursor') === null).toBe(true);
-    expect(screen.getByTestId('file-tree-open-in-claude-web-fallback')).toBeTruthy();
+    expect(screen.queryByTestId('file-tree-open-in-claude-web-fallback') === null).toBe(true);
 
     await userEvent.click(screen.getByRole('menuitem', { name: 'Open with AI Codex' }));
 
@@ -126,17 +123,39 @@ describe('OpenInAgentContextSubmenu runtime behavior', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  test('hides the Claude web fallback when the caller opts out or Claude is installed', async () => {
-    await renderSubmenu({ webFallbackVisible: false });
-    expect(screen.queryByTestId('file-tree-open-in-claude-web-fallback') === null).toBe(true);
-    cleanup();
-
+  test('renders an installed Claude row (no claude.ai fallback anywhere)', async () => {
     await renderSubmenu({
       states: installStates({
         'claude-code': { installed: true, lastChecked: 1 },
       }),
     });
-    expect(screen.queryByTestId('file-tree-open-in-claude-web-fallback') === null).toBe(true);
     expect(screen.getByTestId('file-tree-open-in-claude-code')).toBeTruthy();
+    expect(screen.queryByTestId('file-tree-open-in-claude-web-fallback') === null).toBe(true);
+  });
+
+  test('shows the empty hint when no targets are installed', async () => {
+    await renderSubmenu({
+      states: installStates({
+        'claude-code': { installed: false, lastChecked: 1 },
+        'claude-cowork': { installed: false, lastChecked: 1 },
+        codex: { installed: false, lastChecked: 1 },
+        cursor: { installed: false, lastChecked: 1 },
+      }),
+    });
+    const empty = screen.getByTestId('file-tree-open-in-empty');
+    expect(empty.textContent).toContain('No installed agents found');
+  });
+
+  test('shows the checking hint while the install probe is pending', async () => {
+    await renderSubmenu({
+      states: installStates({
+        'claude-code': { installed: null },
+        'claude-cowork': { installed: null },
+        codex: { installed: null },
+        cursor: { installed: null },
+      }),
+    });
+    const empty = screen.getByTestId('file-tree-open-in-empty');
+    expect(empty.textContent).toContain('Checking for installed agents');
   });
 });

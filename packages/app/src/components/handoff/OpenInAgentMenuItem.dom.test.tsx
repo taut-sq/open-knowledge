@@ -49,7 +49,6 @@ describe('OpenInAgentMenuItem runtime behavior', () => {
         target={target('codex')}
         installState={{ installed: true, lastChecked: 1 }}
         isElectronHost
-        prompt="Open docs/notes.md"
         onSelect={() => selected.push('codex')}
       />,
     );
@@ -59,16 +58,14 @@ describe('OpenInAgentMenuItem runtime behavior', () => {
     expect(selected).toEqual(['codex']);
   });
 
-  test('not-installed Claude row exposes install and web-fallback submenu affordances', async () => {
+  test('not-installed Claude row exposes the install affordance only (no claude.ai web fallback)', async () => {
     const { OpenInAgentMenuItem } = await import('./OpenInAgentMenuItem');
     const openedUrls: string[] = [];
-    const webFallbackSuccesses: string[] = [];
     renderMenuItem(
       <OpenInAgentMenuItem
         target={target('claude-code')}
         installState={{ installed: false, lastChecked: 1 }}
         isElectronHost
-        prompt="Open docs/notes.md"
         onSelect={() => {
           throw new Error('disabled row should not dispatch');
         }}
@@ -76,7 +73,6 @@ describe('OpenInAgentMenuItem runtime behavior', () => {
           openedUrls.push(url);
           return { ok: true };
         }}
-        onWebFallbackSuccess={(entry) => webFallbackSuccesses.push(entry.id)}
       />,
     );
 
@@ -91,12 +87,10 @@ describe('OpenInAgentMenuItem runtime behavior', () => {
     expect(screen.getByTestId('open-in-agent-message-claude-code').textContent).toBe(
       'Requires Claude Desktop.',
     );
-    await userEvent.click(screen.getByTestId('open-in-agent-install-claude-code'));
-    await userEvent.click(screen.getByTestId('open-in-agent-web-fallback-claude-code'));
+    expect(screen.queryByTestId('open-in-agent-web-fallback-claude-code')).toBeNull();
 
-    expect(openedUrls[0]).toBe('https://claude.com/download');
-    expect(openedUrls[1]).toContain('https://claude.ai/new?q=');
-    expect(decodeURIComponent(openedUrls[1].split('q=')[1] ?? '')).toBe('Open docs/notes.md');
-    expect(webFallbackSuccesses).toEqual(['claude-code']);
+    await userEvent.click(screen.getByTestId('open-in-agent-install-claude-code'));
+
+    expect(openedUrls).toEqual(['https://claude.com/download']);
   });
 });

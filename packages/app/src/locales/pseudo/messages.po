@@ -357,10 +357,6 @@ msgstr ""
 msgid "{userName}, {tabCount, plural, one {# concurrent tab} other {# concurrent tabs}}"
 msgstr ""
 
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "{webFallbackLabel}, opens in browser with prompt pre-filled"
-msgstr ""
-
 #: src/components/EditorFooter.tsx
 msgid "{words, plural, one {word} other {words}}"
 msgstr ""
@@ -925,6 +921,7 @@ msgid "Checkbox"
 msgstr ""
 
 #: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
 msgid "Checking for installed agents"
 msgstr ""
@@ -1549,10 +1546,6 @@ msgstr ""
 
 #: src/components/TrashFailureModal.tsx
 msgid "Couldn't move to Trash"
-msgstr ""
-
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Couldn't open {CLAUDE_WEB_FALLBACK_LABEL} in your browser."
 msgstr ""
 
 #: src/components/DocumentErrorBoundary.tsx
@@ -3562,6 +3555,7 @@ msgid "No Incoming"
 msgstr ""
 
 #: src/components/handoff/EditWithAiPopover.tsx
+#: src/components/handoff/OpenInAgentContextSubmenu.tsx
 #: src/components/handoff/OpenInAgentMenu.tsx
 msgid "No installed agents found"
 msgstr ""
@@ -3872,19 +3866,6 @@ msgstr ""
 msgid "Open in {shareBranch}"
 msgstr ""
 
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Open in claude.ai →"
-msgstr ""
-
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-msgid "Open in claude.ai, opens in browser with prompt pre-filled"
-msgstr ""
-
 #: src/components/ShareBranchSwitchDialog.tsx
 msgid "Open in current branch"
 msgstr ""
@@ -4033,10 +4014,6 @@ msgstr ""
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr ""
 
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "Opened {displayName} in your browser."
-msgstr ""
-
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr ""
@@ -4047,16 +4024,6 @@ msgstr ""
 
 #: src/components/LinksPanel.tsx
 msgid "Opens in a new tab"
-msgstr ""
-
-#: src/components/handoff/OpenInAgentContextSubmenu.tsx
-#: src/components/handoff/OpenInAgentEmptySpaceSubmenu.tsx
-#: src/components/handoff/OpenInAgentMenu.tsx
-msgid "opens in browser"
-msgstr ""
-
-#: src/components/handoff/OpenInAgentMenuItem.tsx
-msgid "opens in browser with prompt pre-filled"
 msgstr ""
 
 #: src/components/EmptyEditorState.tsx

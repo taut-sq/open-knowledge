@@ -7,7 +7,6 @@ export const KNOWN_TARGETS = [
     appBrandName: 'Claude Desktop',
     schemes: ['claude:'],
     installUrl: 'https://claude.com/download',
-    hasWebFallback: true,
     tagline: "Conversational pairing in Claude Desktop's Cowork tab.",
   },
   {
@@ -16,7 +15,6 @@ export const KNOWN_TARGETS = [
     appBrandName: 'Claude Desktop',
     schemes: ['claude:'],
     installUrl: 'https://claude.com/download',
-    hasWebFallback: true,
     tagline: "Agentic coding in Claude Desktop's Code tab.",
   },
   {

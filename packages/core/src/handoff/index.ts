@@ -27,4 +27,3 @@ export {
   URN_IPC_REGISTRY,
   type UrnIpcLookup,
 } from './urn-ipc-registry.ts';
-export { buildClaudeAiWebUrl } from './web-fallback-url.ts';

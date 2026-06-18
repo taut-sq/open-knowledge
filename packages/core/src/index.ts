@@ -344,7 +344,6 @@ export {
 } from './git/worktree-list-parser.ts';
 export {
   assertNeverUrnIpcLookup,
-  buildClaudeAiWebUrl,
   buildClaudeLaunchCommand,
   buildClaudeUrl,
   buildCodexUrl,

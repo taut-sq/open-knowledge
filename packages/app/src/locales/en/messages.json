@@ -33,7 +33,6 @@
     "092Wah": ["Enter a name for this template."],
     "0BB9ID": ["No headings yet."],
     "0NA4b3": ["Keep my version"],
-    "0S9PW_": ["Open in claude.ai →"],
     "0YEbfk": ["Connect to AI tools"],
     "0_J12R": [
       "New file from template \"",
@@ -328,7 +327,6 @@
     "96w9hU": ["Something went wrong opening this file (HTTP ", ["status"], ")."],
     "99eR72": ["Visual editor table selection"],
     "9Bd18D": ["Failed to load hub pages"],
-    "9NC_MT": ["Couldn't open ", ["CLAUDE_WEB_FALLBACK_LABEL"], " in your browser."],
     "9NJWgv": ["Backlinks"],
     "9PQysm": ["Hide advanced"],
     "9R7pRC": ["No tags match \"", ["trimmed"], "\". Continue typing to create one."],
@@ -1065,7 +1063,6 @@
     ],
     "Z8KDox": ["Enter a folder name (e.g. brain)."],
     "Z8lGw6": ["Share"],
-    "Z9BoIy": ["opens in browser with prompt pre-filled"],
     "ZBYKxv": [
       "Reverts every change this agent made to <0>",
       ["docName"],
@@ -1135,7 +1132,6 @@
       "/ and all files inside? This action cannot be undone."
     ],
     "a9OzSn": ["No pages found for \"", ["trimmedQuery"], "\""],
-    "aA51jP": ["Open in claude.ai, opens in browser with prompt pre-filled"],
     "aE2_XM": ["One pattern per line — appended to <0>.okignore</0>."],
     "aENGMB": [
       "Semantic search adds meaning-based ranking to the search tool so conceptually-related pages surface even without shared keywords."
@@ -1344,7 +1340,6 @@
     "hYDc6B": ["Name cannot be empty"],
     "hYgDIe": ["Create"],
     "hZoBHK": ["Empty starting content"],
-    "h_HYHD": ["Opened ", ["displayName"], " in your browser."],
     "haHgQj": ["Copied relative path"],
     "he3ygx": ["Copy"],
     "hjO0Mq": ["Add tab"],
@@ -1465,7 +1460,6 @@
     "lond3p": ["Shows above the code body. Round-trips as `title=\"...\"` in markdown."],
     "lrhetp": ["+ ", ["overflow"], " more"],
     "ls1N1w": ["(missing)"],
-    "lsOFZR": [["webFallbackLabel"], ", opens in browser with prompt pre-filled"],
     "lyWa43": ["Project-level disconnected pages"],
     "lzmtKp": ["Failed to load folder properties: ", ["message"]],
     "lzwo7p": ["Could not open GitHub sign-in. Please try again."],
@@ -1602,7 +1596,6 @@
     "pZAs1T": ["Failed to load outgoing links"],
     "pajIrl": ["Could not turn off the terminal: ", ["0"]],
     "pbwTg6": [["seconds"], "s ago"],
-    "pcfY8r": ["opens in browser"],
     "pckX1A": [["0", "plural", { "one": ["#", " use"], "other": ["#", " uses"] }]],
     "pd0UH2": ["Align right"],
     "pgq_xf": [["0"], "/", ["1"], " ", ["2"]],

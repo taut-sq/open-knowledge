@@ -16,7 +16,6 @@ mock.module('@lingui/react/macro', () => ({
 
 const refreshCalls: string[] = [];
 const dispatchCalls: Array<{ target: string; input: HandoffDispatchInput }> = [];
-const fallbackPrompts: string[] = [];
 let states: Record<string, { installed: boolean | null; lastChecked?: number }> = {};
 
 mock.module('./useInstalledAgents', () => ({
@@ -48,20 +47,12 @@ mock.module('@/hooks/use-is-embedded', () => ({
   useIsEmbedded: () => false,
 }));
 
-const successToastForWebFallback = (displayName: string) =>
-  `Opened ${displayName} in your browser.`;
-
 mock.module('./OpenInAgentMenuItem', () => ({
   OpenInAgentMenuItem: ({ target, onSelect }: { target: TargetData; onSelect: () => void }) => (
     <button type="button" data-testid={`open-in-agent-row-${target.id}`} onClick={onSelect}>
       {target.displayName}
     </button>
   ),
-  dispatchClaudeWebFallback: (prompt: string) => {
-    fallbackPrompts.push(prompt);
-    return Promise.resolve();
-  },
-  successToastForWebFallback,
 }));
 
 const input: HandoffDispatchInput = {
@@ -91,16 +82,12 @@ describe('OpenInAgentMenu runtime behavior', () => {
     cleanup();
     refreshCalls.length = 0;
     dispatchCalls.length = 0;
-    fallbackPrompts.length = 0;
     states = {};
   });
 
-  test('exports the shell component and success toast re-export', async () => {
+  test('exports the shell component', async () => {
     const mod = await import('./OpenInAgentMenu');
-    const itemMod = await import('./OpenInAgentMenuItem');
-
     expect(typeof mod.OpenInAgentMenu).toBe('function');
-    expect(mod.successToastForWebFallback).toBe(itemMod.successToastForWebFallback);
   });
 
   test('trigger uses visible Open with AI text as its accessible name', async () => {
@@ -140,9 +127,9 @@ describe('OpenInAgentMenu runtime behavior', () => {
     expect(dispatchCalls).toEqual([{ target: 'codex', input }]);
   });
 
-  test('Claude web fallback appears when the visible Claude row is not installed', async () => {
+  test('shows the empty hint (no claude.ai fallback) when nothing is installed', async () => {
     states = {
-      'claude-cowork': { installed: true, lastChecked: 1 },
+      'claude-cowork': { installed: false, lastChecked: 1 },
       'claude-code': { installed: false, lastChecked: 1 },
       codex: { installed: false, lastChecked: 1 },
       cursor: { installed: false, lastChecked: 1 },
@@ -150,22 +137,22 @@ describe('OpenInAgentMenu runtime behavior', () => {
     await renderMenu();
     await openMenu();
 
-    const fallback = screen.getByTestId('open-in-agent-claude-web-fallback');
-    expect(fallback.textContent).toContain('Open in claude.ai');
-
-    await userEvent.click(fallback);
-    expect(fallbackPrompts).toHaveLength(1);
-    expect(fallbackPrompts[0]).toContain('docs/notes.md');
+    const empty = screen.getByTestId('open-in-agent-empty');
+    expect(empty.textContent).toContain('No installed agents found');
+    expect(screen.queryByTestId('open-in-agent-claude-web-fallback')).toBeNull();
   });
 
-  test('Claude web fallback is hidden when claude-code is installed', async () => {
+  test('shows the checking hint while the install probe is pending', async () => {
     states = {
-      'claude-cowork': { installed: false, lastChecked: 1 },
-      'claude-code': { installed: true, lastChecked: 1 },
+      'claude-cowork': { installed: null },
+      'claude-code': { installed: null },
+      codex: { installed: null },
+      cursor: { installed: null },
     };
     await renderMenu();
     await openMenu();
 
-    expect(screen.queryByTestId('open-in-agent-claude-web-fallback')).toBeNull();
+    const empty = screen.getByTestId('open-in-agent-empty');
+    expect(empty.textContent).toContain('Checking for installed agents');
   });
 });

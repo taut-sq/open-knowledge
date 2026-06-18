@@ -53,6 +53,5 @@ export interface TargetData {
   readonly appBrandName?: string;
   readonly schemes: ReadonlyArray<string>;
   readonly installUrl: string;
-  readonly hasWebFallback?: boolean;
   readonly tagline?: string;
 }
