@@ -70,8 +70,7 @@ export function EmptyEditorState() {
           setDocumentCount(countEntries(success.data.documents));
         }
       })
-      .catch(() => {
-      });
+      .catch(() => {});
   }
 
   const messageReady = documentCount !== null;

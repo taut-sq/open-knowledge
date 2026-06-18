@@ -1,7 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useState } from 'react';
 import { toast } from 'sonner';
-import { TerminalConsentDialog } from '@/components/TerminalConsentDialog';
 import { Switch } from '@/components/ui/switch';
 import { useTerminalConsentState, useTerminalEnabledWriter } from '@/hooks/use-terminal-enabled';
 
@@ -9,13 +7,12 @@ export function TerminalSection() {
   const { t } = useLingui();
   const { enabled, synced } = useTerminalConsentState();
   const writer = useTerminalEnabledWriter();
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const isOn = enabled === true;
+  const isOn = enabled !== false;
 
-  function applyEnabled(next: boolean): boolean {
+  function applyEnabled(next: boolean): void {
     if (writer === null) {
       toast.error(t`Terminal settings not loaded yet — try again in a moment.`);
-      return false;
+      return;
     }
     const result = writer(next);
     if (!result.ok) {
@@ -24,21 +21,7 @@ export function TerminalSection() {
           ? t`Could not enable the terminal: ${result.error}`
           : t`Could not turn off the terminal: ${result.error}`,
       );
-      return false;
     }
-    return true;
-  }
-
-  function onToggle(next: boolean) {
-    if (next) {
-      setConfirmOpen(true);
-      return;
-    }
-    applyEnabled(false);
-  }
-
-  function onConfirmEnable() {
-    if (applyEnabled(true)) setConfirmOpen(false);
   }
 
   return (
@@ -66,18 +49,12 @@ export function TerminalSection() {
         <Switch
           id="settings-terminal-toggle"
           checked={isOn}
-          onCheckedChange={onToggle}
+          onCheckedChange={applyEnabled}
           disabled={!synced || writer === null}
           aria-label={t`Enable terminal for this project`}
           data-testid="settings-terminal-toggle"
         />
       </div>
-
-      <TerminalConsentDialog
-        open={confirmOpen}
-        onAccept={onConfirmEnable}
-        onDecline={() => setConfirmOpen(false)}
-      />
     </section>
   );
 }

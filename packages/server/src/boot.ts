@@ -75,8 +75,7 @@ export function findLegacyRuntimeFiles(okDir: string): string[] {
       if (existsSync(candidate) && statSync(candidate).isDirectory()) {
         found.push(`${name}/`);
       }
-    } catch {
-    }
+    } catch {}
   }
   return found;
 }
@@ -352,8 +351,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
           'ui.lock already held by a live process — yielding (advertisement is fulfilled)',
         );
       } else {
-        await destroyHocuspocus().catch(() => {
-        });
+        await destroyHocuspocus().catch(() => {});
         throw err;
       }
     }
@@ -427,8 +425,7 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
         log.warn({ err: releaseErr }, 'releaseUiLock failed during listen-error cleanup');
       }
     }
-    await destroyHocuspocus().catch(() => {
-    });
+    await destroyHocuspocus().catch(() => {});
     throw err;
   }
 

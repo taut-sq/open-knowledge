@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInstallSkill } from './install-skill.ts';
 
-
 function makeFakeSpawn(capture: {
   command?: string;
   args?: readonly string[];

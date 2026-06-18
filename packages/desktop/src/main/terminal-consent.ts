@@ -1,7 +1,7 @@
-
 import { existsSync, readFileSync } from 'node:fs';
 import { resolveConfigPath } from '@inkeep/open-knowledge-core/server';
 import { parse as parseYaml } from 'yaml';
+import { getLogger } from './desktop-logger.ts';
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -9,17 +9,18 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 export function isTerminalConsented(projectDir: string): boolean {
   const path = resolveConfigPath('project-local', projectDir);
-  if (!existsSync(path)) return false;
+  if (!existsSync(path)) return true;
   let parsed: unknown;
   try {
     parsed = parseYaml(readFileSync(path, 'utf-8'));
-  } catch {
-    return false;
+  } catch (err) {
+    getLogger('terminal-consent').warn({ err }, 'config read/parse failed; failing open');
+    return true;
   }
-  if (!isObject(parsed)) return false;
+  if (!isObject(parsed)) return true;
   const terminal = parsed.terminal;
-  if (!isObject(terminal)) return false;
-  return terminal.enabled === true;
+  if (!isObject(terminal)) return true;
+  return terminal.enabled !== false;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

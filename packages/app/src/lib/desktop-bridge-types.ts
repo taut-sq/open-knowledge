@@ -142,7 +142,9 @@ type OkMenuAction =
   | 'expand-all-tree'
   | 'collapse-all-tree'
   | 'toggle-doc-panel'
-  | 'toggle-terminal';
+  | 'toggle-terminal'
+  | 'new-terminal'
+  | 'kill-terminal';
 
 type OkUnsubscribe = () => void;
 
@@ -371,9 +373,7 @@ export type OkLocalOpAuthReposResponse =
   | { ok: true; host: string; repos: OkLocalOpRepoEntry[] }
   | { ok: false; error: string };
 
-export type OkLocalOpAuthSignoutResponse =
-  | { ok: true }
-  | { ok: false; error?: string };
+export type OkLocalOpAuthSignoutResponse = { ok: true } | { ok: false; error?: string };
 
 type OkEditorActiveTargetSnapshot =
   | { readonly kind: 'doc'; readonly identifier: string }
@@ -389,6 +389,7 @@ interface OkEditorViewMenuStateSnapshot {
   readonly sidebarVisible: boolean;
   readonly docPanelVisible?: boolean;
   readonly terminalVisible?: boolean;
+  readonly terminalLive?: boolean;
 }
 
 interface OkKeyringSmokeResult {

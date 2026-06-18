@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import type { FootnoteDefinition, FootnoteReference } from 'mdast';
 import type { MdxJsxFlowElement, MdxJsxTextElement } from 'mdast-util-mdx';
@@ -686,5 +685,4 @@ describe('FR-20 adversarial fuzz — no unescaped <script> in any emitted HTML',
       expect(out).not.toContain('<iframe');
     }
   });
-
 });

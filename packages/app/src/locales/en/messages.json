@@ -186,6 +186,7 @@
     "5Tk8Fb": ["Loading files"],
     "5WDhAk": ["Link to a page or external URL."],
     "5ZB7XC": ["File drop zone"],
+    "5_j-DA": ["Kill Terminal"],
     "5gr_ev": [
       "Becomes the document's content when someone creates a doc from this template. Type <0>",
       ["dateToken"],
@@ -232,6 +233,7 @@
     "67f-3g": ["Duplicate succeeded but the sidebar may be out of date — refresh to resync"],
     "6Aih4U": ["Offline"],
     "6LbUG7": ["The repository is private and your GitHub account doesn't have access to it."],
+    "6MnZEC": ["Terminal failed to load"],
     "6O626z": ["No headings match \"", ["trimmedAnchorQuery"], "\""],
     "6Pxqwv": [
       "No project templates yet. Create one to make it available everywhere in this project. Folder-scoped templates live on each folder's overview page."
@@ -1253,7 +1255,6 @@
       "Writes a project-MCP config for each selected tool; Claude also gets <0>.claude/launch.json</0>."
     ],
     "eVPynQ": ["Open <0><1>", ["verificationUri"], "</1><2/></0> and enter this code:"],
-    "eiG6_3": ["The terminal is not enabled for this project."],
     "emgiet": ["Authoritative content; mirrored verbatim everywhere it's referenced."],
     "ensWZc": ["or start from scratch <0/>"],
     "euc6Ns": ["Duplicate"],
@@ -1276,6 +1277,7 @@
     "fYKgzG": ["Failed to load recent projects."],
     "fYjgXu": ["Unordered list of items."],
     "fbdLmk": ["Toggle bold formatting."],
+    "fbsiBw": ["Something went wrong starting the terminal."],
     "fiMNLl": ["Sync settings not yet loaded — try again in a moment"],
     "fqSfXY": ["Replace"],
     "fwhX-N": ["Indent or outdent source"],

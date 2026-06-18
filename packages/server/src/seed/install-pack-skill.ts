@@ -1,4 +1,3 @@
-
 import { existsSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { resolveBundledSkillDir } from '../build-skill-zip.ts';
@@ -42,8 +41,7 @@ export function installPackSkill(projectDir: string, packId: string): string[] {
       tracedMkdirSync(skillsRoot, { recursive: true });
       tracedCpSync(sourceDir, targetDir, { recursive: true });
       installed.push(label);
-    } catch {
-    }
+    } catch {}
   }
   return installed;
 }

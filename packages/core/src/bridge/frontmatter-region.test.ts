@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import {
   applyPatchToFm,
@@ -115,7 +114,6 @@ describe('parseFmRegion — recursive value contract (nested objects + arrays of
 });
 
 describe('applyPatchToFm — array style preservation', () => {
-
   test('flow-style input preserves flow style when patch replaces the array', () => {
     const fenced = '---\ntags: [travel, spain, 2026]\n---\n';
     const result = applyPatchToFm(fenced, { tags: ['travel', 'spain', '2026', 'paris'] });

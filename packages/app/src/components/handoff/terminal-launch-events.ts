@@ -1,4 +1,3 @@
-
 const TERMINAL_LAUNCH_EVENT = 'open-knowledge:terminal-launch';
 
 interface TerminalLaunchDetail {

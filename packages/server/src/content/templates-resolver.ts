@@ -1,4 +1,3 @@
-
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { stripFrontmatter, unwrapFrontmatterFences } from '@inkeep/open-knowledge-core';

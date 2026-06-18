@@ -1,4 +1,3 @@
-
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { z } from 'zod';
 import { agentIdentityFields, summaryField } from './_shared.ts';
@@ -234,4 +233,3 @@ export const SkillInstallStateSuccessSchema = z
   })
   .loose() satisfies StandardSchemaV1;
 export type SkillInstallStateSuccess = z.infer<typeof SkillInstallStateSuccessSchema>;
-

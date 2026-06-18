@@ -76,7 +76,6 @@ import {
   markerPrefixOf as prefixOf,
 } from './oracle-e-expectations.test-helper';
 
-
 function createPRNG(seed: number) {
   let state = seed | 0 || 1;
   return {
@@ -97,7 +96,6 @@ function createPRNG(seed: number) {
 }
 
 type Rng = ReturnType<typeof createPRNG>;
-
 
 type Op =
   | { kind: 'wysiwyg-type'; clientIdx: number; text: string; marker: string }
@@ -198,7 +196,6 @@ function generateOps(rng: Rng, clientCount: number, opCount: number): Op[] {
   return ops;
 }
 
-
 async function applyOp(
   op: Op,
   clients: TestClient[],
@@ -237,8 +234,7 @@ async function applyOp(
             return abs?.index ?? n;
           },
         });
-      } catch {
-      }
+      } catch {}
       break;
     }
     case 'agent-write': {
@@ -277,15 +273,13 @@ async function applyOp(
     case 'sync-pause': {
       try {
         clients[op.clientIdx]?.pauseSync();
-      } catch {
-      }
+      } catch {}
       break;
     }
     case 'sync-resume': {
       try {
         clients[op.clientIdx]?.resumeSync();
-      } catch {
-      }
+      } catch {}
       break;
     }
     case 'wait': {
@@ -348,7 +342,6 @@ async function driveToConvergence(
   return classifyFinalState(clients);
 }
 
-
 function writeFuzzSnapshot(
   seed: number,
   data: { ops: Op[]; error: unknown; clientStates: Array<{ ytext: string; fragmentMd: string }> },
@@ -372,8 +365,7 @@ function writeFuzzSnapshot(
         2,
       ),
     );
-  } catch {
-  }
+  } catch {}
 }
 
 function snapshotClients(clients: TestClient[]): Array<{ ytext: string; fragmentMd: string }> {
@@ -382,7 +374,6 @@ function snapshotClients(clients: TestClient[]): Array<{ ytext: string; fragment
     fragmentMd: serializeFragment(c.fragment),
   }));
 }
-
 
 const ALL_OP_KINDS = [
   'wysiwyg-type',
@@ -408,7 +399,6 @@ const WRITE_SURFACE_TO_OP_KIND: Record<string, readonly string[]> = {
   'chunked-source-paste': ['chunked-source-paste'],
   rollback: ['agent-write', 'agent-patch'],
 };
-
 
 const SEED_COUNT_PR = 75;
 const SEED_COUNT_NIGHTLY = 10_000;
@@ -603,8 +593,7 @@ describe('bridge-convergence fuzzer (FR-17)', () => {
         for (const c of clients) {
           try {
             c.resumeSync();
-          } catch {
-          }
+          } catch {}
         }
 
         const convergence = await driveToConvergence(clients, 60000);
@@ -760,7 +749,6 @@ describe('bridge-convergence fuzzer (FR-17)', () => {
     FIXED_SEED === undefined ? 120_000 : 300_000,
   );
 });
-
 
 describe('D18 coverage gate', () => {
   test('fuzzer op-set covers every bridge write surface', () => {

@@ -1,4 +1,3 @@
-
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
@@ -313,8 +312,7 @@ function probeWsUpgrade(url: string, timeoutMs: number): Promise<boolean> {
       settled = true;
       try {
         ws.close();
-      } catch {
-      }
+      } catch {}
       resolveProbe(ok);
     };
     const ws = new WebSocket(url);
@@ -442,6 +440,7 @@ let editorViewMenuState: EditorViewMenuStateSnapshot = {
   sidebarVisible: true,
   docPanelVisible: true,
   terminalVisible: false,
+  terminalLive: false,
 };
 
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL ?? null;
@@ -463,8 +462,7 @@ function runDriverBootSmokeInProduction(): void {
     quit: () => {
       try {
         app.quit();
-      } catch {
-      }
+      } catch {}
     },
     setTimeout: (fn, ms) => {
       setTimeout(fn, ms);
@@ -602,8 +600,7 @@ function ensureWindowManager() {
             } catch (spawnErr) {
               try {
                 closeSync(spawnErrorLogFd);
-              } catch {
-              }
+              } catch {}
               throw Object.assign(
                 new Error(
                   `spawnDetachedServer: child_process.spawn threw synchronously: ${
@@ -644,8 +641,7 @@ function ensureWindowManager() {
             } finally {
               try {
                 closeSync(spawnErrorLogFd);
-              } catch {
-              }
+              } catch {}
             }
             childRef.unref();
             const pid = childRef.pid;
@@ -1264,18 +1260,20 @@ async function runApplicationMenuRefresh(): Promise<void> {
     sidebarVisible: editorViewMenuState.sidebarVisible,
     docPanelVisible: editorViewMenuState.docPanelVisible,
     terminalVisible: editorViewMenuState.terminalVisible,
+    terminalLive: editorViewMenuState.terminalLive,
     onToggleShowHiddenFiles: () => sendMenuActionToFocused('toggle-show-hidden-files'),
     onToggleShowAllFiles: () => sendMenuActionToFocused('toggle-show-all-files'),
     onToggleSidebar: () => sendMenuActionToFocused('toggle-sidebar'),
     onToggleDocPanel: () => sendMenuActionToFocused('toggle-doc-panel'),
     onToggleTerminal: () => sendMenuActionToFocused('toggle-terminal'),
+    onNewTerminal: () => sendMenuActionToFocused('new-terminal'),
+    onKillTerminal: () => sendMenuActionToFocused('kill-terminal'),
     onExpandAll: () => sendMenuActionToFocused('expand-all-tree'),
     onCollapseAll: () => sendMenuActionToFocused('collapse-all-tree'),
     spellCheckEnabled: appState.spellCheckEnabled,
     onToggleSpellCheck: () => setSpellCheckEnabledAppWide(!appState.spellCheckEnabled),
   });
 }
-
 
 function sendMenuActionToFocused(action: OkMenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -2074,7 +2072,6 @@ function registerIpcHandlers() {
       return { ok: false, reason: 'other' };
     }
   });
-
 
   handle('ok:fs:default-projects-root', async () => {
     return resolveDefaultProjectsRoot(appState.lastUsedProjectParent, app.getPath('documents'));

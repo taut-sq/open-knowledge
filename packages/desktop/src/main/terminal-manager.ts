@@ -1,4 +1,3 @@
-
 import type { SendableWebContents } from '../shared/ipc-send.ts';
 import type { PtyHostIncomingMessage, PtyHostOutgoingMessage } from '../utility/pty-host.ts';
 
@@ -100,8 +99,7 @@ export function createTerminalManager(deps: TerminalManagerDeps): TerminalManage
   function safeKillUtility(handle: PtyWindowHandle): void {
     try {
       handle.utility.kill();
-    } catch {
-    }
+    } catch {}
   }
 
   function pushData(handle: PtyWindowHandle, ptyId: string, data: string): void {

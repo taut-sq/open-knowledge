@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import type { ClaudeReadiness, OkDesktopBridge, OkPtyData } from '@/lib/desktop-bridge-types';

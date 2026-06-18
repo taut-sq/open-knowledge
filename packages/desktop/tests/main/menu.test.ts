@@ -157,12 +157,13 @@ describe('buildMenuTemplate', () => {
     expect(findByLabel(template, 'New Project…')).toBeUndefined();
   });
 
-  test('top-level menus include File / Edit / View / Window / Help', () => {
+  test('top-level menus include File / Edit / View / Terminal / Window / Help', () => {
     const template = buildMenuTemplate(makeDeps());
     const topLabels = template.map((t) => t.label);
     expect(topLabels).toContain('File');
     expect(topLabels).toContain('Edit');
     expect(topLabels).toContain('View');
+    expect(topLabels).toContain('Terminal');
     expect(topLabels).toContain('Window');
     expect(topLabels).toContain('Help');
   });
@@ -706,7 +707,6 @@ describe('buildMenuTemplate — View menu visibility toggles + tree-scoped expan
 });
 
 describe('buildMenuTemplate — View → Show/Hide sidebar', () => {
-
   test('renders "Hide sidebar" when sidebarVisible is true (or undefined default)', () => {
     const expanded = buildMenuTemplate(
       makeDeps({ onToggleSidebar: mock(() => {}), sidebarVisible: true }),
@@ -823,7 +823,6 @@ describe('buildMenuTemplate — View → Show/Hide sidebar', () => {
 });
 
 describe('buildMenuTemplate — View → Show/Hide Terminal', () => {
-
   test('renders "Show Terminal" when terminalVisible is unset or false', () => {
     const unsetDeps = buildMenuTemplate(makeDeps({ onToggleTerminal: mock(() => {}) }));
     expect(findByLabel(unsetDeps, 'Show Terminal')).toBeDefined();
@@ -885,6 +884,59 @@ describe('buildMenuTemplate — View → Show/Hide Terminal', () => {
     const resetZoomIdx = labels.indexOf('[role:resetZoom]');
     expect(terminalIdx).toBeGreaterThan(docPanelIdx);
     expect(resetZoomIdx).toBeGreaterThan(terminalIdx);
+  });
+});
+
+describe('buildMenuTemplate — top-level Terminal menu (New / Kill)', () => {
+  test('inserts a Terminal menu between View and Window', () => {
+    const labels = buildMenuTemplate(makeDeps()).map((t) => t.label);
+    const viewIdx = labels.indexOf('View');
+    const terminalIdx = labels.indexOf('Terminal');
+    const windowIdx = labels.indexOf('Window');
+    expect(terminalIdx).toBeGreaterThan(viewIdx);
+    expect(windowIdx).toBeGreaterThan(terminalIdx);
+  });
+
+  test('contains exactly New Terminal then Kill Terminal; New Terminal is click-only (no ⌘J)', () => {
+    const template = buildMenuTemplate(
+      makeDeps({ onNewTerminal: mock(() => {}), onKillTerminal: mock(() => {}) }),
+    );
+    const sub = findByLabel(template, 'Terminal')?.submenu as
+      | MenuItemConstructorOptions[]
+      | undefined;
+    expect(sub?.map((i) => i.label)).toEqual(['New Terminal', 'Kill Terminal']);
+    expect(findByLabel(template, 'New Terminal')?.accelerator).toBeUndefined();
+  });
+
+  test('New Terminal dispatches onNewTerminal; disabled when the handler is unwired', () => {
+    const onNewTerminal = mock(() => {});
+    const item = findByLabel(buildMenuTemplate(makeDeps({ onNewTerminal })), 'New Terminal');
+    expect(item?.enabled).toBe(true);
+    (item?.click as (() => void) | undefined)?.();
+    expect(onNewTerminal).toHaveBeenCalledTimes(1);
+
+    expect(findByLabel(buildMenuTemplate(makeDeps()), 'New Terminal')?.enabled).toBe(false);
+  });
+
+  test('Kill Terminal is disabled with no live session, enabled + kills when one is live', () => {
+    const offline = buildMenuTemplate(makeDeps({ onKillTerminal: mock(() => {}) }));
+    expect(findByLabel(offline, 'Kill Terminal')?.enabled).toBe(false);
+
+    const unwired = buildMenuTemplate(makeDeps({ terminalLive: true }));
+    expect(findByLabel(unwired, 'Kill Terminal')?.enabled).toBe(false);
+
+    const onKillTerminal = mock(() => {});
+    const live = buildMenuTemplate(makeDeps({ onKillTerminal, terminalLive: true }));
+    const killItem = findByLabel(live, 'Kill Terminal');
+    expect(killItem?.enabled).toBe(true);
+    (killItem?.click as (() => void) | undefined)?.();
+    expect(onKillTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  test('the View → Show/Hide Terminal toggle is preserved alongside the Terminal menu', () => {
+    const template = buildMenuTemplate(makeDeps({ onToggleTerminal: mock(() => {}) }));
+    expect(findByLabel(template, 'Show Terminal')).toBeDefined();
+    expect(findByLabel(template, 'Terminal')).toBeDefined();
   });
 });
 

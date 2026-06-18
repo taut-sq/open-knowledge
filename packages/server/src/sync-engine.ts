@@ -1,4 +1,3 @@
-
 import {
   type Dirent,
   existsSync,
@@ -44,7 +43,6 @@ const log = getLogger('sync-engine');
 const SHA_HEX_40 = /^[0-9a-f]{40}$/i;
 
 const SYNC_GH_TOKEN_HOST = 'github.com';
-
 
 export type SyncState =
   | 'dormant'
@@ -148,13 +146,11 @@ interface SyncEngineOptions {
   checkPushPermissionFn?: (opts: CheckPushPermissionOptions) => Promise<PushPermission>;
 }
 
-
 function jitteredMs(seconds: number): number {
   const base = seconds * 1000;
   const jitter = base * 0.15 * (2 * Math.random() - 1); // ±15%
   return Math.round(base + jitter);
 }
-
 
 function isUnbornHead(projectDir: string): boolean {
   try {
@@ -176,14 +172,12 @@ function isUnbornHead(projectDir: string): boolean {
   }
 }
 
-
 function backoffMs(consecutiveFailures: number): number {
   if (consecutiveFailures >= 8) return 60 * 60 * 1000; // 60 min
   if (consecutiveFailures >= 5) return 15 * 60 * 1000; // 15 min
   if (consecutiveFailures >= 3) return 5 * 60 * 1000; // 5 min
   return 0; // use normal interval
 }
-
 
 export class SyncEngine {
   private state: SyncState = 'dormant';
@@ -265,7 +259,6 @@ export class SyncEngine {
     });
   }
 
-
   async start(): Promise<void> {
     if (this.state !== 'dormant') return;
 
@@ -284,8 +277,7 @@ export class SyncEngine {
           this.currentBranch = b;
           this.conflictStore.setBranch(b);
         }
-      } catch {
-      }
+      } catch {}
     } catch (e) {
       log.warn({ err: e }, '[sync] remote detection failed');
     }
@@ -406,7 +398,6 @@ export class SyncEngine {
     this.saveStateNow();
   }
 
-
   async setEnabled(enabled: boolean): Promise<void> {
     if (this.syncEnabled === enabled) return;
     this.syncEnabled = enabled;
@@ -460,7 +451,6 @@ export class SyncEngine {
     void this.probePushPermissionInternal('refresh');
   }
 
-
   async notifyCredentialsChanged(): Promise<void> {
     if (!this.syncEnabled) return;
 
@@ -486,7 +476,6 @@ export class SyncEngine {
     this.saveStateNow();
     void this.probePushPermissionInternal('refresh');
   }
-
 
   async trigger(op: 'sync' | 'push' | 'pull' = 'sync'): Promise<void> {
     this.consecutiveFailures = 0;
@@ -528,7 +517,6 @@ export class SyncEngine {
       await this.runPullCycle();
     }
   }
-
 
   getStatus(): SyncStatus {
     return {
@@ -781,7 +769,6 @@ export class SyncEngine {
     }
   }
 
-
   private schedulePull(overrideDelayMs?: number): void {
     if (this.pullTimer !== null) clearTimeout(this.pullTimer);
     const delayMs = overrideDelayMs ?? this.effectivePullDelayMs();
@@ -809,7 +796,6 @@ export class SyncEngine {
     const bkoff = backoffMs(failures);
     return bkoff > 0 ? bkoff : jitteredMs(this.pullIntervalSeconds);
   }
-
 
   private async runPullCycle(): Promise<void> {
     if (this.pullInFlight) return;
@@ -868,8 +854,7 @@ export class SyncEngine {
       const status = await handle.git.status();
       this.ahead = status.ahead;
       this.behind = status.behind;
-    } catch {
-    }
+    } catch {}
 
     if (this.behind > 0 && this.conflictCount === 0) {
       this.transitionTo('pulling');
@@ -903,7 +888,6 @@ export class SyncEngine {
 
     this.scheduleSaveState();
   }
-
 
   private async runPushCycle(): Promise<void> {
     if (this.pushInFlight) return;
@@ -981,16 +965,14 @@ export class SyncEngine {
         let headTreeSha = '';
         try {
           headTreeSha = (await handle.git.raw(['rev-parse', `${headSha}^{tree}`])).trim();
-        } catch {
-        }
+        } catch {}
         if (headTreeSha && headTreeSha === newTreeSha) {
           let upstreamSha: string | null = null;
           try {
             upstreamSha = (
               await handle.git.raw(['rev-parse', `origin/${this.currentBranch}`])
             ).trim();
-          } catch {
-          }
+          } catch {}
 
           if (upstreamSha === headSha) {
             log.info(
@@ -1172,7 +1154,6 @@ export class SyncEngine {
 
     this.scheduleSaveState();
   }
-
 
   private async commitDirtyContentFilesToHead(handle: GitHandle): Promise<string | null> {
     const status = await handle.git.status();
@@ -1362,8 +1343,7 @@ export class SyncEngine {
           paths.add(projRelPath);
         }
       }
-    } catch {
-    }
+    } catch {}
     return paths;
   }
 
@@ -1386,8 +1366,7 @@ export class SyncEngine {
       const batch = unique.slice(i, i + BATCH);
       try {
         await realIndexHandle.git.raw(['reset', 'HEAD', '--', ...batch]);
-      } catch {
-      }
+      } catch {}
     }
   }
 
@@ -1400,7 +1379,6 @@ export class SyncEngine {
     }
     return `Auto-save: ${contentRelPaths.length} files changed`;
   }
-
 
   private async handleMergeConflict(): Promise<void> {
     const handle = this.gitHandle();
@@ -1540,7 +1518,6 @@ export class SyncEngine {
     }
   }
 
-
   private clearPushError(): void {
     this.pushError = undefined;
     this.pushErrorCode = undefined;
@@ -1600,7 +1577,6 @@ export class SyncEngine {
     }
   }
 
-
   private transitionTo(newState: SyncState): void {
     if (this.state === newState) return;
     const prev = this.state;
@@ -1609,7 +1585,6 @@ export class SyncEngine {
     this.onStateChange?.(newState);
     this.cc1Broadcaster?.signal('sync-status');
   }
-
 
   private scheduleSaveState(): void {
     if (this.stateSaveTimer !== null) return; // debounce

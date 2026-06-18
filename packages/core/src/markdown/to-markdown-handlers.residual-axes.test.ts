@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { sharedExtensions } from '../extensions/shared.ts';
 import { MarkdownManager } from './index.ts';
@@ -260,7 +259,6 @@ describe('inline-code: authored disambiguation pad', () => {
 });
 
 describe('inline-code: pipe re-escape inside a table cell', () => {
-
   test('escaped pipe inside inline code in a cell round-trips byte-exact', () => {
     expectByteExact('| `a\\|b` |\n| - |');
   });

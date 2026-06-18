@@ -7,7 +7,6 @@ import {
   isTerminalConsentedWithGrace,
 } from '../../src/main/terminal-consent.ts';
 
-
 const created: string[] = [];
 
 function makeProject(localConfigYaml: string | null): string {
@@ -32,55 +31,52 @@ afterEach(() => {
 });
 
 describe('isTerminalConsented', () => {
-  test('true only when terminal.enabled is explicitly true', () => {
-    expect(isTerminalConsented(makeProject('terminal:\n  enabled: true\n'))).toBe(true);
-  });
-
-  test('false when terminal.enabled is false (revoked)', () => {
+  test('false only when terminal.enabled is explicitly false (opted out)', () => {
     expect(isTerminalConsented(makeProject('terminal:\n  enabled: false\n'))).toBe(false);
   });
 
-  test('false when the leaf is absent (never consented)', () => {
-    expect(isTerminalConsented(makeProject('git:\n  autoSync:\n    enabled: true\n'))).toBe(false);
+  test('true when terminal.enabled is true', () => {
+    expect(isTerminalConsented(makeProject('terminal:\n  enabled: true\n'))).toBe(true);
   });
 
-  test('false when the project-local config file is missing', () => {
-    expect(isTerminalConsented(makeProject(null))).toBe(false);
+  test('true when terminal.enabled is null', () => {
+    expect(isTerminalConsented(makeProject('terminal:\n  enabled: null\n'))).toBe(true);
   });
 
-  test('false on malformed YAML rather than throwing or defaulting permissive', () => {
-    expect(isTerminalConsented(makeProject('terminal: {{{ not yaml'))).toBe(false);
+  test('true when the leaf is absent (default-on)', () => {
+    expect(isTerminalConsented(makeProject('git:\n  autoSync:\n    enabled: true\n'))).toBe(true);
   });
 
-  test('false when terminal.enabled is a truthy non-boolean (only literal true grants)', () => {
-    expect(isTerminalConsented(makeProject('terminal:\n  enabled: "true"\n'))).toBe(false);
+  test('true when the project-local config file is missing (default-on)', () => {
+    expect(isTerminalConsented(makeProject(null))).toBe(true);
+  });
+
+  test('true on malformed YAML (fails open, not closed)', () => {
+    expect(isTerminalConsented(makeProject('terminal: {{{ not yaml'))).toBe(true);
+  });
+
+  test('true when terminal.enabled is a non-boolean (only literal false opts out)', () => {
+    expect(isTerminalConsented(makeProject('terminal:\n  enabled: "false"\n'))).toBe(true);
   });
 });
 
 describe('isTerminalConsentedWithGrace', () => {
-  test('resolves true immediately when consent is already on disk', async () => {
+  test('resolves true immediately when the project is not opted out', async () => {
     const projectDir = makeProject('terminal:\n  enabled: true\n');
     expect(await isTerminalConsentedWithGrace(projectDir, { timeoutMs: 300, intervalMs: 20 })).toBe(
       true,
     );
   });
 
-  test('resolves true once a grant lands partway through the grace window', async () => {
-    const projectDir = makeProject(null);
+  test('resolves true once a re-enable lands partway through the grace window', async () => {
+    const projectDir = makeProject('terminal:\n  enabled: false\n');
     setTimeout(() => writeLocalConfig(projectDir, 'terminal:\n  enabled: true\n'), 120);
     expect(await isTerminalConsentedWithGrace(projectDir, { timeoutMs: 750, intervalMs: 25 })).toBe(
       true,
     );
   });
 
-  test('resolves false when the config file stays absent through the window', async () => {
-    const projectDir = makeProject(null);
-    expect(await isTerminalConsentedWithGrace(projectDir, { timeoutMs: 200, intervalMs: 25 })).toBe(
-      false,
-    );
-  });
-
-  test('resolves false when the leaf stays false (revoked) through the window', async () => {
+  test('resolves false when the leaf stays false (opted out) through the window', async () => {
     const projectDir = makeProject('terminal:\n  enabled: false\n');
     expect(await isTerminalConsentedWithGrace(projectDir, { timeoutMs: 200, intervalMs: 25 })).toBe(
       false,

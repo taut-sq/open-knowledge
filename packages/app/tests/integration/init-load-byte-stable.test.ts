@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,7 +13,6 @@ import {
   snapshotMarkdownOnly,
 } from './_fixtures/init-load-byte-stable-snapshot.ts';
 import { awaitDocQuiescence, createTestServer, type TestServer } from './test-harness.ts';
-
 
 interface OpenedDoc {
   doc: Y.Doc;
@@ -52,7 +50,6 @@ async function openDoc(port: number, docName: string): Promise<OpenedDoc> {
   };
 }
 
-
 interface Fixture {
   contentDir: string;
   cleanup: () => void;
@@ -72,7 +69,6 @@ function setupFixture(): Fixture {
 const TEST_HARNESS_DEBOUNCE_MS = 200;
 const TEST_HARNESS_MAX_DEBOUNCE_MS = 1000;
 const POST_OPEN_WAIT_MS = TEST_HARNESS_MAX_DEBOUNCE_MS * 2 + 500; // 2500 ms
-
 
 describe('init-load-byte-stable: load path produces zero disk mutations', () => {
   let fixture: Fixture;
@@ -226,7 +222,6 @@ describe('init-load-byte-stable: load path produces zero disk mutations', () => 
   }, 90_000);
 });
 
-
 describe('init-load-byte-stable: mid-session short-circuit absorbs y-prosemirror artifact', () => {
   let fixture: Fixture;
   let server: TestServer | undefined;
@@ -284,7 +279,6 @@ describe('init-load-byte-stable: mid-session short-circuit absorbs y-prosemirror
     }
   }, 60_000);
 });
-
 
 describe('init-load-byte-stable: negative-case control (diff harness has teeth)', () => {
   let fixture: Fixture;

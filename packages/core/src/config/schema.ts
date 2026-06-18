@@ -125,7 +125,7 @@ export const ConfigSchema = z.looseObject({
           agentSettable: false,
           defaultScope: 'project-local',
           description:
-            'Whether the in-app terminal (a real OS shell at full user privilege) is enabled for this project on this machine. null = not chosen yet (the first shell-open asks). Per-machine (project-local) — never shared via git, clone, or sync.',
+            'Opt-out for the in-app terminal (a real OS shell at full user privilege). The terminal is on by default; set false to disable it for this project on this machine. Per-machine (project-local) — never shared via git, clone, or sync.',
         })
         .nullable()
         .default(null),

@@ -137,7 +137,6 @@ describe('unknownMdastGuardPlugin (R8 wildcard)', () => {
 });
 
 describe('rawMdxFallbackMdast content preservation', () => {
-
   test('positioned node without offsets: fallback carries the source bytes, not the type name', () => {
     const tableBlock = '| Species | Count |\n| --- | --- |\n| Coho | 2 |';
     const src = `# Title\n\n${tableBlock}\n`;

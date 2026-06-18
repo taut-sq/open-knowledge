@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sharedExtensions } from '../extensions/shared.ts';
@@ -537,7 +536,6 @@ describe('comment-promoter — block form (`%%\\n…\\n%%`)', () => {
 });
 
 describe('comment-promoter — direct mdast→markdown (sourceForm dispatch)', () => {
-
   // biome-ignore lint/suspicious/noExplicitAny: minimal smoke invocation
   const minimalState: any = {
     enter: () => () => {},

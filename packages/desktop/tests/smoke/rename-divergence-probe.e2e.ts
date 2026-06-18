@@ -1,4 +1,3 @@
-
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -86,8 +85,7 @@ async function runProbe(
         .find((l) => l.includes(userDataBasename) && l.includes('ok-api-origin='));
       const m = line?.match(/ok-api-origin=http:\/\/localhost:(\d+)/);
       if (m) port = Number(m[1]);
-    } catch {
-    }
+    } catch {}
     if (!port) {
       throw new Error(
         `Could not auto-detect API port via renderer argv (userDataBasename=${userDataBasename})`,
@@ -157,8 +155,7 @@ async function runProbe(
     for (const dir of [contentDir, userDataDir]) {
       try {
         rmSync(dir, { recursive: true, force: true });
-      } catch {
-      }
+      } catch {}
     }
   }
 }

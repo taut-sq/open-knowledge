@@ -1,9 +1,7 @@
-
 import { resolve } from 'node:path';
 import simpleGit, { type SimpleGit, type SimpleGitOptions } from 'simple-git';
 
 export { withParentLock } from './git-mutex.ts';
-
 
 export interface RelayGhToken {
   token: string;
@@ -27,7 +25,6 @@ type CredentialHelperUnsafeGitOptions = SimpleGitOptions & {
     allowUnsafeCredentialHelper?: boolean;
   };
 };
-
 
 export function buildGitEnv(ghToken?: RelayGhToken): Record<string, string> {
   const env: Record<string, string> = { LANG: 'C', LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0' };

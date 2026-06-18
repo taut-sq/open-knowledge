@@ -1,4 +1,3 @@
-
 import { getFileExtension } from '@/components/file-tree-rename-validation';
 
 export const OK_RENAME_CHIP_ATTR = 'data-ok-rename-extension-chip';

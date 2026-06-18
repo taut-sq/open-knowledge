@@ -1,4 +1,3 @@
-
 const DARWIN_FALLBACK_SHELL = '/bin/zsh';
 
 const STRIPPED_ENV_MARKERS = ['OK_ELECTRON_PROTOCOL_HOST', 'OK_LOCK_KIND'] as const;
@@ -140,8 +139,7 @@ export function setupPtyHost(deps: SetupPtyHostDeps): PtyHostHandle {
   function safeKill(pty: PtyProcessLike): void {
     try {
       pty.kill();
-    } catch {
-    }
+    } catch {}
   }
 
   function handleCreate(message: PtyCreateMessage): void {

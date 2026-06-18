@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,8 +45,7 @@ describe('M1 smoke', () => {
     } finally {
       try {
         entry.deletePassword();
-      } catch {
-      }
+      } catch {}
     }
   });
 
@@ -440,7 +438,7 @@ describe('M1 smoke', () => {
     expect(desktopMembers.size).toBeGreaterThan(0);
     expect(coreMembers.size).toBeGreaterThan(0);
     expect(appMembers.size).toBeGreaterThan(0);
-    expect(desktopMembers.size).toBe(25);
+    expect(desktopMembers.size).toBe(27);
     expect(desktopMembers).toEqual(coreMembers);
     expect(desktopMembers).toEqual(appMembers);
   });

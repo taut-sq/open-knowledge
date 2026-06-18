@@ -161,7 +161,6 @@ describe('frontmatter-region — round-trip invariants', () => {
   });
 });
 
-
 const scalarArbitrary = fc.oneof(stringValue, numberValue, booleanValue);
 const scalarListArbitrary = fc.array(stringValue, { minLength: 1, maxLength: 3 });
 
