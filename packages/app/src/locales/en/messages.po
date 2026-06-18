@@ -4407,6 +4407,10 @@ msgstr "Reconnected"
 msgid "Reconnecting after server restart"
 msgstr "Reconnecting after server restart"
 
+#: src/components/FileTree.tsx
+msgid "Reconnecting…"
+msgstr "Reconnecting…"
+
 #: src/components/InstallInClaudeDesktopDialog.tsx
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Reinstall"
@@ -4428,6 +4432,10 @@ msgstr "Reject"
 #: src/components/FileTree.tsx
 msgid "Relative path"
 msgstr "Relative path"
+
+#: src/components/FileTree.tsx
+msgid "Relaunching to install the update…"
+msgstr "Relaunching to install the update…"
 
 #: src/components/settings/SettingsDialogShell.tsx
 msgid "Release notes"
