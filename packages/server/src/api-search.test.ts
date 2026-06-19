@@ -181,7 +181,6 @@ describe('GET /api/search', () => {
   });
 });
 
-
 function indexEntry(canonicalPath: string, kind: FileIndexEntry['kind']): FileIndexEntry {
   const stat = statSync(canonicalPath);
   return {
@@ -629,7 +628,6 @@ describe('GET /api/search — operational budget (D15)', () => {
     }
   });
 });
-
 
 describe('GET /api/search — dot-path searchability', () => {
   test('a tracked dot-path markdown is searchable (AC3)', async () => {

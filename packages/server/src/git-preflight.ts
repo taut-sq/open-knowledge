@@ -1,4 +1,3 @@
-
 import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -22,7 +21,6 @@ import { join, delimiter as PATH_DELIM } from 'node:path';
 export const MIN_GIT_VERSION = '2.31.0';
 
 const PROBE_TIMEOUT_MS = 5000;
-
 
 export interface GitDetected {
   readonly ok: true;
@@ -84,7 +82,6 @@ export class GitTooOldError extends Error {
   }
 }
 
-
 export function detectGit(): GitDetected {
   const stage1 = probeGit('git');
   if (stage1.kind === 'ok') {
@@ -125,7 +122,6 @@ export function assertGitAvailable(): GitDetected {
   }
   return detected;
 }
-
 
 type ProbeResult =
   | { kind: 'ok'; version: string; resolvedPath: string }
@@ -226,7 +222,6 @@ export function fallbackPaths(platform: NodeJS.Platform): readonly string[] {
       ];
   }
 }
-
 
 export function buildGuidance(platform: NodeJS.Platform): InstallGuidance {
   switch (platform) {
@@ -342,7 +337,6 @@ export function detectLinuxFamily(osReleaseContents?: string): LinuxFamily {
   return 'unknown';
 }
 
-
 function hasCommand(name: string): boolean {
   return resolveOnPath(name) !== null;
 }
@@ -359,7 +353,6 @@ function hasScoop(): boolean {
 function hasChoco(): boolean {
   return hasCommand('choco');
 }
-
 
 function buildMissingMessage(g: InstallGuidance): string {
   const lines: string[] = [];
@@ -410,7 +403,6 @@ function buildTooOldMessage(
   return lines.join('\n');
 }
 
-
 export function compareSemver(a: string, b: string): number {
   const pa = a.split('.').map((s) => Number.parseInt(s, 10) || 0);
   const pb = b.split('.').map((s) => Number.parseInt(s, 10) || 0);
@@ -421,6 +413,5 @@ export function compareSemver(a: string, b: string): number {
   }
   return 0;
 }
-
 
 export const PATH_DELIMITER: string = PATH_DELIM;

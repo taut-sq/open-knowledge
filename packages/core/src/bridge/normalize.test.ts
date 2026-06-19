@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
 import { sharedExtensions } from '../extensions/shared.ts';
+import { loadIndentedJsxFixtures, loadLargeEmbedFixtures } from '../markdown/fixtures/index.ts';
 import { MarkdownManager } from '../markdown/index.ts';
 import {
   BRIDGE_TOLERANCE_CLASSES,
@@ -310,7 +312,6 @@ describe('block-separator-collapse — `\\n[marker]` ≡ `\\n\\n[marker]`', () =
 });
 
 describe('commonmark-escape collapse', () => {
-
   test('escaped underscore equivalent to plain underscore', () => {
     expect(normalizeBridge('init_spike')).toBe(normalizeBridge('init\\_spike'));
   });
@@ -346,7 +347,6 @@ describe('commonmark-escape collapse', () => {
 });
 
 describe('table-align-row-spacing collapse', () => {
-
   test('unpadded equivalent to padded alignment row', () => {
     expect(normalizeBridge('|---|---|')).toBe(normalizeBridge('| --- | --- |'));
   });
@@ -387,7 +387,6 @@ describe('table-align-row-spacing collapse', () => {
 });
 
 describe('emphasis-around-code flatten', () => {
-
   test('strong wrapper around inline code equivalent to bare inline code', () => {
     expect(normalizeBridge('**`text-indent`**')).toBe(normalizeBridge('`text-indent`'));
   });
@@ -407,7 +406,6 @@ describe('emphasis-around-code flatten', () => {
 });
 
 describe('list-indent canonical collapse', () => {
-
   test('6-space-indented list item equivalent to 3-space-indented', () => {
     expect(normalizeBridge('      - nested item')).toBe(normalizeBridge('   - nested item'));
   });
@@ -448,7 +446,6 @@ describe('list-indent canonical collapse', () => {
 });
 
 describe('ordered-list-marker-number canonical collapse', () => {
-
   test('lazy `1./1.` equivalent to renumbered `1./2.`', () => {
     expect(normalizeBridge('# Todo\n\n1. first\n1. second\n')).toBe(
       normalizeBridge('# Todo\n\n1. first\n2. second\n'),
@@ -518,6 +515,7 @@ describe('detectAppliedToleranceClasses (FR-41)', () => {
       'list-indent-canonical',
       'ordered-list-marker-number',
       'paragraph-continuation-indent',
+      'jsx-container-boundary-blank',
       'trailing-whitespace',
       'blank-line-collapse',
       'trailing-newline',
@@ -705,6 +703,31 @@ describe('detectAppliedToleranceClasses (FR-41)', () => {
       expect(BRIDGE_TOLERANCE_CLASSES).toContain(cls);
     }
   });
+
+  test('detects jsx-container-boundary-blank when a boundary blank adjacent to a JSX tag is present', () => {
+    expect(
+      detectAppliedToleranceClasses(
+        '<Steps>\n\n  <Step>\n    a\n  </Step>\n</Steps>',
+        '<Steps>\n  <Step>\n    a\n  </Step>\n</Steps>',
+      ),
+    ).toContain('jsx-container-boundary-blank');
+  });
+
+  test('does not detect jsx-container-boundary-blank for plain blank-separated content', () => {
+    expect(detectAppliedToleranceClasses('para\n\ntext', 'para\n\ntext')).not.toContain(
+      'jsx-container-boundary-blank',
+    );
+  });
+
+  test('jsx-container-boundary-blank detection is linear, not quadratic, on large angle-bracket-heavy input', () => {
+    const genericHeavy = 'Promise<Array<Map<Set<Record '.repeat(8000); // ~232 KB
+    const attributeHeavy = '<Ax '.repeat(32000); // ~128 KB, exercises the \\s[^>]* path
+    const start = performance.now();
+    detectAppliedToleranceClasses(genericHeavy, genericHeavy);
+    detectAppliedToleranceClasses(attributeHeavy, attributeHeavy);
+    const elapsedMs = performance.now() - start;
+    expect(elapsedMs).toBeLessThan(250);
+  });
 });
 
 describe('paragraph lazy-continuation indent (step 7f)', () => {
@@ -758,6 +781,108 @@ describe('paragraph lazy-continuation indent (step 7f)', () => {
 
   test('list-marker indents stay owned by step 7c, not stripped as continuations', () => {
     expect(normalizeBridge('para\n - item\n')).toBe('para\n- item');
+  });
+});
+
+describe('JSX-container boundary-blank fold (step 7g)', () => {
+  test('blank inside a single Step folds to the single-newline form (M2)', () => {
+    const authored = '<Steps>\n\n  <Step>\n\n    Install the package.\n\n  </Step>\n\n</Steps>\n';
+    const serialized = '<Steps>\n  <Step>\n    Install the package.\n  </Step>\n</Steps>\n';
+    expect(normalizeBridge(authored)).toBe(normalizeBridge(serialized));
+  });
+
+  test('heading-less flush-left multi-Step (github-sync shape) folds', () => {
+    const authored =
+      '<Steps>\n\n<Step>\n\nClone the repo.\n\n</Step>\n\n<Step>\n\nInstall dependencies.\n\n</Step>\n\n</Steps>\n';
+    const serialized =
+      '<Steps>\n  <Step>\n    Clone the repo.\n  </Step>\n  <Step>\n    Install dependencies.\n  </Step>\n</Steps>\n';
+    expect(normalizeBridge(authored)).toBe(normalizeBridge(serialized));
+  });
+
+  test('Tabs/Tab container folds (tag name independent)', () => {
+    const authored = '<Tabs>\n\n  <Tab value="npm">\n\n    npm install\n\n  </Tab>\n\n</Tabs>\n';
+    const serialized = '<Tabs>\n  <Tab value="npm">\n    npm install\n  </Tab>\n</Tabs>\n';
+    expect(normalizeBridge(authored)).toBe(normalizeBridge(serialized));
+  });
+
+  test('depth-2 nested containers fold', () => {
+    const authored =
+      '<Steps>\n\n  <Step>\n\n    <Tabs>\n\n      <Tab value="a">\n\n        body\n\n      </Tab>\n\n    </Tabs>\n\n  </Step>\n\n</Steps>\n';
+    const serialized =
+      '<Steps>\n  <Step>\n    <Tabs>\n      <Tab value="a">\n        body\n      </Tab>\n    </Tabs>\n  </Step>\n</Steps>\n';
+    expect(normalizeBridge(authored)).toBe(normalizeBridge(serialized));
+  });
+
+  test('a closing tag indented after a fenced code block folds (tag de-indent is neighbor-independent)', () => {
+    const indentedClose = '<Steps>\n<Step>\n```ts\nconst x = 1;\n```\n  </Step>\n</Steps>\n';
+    const flushClose = '<Steps>\n<Step>\n```ts\nconst x = 1;\n```\n</Step>\n</Steps>\n';
+    expect(normalizeBridge(indentedClose)).toBe(normalizeBridge(flushClose));
+  });
+
+  test('GUARD (a): a doc-level CommonMark 4.4 indented-code block (depth 0) is NOT folded', () => {
+    expect(normalizeBridge('intro\n\n    code line\n')).not.toBe(
+      normalizeBridge('intro\n\n        code line\n'),
+    );
+  });
+
+  test('GUARD (a2): a depth-0 INDENTED line that trims to a JSX tag is doc-level indented code, NOT a container open', () => {
+    expect(normalizeBridge('intro\n\n    <Step>\n\n    body')).not.toBe(
+      normalizeBridge('intro\n\n    <Step>\n    body'),
+    );
+  });
+
+  test('GUARD (d): a self-closing tag does NOT open a container depth (the !endsWith("/>") guard)', () => {
+    expect(normalizeBridge('<Icon />\n\nParagraph after icon.\n')).not.toBe(
+      normalizeBridge('<Icon />\nParagraph after icon.\n'),
+    );
+  });
+
+  test('GUARD (b): 7g folds the <Step> scaffolding but a nested blockquote continuation indent stays divergent', () => {
+    const authored = '<Steps>\n\n<Step>\n\n> quote line\n  continuation\n\n</Step>\n\n</Steps>\n';
+    const scaffoldFolded = '<Steps>\n<Step>\n> quote line\n  continuation\n</Step>\n</Steps>\n';
+    expect(normalizeBridge(authored)).toBe(normalizeBridge(scaffoldFolded));
+    const tight = '<Steps>\n\n<Step>\n\n> quote line\ncontinuation\n\n</Step>\n\n</Steps>\n';
+    expect(normalizeBridge(authored)).not.toBe(normalizeBridge(tight));
+    expect(normalizeBridge('> quote line\n  continuation\n')).not.toBe(
+      normalizeBridge('> quote line\ncontinuation\n'),
+    );
+  });
+
+  test('GUARD (c): 7g folds the <Step> scaffolding but a nested loose-list continuation indent stays divergent', () => {
+    const authored = '<Steps>\n\n<Step>\n\n- item\n  continuation\n\n</Step>\n\n</Steps>\n';
+    const scaffoldFolded = '<Steps>\n<Step>\n- item\n  continuation\n</Step>\n</Steps>\n';
+    expect(normalizeBridge(authored)).toBe(normalizeBridge(scaffoldFolded));
+    const tight = '<Steps>\n\n<Step>\n\n- item\ncontinuation\n\n</Step>\n\n</Steps>\n';
+    expect(normalizeBridge(authored)).not.toBe(normalizeBridge(tight));
+    expect(normalizeBridge('- item\n  continuation\n')).not.toBe(
+      normalizeBridge('- item\ncontinuation\n'),
+    );
+  });
+
+  test('lowercase <details> is NOT a JSX container (boundary blanks preserved)', () => {
+    expect(normalizeBridge('<details>\n\n<summary>T</summary>\n\nbody\n\n</details>\n')).not.toBe(
+      normalizeBridge('<details>\n<summary>T</summary>\nbody\n</details>\n'),
+    );
+  });
+
+  test('does NOT drop a blank line inside a fenced-code interior within a container', () => {
+    const withBlank =
+      '<Steps>\n\n  <Step>\n\n    ```ts\n    const a = 1;\n\n    const b = 2;\n    ```\n\n  </Step>\n\n</Steps>\n';
+    const noBlank =
+      '<Steps>\n\n  <Step>\n\n    ```ts\n    const a = 1;\n    const b = 2;\n    ```\n\n  </Step>\n\n</Steps>\n';
+    expect(normalizeBridge(withBlank)).not.toBe(normalizeBridge(noBlank));
+  });
+
+  test('residual is correct: inside-container deep-indented content folds (container consumes relative indent, parses to a paragraph)', () => {
+    const eight = '<Steps>\n\n  <Step>\n\n        code\n\n  </Step>\n\n</Steps>\n';
+    const twelve = '<Steps>\n\n  <Step>\n\n            code\n\n  </Step>\n\n</Steps>\n';
+    expect(normalizeBridge(eight)).toBe(normalizeBridge(twelve));
+  });
+
+  test('a large consecutive-blank run inside a container folds identically to a single boundary blank (linear scan, no quadratic re-walk)', () => {
+    const big = `<Steps>\n${'\n'.repeat(4000)}<Step>\n\nbody paragraph.\n\n</Step>\n\n</Steps>\n`;
+    const single = '<Steps>\n\n<Step>\n\nbody paragraph.\n\n</Step>\n\n</Steps>\n';
+    expect(normalizeBridge(big)).toBe(normalizeBridge(single));
   });
 });
 
@@ -918,5 +1043,72 @@ describe('table-row trailing-pipe tolerance (row-no-trailing-pipe)', () => {
         normalizeBridge('| a | b |\n| - | - |\n| 1 | 2 |'),
       );
     });
+  });
+});
+
+const g2Manager = new MarkdownManager({ extensions: sharedExtensions });
+
+function dirtySerialize(md: string): string {
+  const json = g2Manager.parse(md);
+  const visit = (n: JSONContent): void => {
+    if (n.type === 'jsxComponent' && n.attrs) n.attrs.sourceDirty = true;
+    n.content?.forEach(visit);
+  };
+  visit(json);
+  return g2Manager.serialize(json);
+}
+
+const JSX_EMBED_CORPUS = [...loadIndentedJsxFixtures(), ...loadLargeEmbedFixtures()];
+
+function assertFoldsWithinTolerance(authored: string, serialized: string): void {
+  expect(normalizeBridge(serialized)).toBe(normalizeBridge(authored));
+  if (serialized !== authored) {
+    expect(detectAppliedToleranceClasses(authored, serialized).length).toBeGreaterThan(0);
+  }
+}
+
+describe('G2 forward-regression guard — dirty serializer output is a within-tolerance fixed point folded by a named class', () => {
+  for (const { name, source } of JSX_EMBED_CORPUS) {
+    test(`${name}: dirty round-trip folds within tolerance by a named class`, () => {
+      assertFoldsWithinTolerance(source, dirtySerialize(source));
+    });
+  }
+
+  test('planted beyond-tolerance output trips the guard (discriminating, not tautological)', () => {
+    const [first] = loadIndentedJsxFixtures();
+    if (!first) throw new Error('indented-jsx corpus is empty');
+    const authored = first.source;
+    const planted = `${authored}\nAn injected paragraph the serializer never emitted.\n`;
+    expect(normalizeBridge(planted)).not.toBe(normalizeBridge(authored));
+    expect(() => assertFoldsWithinTolerance(authored, planted)).toThrow();
+  });
+});
+
+describe('O7 — normalizeBridge idempotence over the JSX/embed corpus', () => {
+  for (const { name, source } of JSX_EMBED_CORPUS) {
+    test(`${name}: normalizeBridge is idempotent`, () => {
+      const once = normalizeBridge(source);
+      expect(normalizeBridge(once)).toBe(once);
+    });
+  }
+});
+
+describe('O7c — MDX normalizing-construct convergence under the real comparator', () => {
+  const mm = new MarkdownManager({ extensions: sharedExtensions });
+  const roundTrip = (md: string): string => mm.serialize(mm.parse(md));
+
+  test('CommonMark: heading→paragraph tight separator normalizes and converges', () => {
+    const source = '## Heading\nFollowing paragraph.\n';
+    const serialized = roundTrip(source);
+    expect(serialized).not.toBe(source);
+    expect(normalizeBridge(serialized)).toBe(normalizeBridge(source));
+  });
+
+  test('MDX: indented-children <Steps> dirty round-trip normalizes and converges', () => {
+    const [first] = loadIndentedJsxFixtures();
+    if (!first) throw new Error('indented-jsx corpus is empty');
+    const serialized = dirtySerialize(first.source);
+    expect(serialized).not.toBe(first.source);
+    expect(normalizeBridge(serialized)).toBe(normalizeBridge(first.source));
   });
 });

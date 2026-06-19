@@ -1,4 +1,3 @@
-
 import {
   type BridgeInvariantSite,
   type BridgeInvariantViolation,
@@ -16,7 +15,6 @@ import {
   incrementBridgeToleranceApplied,
   incrementObserverAPathBFiresSuppressed,
 } from './metrics.ts';
-
 
 const DEFAULT_DEBOUNCE_S = 60;
 
@@ -58,12 +56,12 @@ const lastEmitMs = new Map<string, number>();
 const MAX_VIOLATION_RATE_TUPLES = 1024;
 
 /** Map<rateKey, last-emit-Unix-ms> for the bridge-tolerance-applied event.
- *  rateKey = `${site}::${class}`. Bounded cardinality: 15 classes × 3 sites =
- *  45 entries max globally. Per-(site, class) windows let operators see how
+ *  rateKey = `${site}::${class}`. Bounded cardinality: 16 classes × 3 sites =
+ *  48 entries max globally. Per-(site, class) windows let operators see how
  *  often each site relies on each tolerance class — observer-b CRLF rates
  *  vs persistence CRLF rates surface separately.
  *
- *  WARN: same module-level state caveat as `lastEmitMs` above. The 45-entry
+ *  WARN: same module-level state caveat as `lastEmitMs` above. The 48-entry
  *  bound is global; under multi-server-per-process, a single server's
  *  tolerance event would suppress another server's same-class event in
  *  the same window. Less concerning than the violation rate-limiter
@@ -217,13 +215,11 @@ export function __getSplitBrainRateTupleCountForTests(): number {
   return lastSplitBrainEmitMs.size;
 }
 
-
 export function shouldThrowOnBridgeInvariantViolation(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return env.NODE_ENV === 'test' || env.OK_BRIDGE_THROW_ON_VIOLATION === '1';
 }
-
 
 interface AssertBridgeInvariantOpts {
   site: BridgeInvariantSite;

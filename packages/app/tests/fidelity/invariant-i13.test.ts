@@ -1,9 +1,11 @@
-
 import { describe, expect, test } from 'bun:test';
 import { normalizeBridge } from '@inkeep/open-knowledge-core';
 import type { JSONContent } from '@tiptap/core';
 import * as fc from 'fast-check';
-import { loadBuiltInFixtures } from '../../../core/src/markdown/fixtures/index.ts';
+import {
+  loadBuiltInFixtures,
+  loadIndentedJsxFixtures,
+} from '../../../core/src/markdown/fixtures/index.ts';
 import { assertAcrossSeeds, mdManager, NUM_RUNS } from './helpers';
 
 function walkJsxComponents(node: JSONContent, mutate: (n: JSONContent) => void): void {
@@ -117,7 +119,6 @@ describe('I13 — NG12 probe cases: idempotent under synthetic prop edits', () =
   });
 });
 
-
 interface IndentedJsxCase {
   name: string;
   source: string;
@@ -191,6 +192,7 @@ const INDENTED_JSX_CLASS: IndentedJsxCase[] = [
       '',
     ].join('\n'),
   },
+  ...loadIndentedJsxFixtures(),
 ];
 
 describe('I13 — indented-children MDX JSX bridge fixed-point (PRD-7110)', () => {
@@ -203,7 +205,152 @@ describe('I13 — indented-children MDX JSX bridge fixed-point (PRD-7110)', () =
       const once = dirtyRoundTrip(source);
       expect(dirtyRoundTrip(once)).toBe(once);
     });
+
+    test(`${name}: repeated dirty drains stay a within-tolerance fixed point (no byte growth)`, () => {
+      const normalizedSource = normalizeBridge(source);
+      const first = dirtyRoundTrip(source);
+      expect(normalizeBridge(first)).toBe(normalizedSource);
+      let cur = first;
+      for (let i = 1; i < 6; i++) {
+        cur = dirtyRoundTrip(cur);
+        expect(normalizeBridge(cur)).toBe(normalizedSource);
+        expect(cur).toBe(first);
+      }
+    });
   }
+});
+
+function findJsxContainer(root: JSONContent, componentName: string): JSONContent | undefined {
+  let found: JSONContent | undefined;
+  const visit = (n: JSONContent): void => {
+    if (found) return;
+    if (n.type === 'jsxComponent' && n.attrs?.componentName === componentName) found = n;
+    else n.content?.forEach(visit);
+  };
+  visit(root);
+  return found;
+}
+
+function structurallyEditAndSerialize(md: string, edit: (root: JSONContent) => void): string {
+  const json = mdManager.parse(md);
+  edit(json);
+  walkJsxComponents(json, (node) => {
+    if (node.attrs) node.attrs.sourceDirty = true;
+  });
+  return mdManager.serialize(json);
+}
+
+function occurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+function markerOrder(md: string, markers: readonly string[]): string[] {
+  return markers
+    .map((m) => ({ m, idx: md.indexOf(m) }))
+    .filter(({ idx }) => idx >= 0)
+    .sort((a, b) => a.idx - b.idx)
+    .map(({ m }) => m);
+}
+
+const O3_THREE_STEP = [
+  '<Steps>',
+  '',
+  '<Step>',
+  '',
+  'Alpha marker body.',
+  '',
+  '</Step>',
+  '',
+  '<Step>',
+  '',
+  'Bravo marker body.',
+  '',
+  '</Step>',
+  '',
+  '<Step>',
+  '',
+  'Charlie marker body.',
+  '',
+  '</Step>',
+  '',
+  '</Steps>',
+  '',
+].join('\n');
+
+const O3_MARKERS = ['Alpha marker body.', 'Bravo marker body.', 'Charlie marker body.'] as const;
+
+describe('I13 — structural child-edit invariant (PRD-7110)', () => {
+  function assertEditedFixedPoint(editedMd: string): void {
+    expect(dirtyRoundTrip(editedMd)).toBe(editedMd);
+    expect(normalizeBridge(dirtyRoundTrip(editedMd))).toBe(normalizeBridge(editedMd));
+  }
+
+  test('swap: siblings reorder, each marker once, correct order, fixed point', () => {
+    const edited = structurallyEditAndSerialize(O3_THREE_STEP, (root) => {
+      const kids = findJsxContainer(root, 'Steps')?.content;
+      if (!kids) throw new Error('Steps container not found');
+      [kids[0], kids[2]] = [kids[2], kids[0]];
+    });
+    for (const m of O3_MARKERS) expect(occurrences(edited, m)).toBe(1);
+    expect(markerOrder(edited, O3_MARKERS)).toEqual([
+      'Charlie marker body.',
+      'Bravo marker body.',
+      'Alpha marker body.',
+    ]);
+    assertEditedFixedPoint(edited);
+  });
+
+  test('delete: one sibling removed, remaining markers once, order preserved, fixed point', () => {
+    const edited = structurallyEditAndSerialize(O3_THREE_STEP, (root) => {
+      const kids = findJsxContainer(root, 'Steps')?.content;
+      if (!kids) throw new Error('Steps container not found');
+      kids.splice(1, 1);
+    });
+    expect(occurrences(edited, 'Bravo marker body.')).toBe(0);
+    expect(occurrences(edited, 'Alpha marker body.')).toBe(1);
+    expect(occurrences(edited, 'Charlie marker body.')).toBe(1);
+    expect(markerOrder(edited, O3_MARKERS)).toEqual(['Alpha marker body.', 'Charlie marker body.']);
+    assertEditedFixedPoint(edited);
+  });
+
+  test('insert: new sibling appended, all markers once, order preserved, fixed point', () => {
+    const all = [...O3_MARKERS, 'Delta marker body.'];
+    const edited = structurallyEditAndSerialize(O3_THREE_STEP, (root) => {
+      const kids = findJsxContainer(root, 'Steps')?.content;
+      if (!kids) throw new Error('Steps container not found');
+      kids.push({
+        type: 'jsxComponent',
+        attrs: {
+          componentName: 'Step',
+          kind: 'element',
+          attributes: [],
+          props: {},
+          sourceDirty: true,
+        },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Delta marker body.' }] }],
+      });
+    });
+    for (const m of all) expect(occurrences(edited, m)).toBe(1);
+    expect(markerOrder(edited, all)).toEqual(all);
+    assertEditedFixedPoint(edited);
+  });
+
+  test('closing-tag edit (componentName rename) re-emits open+close, no sibling reorder/duplication', () => {
+    const edited = structurallyEditAndSerialize(O3_THREE_STEP, (root) => {
+      const target = findJsxContainer(root, 'Steps')?.content?.[1];
+      if (!target?.attrs) throw new Error('Step[1] not found');
+      target.attrs.componentName = 'Stage';
+    });
+    expect(edited).toContain('<Stage>');
+    expect(edited).toContain('</Stage>');
+    for (const m of O3_MARKERS) expect(occurrences(edited, m)).toBe(1);
+    expect(markerOrder(edited, O3_MARKERS)).toEqual([
+      'Alpha marker body.',
+      'Bravo marker body.',
+      'Charlie marker body.',
+    ]);
+    assertEditedFixedPoint(edited);
+  });
 });
 
 describe('I13 — reconstructAttrs overlays non-JSON preserved expressions (PRD-7110)', () => {
@@ -252,7 +399,6 @@ describe('I13 — string-attr entity divergence on the delegation path (PRD-7110
     expect(normalizeBridge(out)).toBe(normalizeBridge(source));
   });
 });
-
 
 interface DetailsCase {
   name: string;

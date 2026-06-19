@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sharedExtensions } from '../extensions/shared.ts';
@@ -129,7 +128,6 @@ describe('fenced math (` ```math `) → MathFence compat', () => {
 });
 
 describe('D-M5b heuristic — `$…$` ambiguity guard (currency-safe)', () => {
-
   test('`$$` inside a code span does NOT parse as math', () => {
     const json = mdManager.parse('Use the `$$E=mc^2$$` syntax.\n');
     const dollarMath = findInJson(json, isComponent('DollarMath'));

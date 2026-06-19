@@ -301,7 +301,6 @@ describe('applyRenameChip — overlay marker for symptom 2 (icon-flash bridge)',
   });
 
   test('post-settle: module-level activeRenameExt is cleared (Makefile selected later gets no marker)', () => {
-
     const { row, input } = buildPierreRenameRow({
       path: 'AGENTS.md',
       initialValue: 'AGENTS.md',

@@ -11,7 +11,6 @@ import { parseGitUrl } from '../github/url.ts';
 import { isGitHubRepoPublic } from '../github/visibility.ts';
 import { addOkPathsToGitExclude } from '../sharing/git-exclude.ts';
 
-
 const STAGE_RANGES: [string, number, number][] = [
   ['count', 0, 10],
   ['compress', 10, 20],
@@ -71,7 +70,6 @@ export async function cloneWithBranchFallback(opts: {
     throw err;
   }
 }
-
 
 interface CloneOptions {
   json: boolean;
@@ -202,7 +200,6 @@ export function ensureOkExcludedFromGit(
   if (result.appended.length > 0) return 'appended';
   return 'already-present';
 }
-
 
 export function cloneCommand(getConfig: () => Config): Command {
   return new Command('clone')

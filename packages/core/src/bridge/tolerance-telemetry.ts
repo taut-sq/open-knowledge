@@ -25,6 +25,7 @@ const SEVERITY_BY_CLASS = {
   'row-no-trailing-pipe': 'serializer-caused',
   'ordered-list-marker-number': 'serializer-caused',
   'list-indent-canonical': 'serializer-caused',
+  'jsx-container-boundary-blank': 'serializer-caused',
   'trailing-whitespace': 'serializer-caused',
   'blank-line-collapse': 'serializer-caused',
   'trailing-newline': 'serializer-caused',

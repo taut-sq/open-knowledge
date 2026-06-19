@@ -1,4 +1,3 @@
-
 import { HocuspocusAuthRejection } from './auth-token-schema.ts';
 import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import {

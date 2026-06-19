@@ -1,4 +1,3 @@
-
 import { Trans, useLingui } from '@lingui/react/macro';
 import { Share2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';

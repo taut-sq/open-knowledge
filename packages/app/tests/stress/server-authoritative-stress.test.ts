@@ -1,4 +1,3 @@
-
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { setTimeout as wait } from 'node:timers/promises';
 import * as Y from 'yjs';
@@ -10,7 +9,6 @@ import {
   type TestClient,
   type TestServer,
 } from '../integration/test-harness';
-
 
 function createPRNG(seed: number) {
   let state = seed | 0 || 1;
@@ -27,7 +25,6 @@ function createPRNG(seed: number) {
   };
 }
 
-
 function wysiwygAppend(client: TestClient, text: string): void {
   const paragraph = new Y.XmlElement('paragraph');
   const ytext = new Y.XmlText();
@@ -41,7 +38,6 @@ function sourceAppend(client: TestClient, text: string): void {
     client.ytext.insert(client.ytext.length, `\n\n${text}\n`);
   });
 }
-
 
 async function driveToConvergence(
   clients: TestClient[],
@@ -85,7 +81,6 @@ async function driveToConvergence(
   return null;
 }
 
-
 function findDuplicates(ytext: string, markers: Set<string>): string[] {
   const duplicates: string[] = [];
   for (const marker of markers) {
@@ -99,7 +94,6 @@ function findDuplicates(ytext: string, markers: Set<string>): string[] {
   }
   return duplicates;
 }
-
 
 describe('server-authoritative stress (US-013)', () => {
   let server: TestServer;
@@ -144,6 +138,7 @@ describe('server-authoritative stress (US-013)', () => {
     try {
       const allMarkers = new Set<string>();
       let editCount = 0;
+      let authoredBytes = 0;
       const testStart = Date.now();
 
       while (Date.now() - testStart < durationMs) {
@@ -152,6 +147,7 @@ describe('server-authoritative stress (US-013)', () => {
         const editType = rng.next() < 0.8 ? 'wysiwyg' : 'source';
         const marker = `s-${editCount}-c${clientIdx}-${editType === 'wysiwyg' ? 'w' : 's'}-${rng.nextInt(10000)}`;
         allMarkers.add(marker);
+        authoredBytes += Buffer.byteLength(marker) + 4;
 
         if (editType === 'wysiwyg') {
           wysiwygAppend(client, marker);
@@ -228,6 +224,8 @@ describe('server-authoritative stress (US-013)', () => {
           );
         }
         expect(dupes).toEqual([]);
+
+        expect(Buffer.byteLength(ytextStr)).toBeLessThanOrEqual(authoredBytes * 2 + 512);
       }
 
       console.log(

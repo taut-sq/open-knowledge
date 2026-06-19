@@ -1,9 +1,9 @@
-
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { setTimeout as wait } from 'node:timers/promises';
 import * as Y from 'yjs';
 import { HARNESS_BOOT_TIMEOUT_MS } from './harness-boot-timeout';
 import {
+  agentWriteMd,
   assertBridgeInvariant,
   createTestClients,
   createTestServer,
@@ -97,4 +97,47 @@ describe('map-driven Observer A — cross-CRDT integration', () => {
       for (const c of clients) await c.cleanup();
     }
   });
+
+  test('(c) indented-JSX doc converges within byte budget, no Step duplication (PRD-7110 amplifier)', async () => {
+    const docName = `map-driven-jsx-${crypto.randomUUID()}`;
+    const clients = await createTestClients(server.port, {
+      count: 2,
+      docName,
+      perClientOptions: { skipInvariantWatcher: true },
+    });
+    try {
+      const seed =
+        '<Steps>\n\n<Step>\n\nSTEP-ALPHA-BODY paragraph.\n\n</Step>\n\n<Step>\n\nSTEP-BRAVO-BODY paragraph.\n\n</Step>\n\n</Steps>\n';
+      await agentWriteMd(server.port, seed, { docName, position: 'replace' });
+      await awaitConvergence(clients, ['STEP-ALPHA-BODY', 'STEP-BRAVO-BODY']);
+
+      appendParagraph(clients[0], 'MAP-JSX-EDIT-A');
+      appendParagraph(clients[1], 'MAP-JSX-EDIT-B');
+      await awaitConvergence(clients, [
+        'STEP-ALPHA-BODY',
+        'STEP-BRAVO-BODY',
+        'MAP-JSX-EDIT-A',
+        'MAP-JSX-EDIT-B',
+      ]);
+
+      const ytexts = clients.map((c) => c.ytext.toString());
+      expect(ytexts[1]).toBe(ytexts[0]);
+      for (const client of clients) assertBridgeInvariant(client.ytext, client.fragment);
+
+      const converged = ytexts[0];
+      for (const marker of [
+        'STEP-ALPHA-BODY',
+        'STEP-BRAVO-BODY',
+        'MAP-JSX-EDIT-A',
+        'MAP-JSX-EDIT-B',
+      ]) {
+        expect(converged.split(marker).length - 1).toBe(1);
+      }
+      const authoredBytes =
+        Buffer.byteLength(seed) + Buffer.byteLength('MAP-JSX-EDIT-A MAP-JSX-EDIT-B');
+      expect(Buffer.byteLength(converged)).toBeLessThanOrEqual(authoredBytes * 3);
+    } finally {
+      for (const c of clients) await c.cleanup();
+    }
+  }, 30_000);
 });

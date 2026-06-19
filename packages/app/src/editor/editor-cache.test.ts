@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { EditorView } from '@codemirror/view';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
@@ -42,7 +41,6 @@ import {
   mountTiptapEditorPromise,
 } from './mount-promise';
 
-
 interface FakeNode {
   parentElement: FakeNode | null;
   scrollTop: number;
@@ -59,8 +57,7 @@ function makeNode(): FakeNode {
     scrollTop: 0,
     children: [],
     style: {},
-    setAttribute(_key, _value) {
-    },
+    setAttribute(_key, _value) {},
     appendChild(child) {
       if (child.parentElement) child.parentElement.removeChild(child);
       node.children.push(child);
@@ -76,7 +73,6 @@ function makeNode(): FakeNode {
   };
   return node;
 }
-
 
 interface FakeTiptapEditorSpies {
   destroyCalls: number;
@@ -131,7 +127,6 @@ function makeFakeCmView(dom: FakeNode): { view: EditorView; spies: FakeCmViewSpi
   return { view, spies };
 }
 
-
 interface FakeProviderSpies {
   destroyCalls: number;
   connectCalls: number;
@@ -155,7 +150,6 @@ function makeFakeProvider(ydoc: Y.Doc): { provider: HocuspocusProvider; spies: F
   } as unknown as HocuspocusProvider;
   return { provider, spies };
 }
-
 
 interface TiptapHarness {
   docName: string;
@@ -255,7 +249,6 @@ function makeCmHarness(docName: string): CmHarness {
   };
   return harness;
 }
-
 
 describe('CACHE_ENABLED constant', () => {
   test('is true by default (V2 ships enabled)', () => {
@@ -626,7 +619,6 @@ describe('TipTap cache — __uncached / kill-switch path', () => {
 });
 
 describe('TipTap cache — undoManager.restore cleanup on destroy', () => {
-
   let originalGetState: typeof yUndoPluginKey.getState;
 
   beforeEach(() => {
@@ -847,7 +839,6 @@ describe('TipTap cache — undoManager.restore cleanup on destroy', () => {
   });
 });
 
-
 describe('CM6 cache — lifecycle', () => {
   beforeEach(() => __resetCacheForTests());
   afterEach(() => __resetCacheForTests());
@@ -1018,7 +1009,6 @@ describe('CM6 cache — lifecycle', () => {
   });
 });
 
-
 describe('STOP rule: editor-cache never calls editor.mount() / editor.unmount()', () => {
   test('source contains no reference to editor.mount( or editor.unmount(', async () => {
     const sourceText = await Bun.file(`${import.meta.dir}/editor-cache.ts`).text();
@@ -1030,7 +1020,6 @@ describe('STOP rule: editor-cache never calls editor.mount() / editor.unmount()'
     expect(/editor\.unmount\s*\(/.test(code)).toBe(false);
   });
 });
-
 
 describe('Module-level cache survives simulated remounts', () => {
   beforeEach(() => __resetCacheForTests());
@@ -1055,7 +1044,6 @@ describe('Module-level cache survives simulated remounts', () => {
     expect(h.factoryCallCount).toBe(1);
   });
 });
-
 
 describe('size-gate constants', () => {
   test('VIEW_COUNT_CACHE_THRESHOLD = 50', () => {
@@ -1168,7 +1156,6 @@ describe('mountCmEditor — size gate mirror of TipTap', () => {
   });
 });
 
-
 describe('setActivityMountList — connect/disconnect transitions', () => {
   beforeEach(() => __resetCacheForTests());
   afterEach(() => __resetCacheForTests());
@@ -1262,8 +1249,7 @@ describe('setActivityMountList — connect/disconnect transitions', () => {
       entries: new Map<string, { provider: HocuspocusProvider }>([
         ['orphan-doc', { provider }],
       ]) as ReadonlyMap<string, { provider: HocuspocusProvider }>,
-      onEvict: (_cb: (docName: string) => void) => () => {
-      },
+      onEvict: (_cb: (docName: string) => void) => () => {},
     };
     const unsubscribe = subscribePoolEviction(fakePool);
     try {
@@ -1299,7 +1285,6 @@ describe('setActivityMountList — connect/disconnect transitions', () => {
     expect(spies.disconnectCalls).toBe(0);
   });
 });
-
 
 describe('parkingNode — per-entry exclusivity', () => {
   beforeEach(() => {
@@ -1551,8 +1536,7 @@ describe('telemetry marks', () => {
     __resetCacheForTests();
     try {
       performance.clearMeasures();
-    } catch {
-    }
+    } catch {}
   });
   afterEach(() => __resetCacheForTests());
 
@@ -1669,8 +1653,7 @@ describe('telemetry marks', () => {
     });
     try {
       performance.clearMeasures('ok/cold/editor-mount-stats');
-    } catch {
-    }
+    } catch {}
     mountTiptapEditor({
       docName: h.docName,
       container: makeNode() as unknown as HTMLElement,
@@ -1682,7 +1665,6 @@ describe('telemetry marks', () => {
   });
 });
 
-
 describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () => {
   beforeEach(() => {
     __resetCacheForTests();
@@ -1691,8 +1673,7 @@ describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () =>
       performance.clearMarks('ok/cache/reparent-end');
       performance.clearMeasures('ok/cache/reparent-start');
       performance.clearMeasures('ok/cache/reparent-end');
-    } catch {
-    }
+    } catch {}
   });
   afterEach(() => __resetCacheForTests());
 
@@ -1706,8 +1687,7 @@ describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () =>
     try {
       performance.clearMeasures('ok/cache/reparent-start');
       performance.clearMeasures('ok/cache/reparent-end');
-    } catch {
-    }
+    } catch {}
     mountTiptapEditor({
       docName: h.docName,
       container: makeNode() as unknown as HTMLElement,
@@ -1755,8 +1735,7 @@ describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () =>
     try {
       performance.clearMeasures('ok/cache/reparent-start');
       performance.clearMeasures('ok/cache/reparent-end');
-    } catch {
-    }
+    } catch {}
     mountCmEditor({
       docName: h.docName,
       container: makeNode() as unknown as HTMLElement,
@@ -1790,8 +1769,7 @@ describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () =>
       performance.clearMeasures('ok/cache/reparent-start');
       performance.clearMeasures('ok/cache/reparent-end');
       performance.clearMeasures('ok/cache/hit');
-    } catch {
-    }
+    } catch {}
     mountTiptapEditor({
       docName: h.docName,
       container: makeNode() as unknown as HTMLElement,
@@ -1818,8 +1796,7 @@ describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () =>
     });
     try {
       performance.clearMeasures('ok/cache/hit');
-    } catch {
-    }
+    } catch {}
     mountTiptapEditor({
       docName: h.docName,
       container: makeNode() as unknown as HTMLElement,
@@ -1828,7 +1805,6 @@ describe('US-001 (cap-calibration-probes): cache-hit reparent span marks', () =>
     expect(performance.getEntriesByName('ok/cache/hit').length).toBeGreaterThanOrEqual(1);
   });
 });
-
 
 let __us004DocumentStubInstalled = false;
 function installDocumentStub(): void {
@@ -2303,8 +2279,7 @@ describe('captureRenameSnapshots', () => {
   test('skips empty Y.Text editors and emits ok/cache/snapshot-skipped-empty', () => {
     try {
       performance.clearMeasures();
-    } catch {
-    }
+    } catch {}
 
     const h = makeTiptapHarness('from-doc');
     mountTiptapEditor({

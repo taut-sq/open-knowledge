@@ -1,11 +1,9 @@
-
 import { describe, expect, test } from 'bun:test';
 import * as fc from 'fast-check';
 import { paragraphWithFidelityChars } from './arbitraries';
 import { mdRoundTrip, NUM_RUNS, normalize } from './helpers';
 
 describe('I4 — idempotence: two round-trips produce identical output', () => {
-
   test('fidelity chars idempotence', () => {
     fc.assert(
       fc.property(paragraphWithFidelityChars, (md) => {

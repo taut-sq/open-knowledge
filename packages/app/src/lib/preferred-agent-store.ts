@@ -28,8 +28,7 @@ export function readPreferredAgent(storage?: PreferredAgentStorage): HandoffTarg
 export function writePreferredAgent(id: HandoffTarget, storage?: PreferredAgentStorage): void {
   try {
     (storage ?? localStorage).setItem(PREFERRED_AGENT_KEY, id);
-  } catch {
-  }
+  } catch {}
 }
 
 export function resolvePreferredAgent(args: {

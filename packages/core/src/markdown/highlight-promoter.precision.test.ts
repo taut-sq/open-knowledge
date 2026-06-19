@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sharedExtensions } from '../extensions/shared.ts';
@@ -175,7 +174,6 @@ describe('highlight-promoter — multi-match', () => {
 });
 
 describe('highlight-promoter — cross-children body (==**bold**==, ==*italic*==, ==`code`==)', () => {
-
   test('`==**bold**==` carries both highlight + strong', () => {
     const json = mdManager.parse('==**bold**==\n');
     const marks = collectHighlightedTextNodes(json);
@@ -460,7 +458,6 @@ describe('highlight-promoter — round-trip', () => {
 });
 
 describe('highlight-promoter — direct mdast→markdown', () => {
-
   // biome-ignore lint/suspicious/noExplicitAny: minimal smoke invocation matching the existing precedent
   const minimalState: any = {
     enter: () => () => {},

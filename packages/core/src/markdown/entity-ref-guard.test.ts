@@ -1,4 +1,3 @@
-
 import { describe, expect, test } from 'bun:test';
 import type { Root } from 'mdast';
 import { sharedExtensions } from '../extensions/shared.ts';

@@ -29,6 +29,7 @@ describe('classifySeverity', () => {
     'row-no-trailing-pipe',
     'ordered-list-marker-number',
     'list-indent-canonical',
+    'jsx-container-boundary-blank',
     'trailing-whitespace',
     'blank-line-collapse',
     'trailing-newline',

@@ -1,4 +1,3 @@
-
 import type { HandoffTarget, InstallState, TargetData } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { Sparkles, SquareTerminal } from 'lucide-react';

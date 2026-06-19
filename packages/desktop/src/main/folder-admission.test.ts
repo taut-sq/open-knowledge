@@ -163,7 +163,6 @@ describe('validateFolderPick — purity + path normalization', () => {
   });
 });
 
-
 let tmpRoot: string;
 /** Realpath-resolved scratch dir. macOS aliases /tmp → /private/tmp; using
  * realpath keeps fixtures' absolute paths consistent with the realpathSync
@@ -545,7 +544,6 @@ describe('discoverProject — type surface', () => {
     expect(v.blocked).toBe(false);
   });
 });
-
 
 describe('discoverProject — ancestor-promote bounded by boot budget (regression: utility init timeout)', () => {
   type DirSizeProbe = (dir: string) => Promise<{ readonly exceedsCap: boolean }>;
