@@ -209,6 +209,215 @@ describe('repairSkills — project sweep (AC-A1, AC-A2, AC-A3)', () => {
   });
 });
 
+describe('repairSkills — project sweep create-if-wired gate', () => {
+  let scratch: ReturnType<typeof mkScratch>;
+  let projectBundleDir: string;
+  let discoveryBundleDir: string;
+  let logEvents: RepairSkillsLogEvent[];
+
+  const OK_WIRED_MCP_JSON = JSON.stringify({
+    mcpServers: {
+      'open-knowledge': { command: '/bin/sh', args: ['-l', '-c', '# ok-mcp-v1\nexec ok mcp'] },
+    },
+  });
+  const UNWIRED_MCP_JSON = JSON.stringify({ mcpServers: { other: { command: 'node' } } });
+
+  beforeEach(() => {
+    scratch = mkScratch('create-wired');
+    projectBundleDir = join(scratch.bundles, 'project');
+    discoveryBundleDir = join(scratch.bundles, 'discovery');
+    writeBundledSkill(projectBundleDir, '9.9.9');
+    writeBundledSkill(discoveryBundleDir, '9.9.9');
+    logEvents = [];
+  });
+  afterEach(() => {
+    rmSync(scratch.root, { recursive: true, force: true });
+  });
+
+  it('creates a project SKILL.md for a host wired for OK MCP but missing the skill', async () => {
+    writeFileSync(join(scratch.project, '.mcp.json'), OK_WIRED_MCP_JSON);
+
+    const written: Array<{ home: string; version: string }> = [];
+    const result = await repairSkills({
+      projectDir: scratch.project,
+      home: scratch.home,
+      logger: (event) => logEvents.push(event),
+      deps: depsBuilder({
+        projectBundleDir,
+        discoveryBundleDir,
+        bundledVersion: '9.9.9',
+        recordedVersion: '9.9.9', // user sweep version-skips for isolation
+        writtenVersions: written,
+      }),
+    });
+
+    if (result.status !== 'done' || result.project.outcome !== 'done')
+      throw new Error('unreachable');
+    const claude = result.project.entries.find((e) => e.editorId === 'claude');
+    expect(claude?.outcome).toBe('created');
+    expect(result.project.entries.find((e) => e.editorId === 'cursor')?.outcome).toBe('no-token');
+    expect(result.project.entries.find((e) => e.editorId === 'codex')?.outcome).toBe('no-token');
+
+    const skillFile = join(
+      scratch.project,
+      '.claude',
+      'skills',
+      PROJECT_SKILL_DIR_NAME,
+      'SKILL.md',
+    );
+    expect(existsSync(skillFile)).toBe(true);
+    expect(readFileSync(skillFile, 'utf-8')).toContain('bundled-9.9.9-content');
+    expect(
+      logEvents.some((e) => e.event === 'project-skill-reclaim-created' && e.editorId === 'claude'),
+    ).toBe(true);
+  });
+
+  it('creates a project SKILL.md for cursor wired via .cursor/mcp.json', async () => {
+    mkdirSync(join(scratch.project, '.cursor'), { recursive: true });
+    writeFileSync(join(scratch.project, '.cursor', 'mcp.json'), OK_WIRED_MCP_JSON);
+
+    const written: Array<{ home: string; version: string }> = [];
+    const result = await repairSkills({
+      projectDir: scratch.project,
+      home: scratch.home,
+      logger: (event) => logEvents.push(event),
+      deps: depsBuilder({
+        projectBundleDir,
+        discoveryBundleDir,
+        bundledVersion: '9.9.9',
+        recordedVersion: '9.9.9',
+        writtenVersions: written,
+      }),
+    });
+
+    if (result.status !== 'done' || result.project.outcome !== 'done')
+      throw new Error('unreachable');
+    expect(result.project.entries.find((e) => e.editorId === 'cursor')?.outcome).toBe('created');
+    expect(
+      existsSync(join(scratch.project, '.cursor', 'skills', PROJECT_SKILL_DIR_NAME, 'SKILL.md')),
+    ).toBe(true);
+  });
+
+  it('creates a project SKILL.md for codex wired via .codex/config.toml (TOML, marker substring)', async () => {
+    mkdirSync(join(scratch.project, '.codex'), { recursive: true });
+    writeFileSync(
+      join(scratch.project, '.codex', 'config.toml'),
+      '[mcp_servers.open-knowledge]\ncommand = "/bin/sh"\nargs = ["-l", "-c", "# ok-mcp-v1\\nexec ok mcp"]\n',
+    );
+
+    const written: Array<{ home: string; version: string }> = [];
+    const result = await repairSkills({
+      projectDir: scratch.project,
+      home: scratch.home,
+      logger: (event) => logEvents.push(event),
+      deps: depsBuilder({
+        projectBundleDir,
+        discoveryBundleDir,
+        bundledVersion: '9.9.9',
+        recordedVersion: '9.9.9',
+        writtenVersions: written,
+      }),
+    });
+
+    if (result.status !== 'done' || result.project.outcome !== 'done')
+      throw new Error('unreachable');
+    expect(result.project.entries.find((e) => e.editorId === 'codex')?.outcome).toBe('created');
+    expect(
+      existsSync(join(scratch.project, '.agents', 'skills', PROJECT_SKILL_DIR_NAME, 'SKILL.md')),
+    ).toBe(true);
+  });
+
+  it('does NOT create when a host config exists but has no OK marker', async () => {
+    writeFileSync(join(scratch.project, '.mcp.json'), UNWIRED_MCP_JSON);
+
+    const written: Array<{ home: string; version: string }> = [];
+    const result = await repairSkills({
+      projectDir: scratch.project,
+      home: scratch.home,
+      logger: (event) => logEvents.push(event),
+      deps: depsBuilder({
+        projectBundleDir,
+        discoveryBundleDir,
+        bundledVersion: '9.9.9',
+        recordedVersion: '9.9.9',
+        writtenVersions: written,
+      }),
+    });
+
+    if (result.status !== 'done' || result.project.outcome !== 'done')
+      throw new Error('unreachable');
+    for (const entry of result.project.entries) {
+      expect(entry.outcome).toBe('no-token');
+      expect(existsSync(entry.path)).toBe(false);
+    }
+  });
+
+  it('refreshes (reclaimed) rather than re-creating when SKILL.md already exists and is wired', async () => {
+    const claudeDest = join(scratch.project, '.claude', 'skills', PROJECT_SKILL_DIR_NAME);
+    writeStaleSkillFiles(claudeDest, 'wired-refresh');
+    writeFileSync(join(scratch.project, '.mcp.json'), OK_WIRED_MCP_JSON);
+
+    const written: Array<{ home: string; version: string }> = [];
+    const result = await repairSkills({
+      projectDir: scratch.project,
+      home: scratch.home,
+      logger: (event) => logEvents.push(event),
+      deps: depsBuilder({
+        projectBundleDir,
+        discoveryBundleDir,
+        bundledVersion: '9.9.9',
+        recordedVersion: '9.9.9',
+        writtenVersions: written,
+      }),
+    });
+
+    if (result.status !== 'done' || result.project.outcome !== 'done')
+      throw new Error('unreachable');
+    expect(result.project.entries.find((e) => e.editorId === 'claude')?.outcome).toBe('reclaimed');
+    expect(readFileSync(join(claudeDest, 'SKILL.md'), 'utf-8')).toContain('bundled-9.9.9-content');
+    expect(existsSync(join(claudeDest, 'leftover.md'))).toBe(false);
+  });
+
+  it('refuses to create through a host dir symlink escaping the project (create path)', async () => {
+    const realFs = await import('node:fs');
+    const escapeRoot = resolve(
+      tmpdir(),
+      `repair-skills-create-escape-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    const escapeTarget = join(escapeRoot, 'evil-claude');
+    mkdirSync(escapeTarget, { recursive: true });
+    const witness = join(escapeTarget, 'witness.txt');
+    writeFileSync(witness, 'do-not-touch');
+    try {
+      realFs.symlinkSync(escapeTarget, join(scratch.project, '.claude'));
+      writeFileSync(join(scratch.project, '.mcp.json'), OK_WIRED_MCP_JSON);
+
+      const written: Array<{ home: string; version: string }> = [];
+      const result = await repairSkills({
+        projectDir: scratch.project,
+        home: scratch.home,
+        logger: (event) => logEvents.push(event),
+        deps: depsBuilder({
+          projectBundleDir,
+          discoveryBundleDir,
+          bundledVersion: '9.9.9',
+          recordedVersion: '9.9.9',
+          writtenVersions: written,
+        }),
+      });
+
+      if (result.status !== 'done' || result.project.outcome !== 'done')
+        throw new Error('unreachable');
+      const claude = result.project.entries.find((e) => e.editorId === 'claude');
+      expect(claude?.outcome).toBe('failed');
+      expect(claude?.error).toMatch(/outside the project directory/i);
+      expect(readFileSync(witness, 'utf-8')).toBe('do-not-touch');
+    } finally {
+      rmSync(escapeRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('repairSkills — user sweep version gate (AC-B1, AC-B2, AC-B3, AC-B4)', () => {
   let scratch: ReturnType<typeof mkScratch>;
   let projectBundleDir: string;
@@ -906,7 +1115,7 @@ describe('formatRepairSkillsResult — done-branch stdout formatting', () => {
       },
     });
     expect(out).toContain('Skill reclaim complete.');
-    expect(out).toContain('Project: 1 reclaimed, 1 no-token, 1 failed.');
+    expect(out).toContain('Project: 1 reclaimed, 0 created, 1 no-token, 1 failed.');
     expect(out).toContain('User (9.9.9): 2 written, 2 skipped, 0 failed.');
   });
 

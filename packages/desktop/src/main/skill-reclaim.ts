@@ -8,6 +8,7 @@ import {
   writeFileSync as fsWriteFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { assertProjectPathSafe, EDITOR_TARGETS, type EditorId } from '@inkeep/open-knowledge';
 
 interface SkillReclaimLogger {
   event(payload: { event: string; [key: string]: unknown }): void;
@@ -21,12 +22,14 @@ const DEFAULT_LOGGER: SkillReclaimLogger = {
 
 const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
   readonly hostDir: string;
-  readonly editorId: string;
+  readonly editorId: EditorId;
 }> = [
   { hostDir: '.claude', editorId: 'claude' },
   { hostDir: '.cursor', editorId: 'cursor' },
   { hostDir: '.agents', editorId: 'codex' },
 ];
+
+const OK_MCP_MARKER = '# ok-mcp-v1';
 
 const USER_SKILL_DIR_NAME = 'open-knowledge-discovery';
 const PROJECT_SKILL_DIR_NAME = 'open-knowledge';
@@ -329,7 +332,7 @@ type ProjectSkillReclaimEntry = {
   editorId: string;
   hostDir: string;
   path: string;
-  status: 'no-token' | 'reclaimed' | 'failed';
+  status: 'no-token' | 'reclaimed' | 'created' | 'failed';
   error?: string;
 };
 
@@ -344,11 +347,22 @@ interface ReclaimProjectSkillsOpts {
   platform: 'darwin' | 'win32' | 'linux' | string;
   forceEnv?: string | null | undefined;
   reclaimDisableEnv?: string | null | undefined;
+  createIfWired?: boolean;
   deps: {
     resolveBundledSkillDir(): string;
   };
   fs?: SkillFsOps;
   logger?: SkillReclaimLogger;
+}
+
+function editorWiredForOk(configPath: string | undefined, fs: SkillFsOps): boolean {
+  if (!configPath) return false;
+  try {
+    if (!fs.existsSync(configPath)) return false;
+    return fs.readFileSync(configPath).toString('utf8').includes(OK_MCP_MARKER);
+  } catch {
+    return false;
+  }
 }
 
 export async function reclaimProjectSkillsOnProjectOpen(
@@ -361,6 +375,7 @@ export async function reclaimProjectSkillsOnProjectOpen(
     platform,
     forceEnv,
     reclaimDisableEnv,
+    createIfWired = false,
     deps,
     fs = defaultFsOps,
     logger = DEFAULT_LOGGER,
@@ -386,7 +401,10 @@ export async function reclaimProjectSkillsOnProjectOpen(
   for (const host of HOSTS_WITH_USER_SKILL_DIR) {
     const dest = join(projectDir, host.hostDir, 'skills', PROJECT_SKILL_DIR_NAME);
     const skillFile = join(dest, 'SKILL.md');
-    if (!fs.existsSync(skillFile)) {
+    const skillExists = fs.existsSync(skillFile);
+    const projectConfigPath = EDITOR_TARGETS[host.editorId]?.projectConfigPath?.(projectDir);
+    const wired = !skillExists && createIfWired && editorWiredForOk(projectConfigPath, fs);
+    if (!skillExists && !wired) {
       entries.push({
         editorId: host.editorId,
         hostDir: host.hostDir,
@@ -401,15 +419,17 @@ export async function reclaimProjectSkillsOnProjectOpen(
       continue;
     }
     try {
+      assertProjectPathSafe(dest, projectDir);
       replaceDir(sourceDir, dest, fs);
+      const status = skillExists ? 'reclaimed' : 'created';
       entries.push({
         editorId: host.editorId,
         hostDir: host.hostDir,
         path: dest,
-        status: 'reclaimed',
+        status,
       });
       logger.event({
-        event: 'project-skill-reclaim-reclaimed',
+        event: skillExists ? 'project-skill-reclaim-reclaimed' : 'project-skill-reclaim-created',
         editorId: host.editorId,
         path: dest,
       });

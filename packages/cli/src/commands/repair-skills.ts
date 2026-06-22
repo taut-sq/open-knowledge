@@ -19,6 +19,7 @@ import {
 } from '@inkeep/open-knowledge-server';
 import { Command } from 'commander';
 import { assertProjectPathSafe } from '../integrations/write-project-skill.ts';
+import { CHAIN_VERSION_SENTINEL, EDITOR_TARGETS, type EditorId } from './editors.ts';
 
 const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
   readonly hostDir: string;
@@ -107,7 +108,7 @@ export interface RepairSkillsContext {
   fs?: RepairSkillsFsOps;
 }
 
-export type ProjectSkillOutcome = 'no-token' | 'reclaimed' | 'failed';
+export type ProjectSkillOutcome = 'no-token' | 'reclaimed' | 'created' | 'failed';
 export type UserSkillCentralOutcome = 'written' | 'overwritten' | 'failed';
 export type UserSkillHostOutcome =
   | 'written'
@@ -179,6 +180,16 @@ function copyDirContents(sourceDir: string, destDir: string, fs: RepairSkillsFsO
   }
 }
 
+function editorWiredForOk(configPath: string | undefined, fs: RepairSkillsFsOps): boolean {
+  if (!configPath) return false;
+  try {
+    if (!fs.existsSync(configPath)) return false;
+    return fs.readFileSync(configPath).toString('utf8').includes(CHAIN_VERSION_SENTINEL);
+  } catch {
+    return false;
+  }
+}
+
 function runProjectSweep(
   projectDir: string,
   deps: Required<RepairSkillsDeps>,
@@ -198,7 +209,11 @@ function runProjectSweep(
   for (const host of HOSTS_WITH_USER_SKILL_DIR) {
     const dest = join(projectDir, host.hostDir, 'skills', PROJECT_SKILL_DIR_NAME);
     const skillFile = join(dest, 'SKILL.md');
-    if (!fs.existsSync(skillFile)) {
+    const skillExists = fs.existsSync(skillFile);
+    const projectConfigPath =
+      EDITOR_TARGETS[host.editorId as EditorId]?.projectConfigPath?.(projectDir);
+    const wired = !skillExists && editorWiredForOk(projectConfigPath, fs);
+    if (!skillExists && !wired) {
       entries.push({
         editorId: host.editorId,
         hostDir: host.hostDir,
@@ -216,14 +231,15 @@ function runProjectSweep(
     try {
       assertProjectPathSafe(dest, projectDir);
       replaceDir(sourceDir, dest, fs);
+      const outcome: ProjectSkillOutcome = skillExists ? 'reclaimed' : 'created';
       entries.push({
         editorId: host.editorId,
         hostDir: host.hostDir,
         path: dest,
-        outcome: 'reclaimed',
+        outcome,
       });
       logger({
-        event: 'project-skill-reclaim-reclaimed',
+        event: skillExists ? 'project-skill-reclaim-reclaimed' : 'project-skill-reclaim-created',
         scope: 'project',
         editorId: host.editorId,
         path: dest,
@@ -490,9 +506,12 @@ function formatRepairSkillsResult(result: RepairSkillsResult): string {
   const lines: string[] = ['Skill reclaim complete.'];
   if (result.project.outcome === 'done') {
     const reclaimed = result.project.entries.filter((e) => e.outcome === 'reclaimed').length;
+    const created = result.project.entries.filter((e) => e.outcome === 'created').length;
     const noToken = result.project.entries.filter((e) => e.outcome === 'no-token').length;
     const failed = result.project.entries.filter((e) => e.outcome === 'failed').length;
-    lines.push(`  Project: ${reclaimed} reclaimed, ${noToken} no-token, ${failed} failed.`);
+    lines.push(
+      `  Project: ${reclaimed} reclaimed, ${created} created, ${noToken} no-token, ${failed} failed.`,
+    );
   } else {
     lines.push(`  Project: skipped (${result.project.reason}).`);
   }

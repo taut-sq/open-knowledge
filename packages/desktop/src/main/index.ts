@@ -824,21 +824,6 @@ async function openProject(
       err: err instanceof Error ? err.message : String(err),
     });
   });
-  void reclaimProjectSkillsOnProjectOpen({
-    projectDir: resolvedProjectDir,
-    executablePath: app.getPath('exe'),
-    isPackaged: app.isPackaged,
-    platform: process.platform,
-    forceEnv: process.env.OK_M6B_FORCE ?? null,
-    reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
-    deps: {
-      resolveBundledSkillDir: () => resolveBundledSkillDir('project', { checkDesktop: false }),
-    },
-  }).catch((err) => {
-    console.warn('[main] project-skill reclaim failed', {
-      err: err instanceof Error ? err.message : String(err),
-    });
-  });
   let didEnsureGit = false;
   let flowKind: OnboardingFlowKind;
   let contentDirChanged = false;
@@ -993,6 +978,25 @@ async function openProject(
         pickedPath: discovery.pickedPath,
       };
     }
+  }
+
+  if (discovery.kind === 'managed' || discovery.kind === 'managed-requires-confirmation') {
+    void reclaimProjectSkillsOnProjectOpen({
+      projectDir: resolvedProjectDir,
+      executablePath: app.getPath('exe'),
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      forceEnv: process.env.OK_M6B_FORCE ?? null,
+      reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
+      createIfWired: true,
+      deps: {
+        resolveBundledSkillDir: () => resolveBundledSkillDir('project', { checkDesktop: false }),
+      },
+    }).catch((err) => {
+      console.warn('[main] project-skill reclaim failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   recordOnboardingFlow({
