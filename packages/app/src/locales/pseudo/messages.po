@@ -4307,6 +4307,10 @@ msgstr ""
 msgid "Preferences"
 msgstr ""
 
+#: src/components/CommandPalette.tsx
+msgid "Preparing search"
+msgstr ""
+
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Preparing share URL..."
 msgstr ""

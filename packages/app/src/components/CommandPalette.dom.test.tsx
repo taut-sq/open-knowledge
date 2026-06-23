@@ -39,6 +39,7 @@ const installedAgentStates = {
   cursor: { installed: false },
 };
 const workspaceValue = { rootPath: '/workspace' };
+let pageListLoading = false;
 
 mock.module('@lingui/react/macro', () => ({
   Trans: ({ children }: { children?: ReactNode }) => <>{children}</>,
@@ -142,6 +143,8 @@ mock.module('@/components/PageListContext', () => ({
     pageTitles: new Map<string, string>(),
     pageMeta: new Map<string, unknown>(),
     folderPaths: new Set<string>(),
+    filePaths: new Set<string>(),
+    loading: pageListLoading,
   }),
 }));
 
@@ -236,6 +239,7 @@ describe('CommandPalette DOM behavior', () => {
     cleanup();
     activeDocName = 'docs/active';
     activeTarget = { kind: 'doc', docName: 'docs/active' };
+    pageListLoading = false;
     requestDocPanelTabCalls = [];
     seedDialogProps = [];
     newItemDialogProps = [];
@@ -370,6 +374,59 @@ describe('CommandPalette DOM behavior', () => {
 
     expect(commandDialogProps.at(-1)?.transition).toBeUndefined();
     expect(commandDialogProps.at(-1)?.placement).toBeUndefined();
+  });
+
+  test('during cold load, a typed query shows a preparing state and never fires the body search', async () => {
+    pageListLoading = true;
+    await renderPalette({ bridge: null });
+
+    await setQuery('rename');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('command-palette-search-preparing')).not.toBeNull(),
+    );
+    expect(screen.queryByText('Search failed.')).toBeNull();
+    expect(screen.queryByText('No matching commands.')).toBeNull();
+
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } };
+    expect(fetchMock.mock.calls.some((call) => call[0] === '/api/search')).toBe(false);
+  });
+
+  test('once the page list has loaded, a typed query fires the body search with no preparing state', async () => {
+    await renderPalette({ bridge: null });
+
+    await setQuery('rename');
+
+    await waitFor(() => {
+      const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } };
+      expect(fetchMock.mock.calls.some((call) => call[0] === '/api/search')).toBe(true);
+    });
+    expect(screen.queryByTestId('command-palette-search-preparing')).toBeNull();
+  });
+
+  test('a query typed during cold load auto-fires the body search once the page list loads', async () => {
+    pageListLoading = true;
+    const { CommandPalette } = await import('./CommandPalette');
+    const onOpenChange = mock(() => {});
+    const { rerender } = render(
+      <CommandPalette bridge={null} open={true} onOpenChange={onOpenChange} />,
+    );
+    await waitFor(() => expect(screen.getByRole('dialog')).not.toBeNull());
+
+    await setQuery('rename');
+    await waitFor(() =>
+      expect(screen.getByTestId('command-palette-search-preparing')).not.toBeNull(),
+    );
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } };
+    expect(fetchMock.mock.calls.some((call) => call[0] === '/api/search')).toBe(false);
+
+    pageListLoading = false;
+    rerender(<CommandPalette bridge={null} open={true} onOpenChange={onOpenChange} />);
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => call[0] === '/api/search')).toBe(true),
+    );
+    expect(screen.queryByTestId('command-palette-search-preparing')).toBeNull();
   });
 });
 

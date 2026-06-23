@@ -4312,6 +4312,10 @@ msgstr "Plain"
 msgid "Preferences"
 msgstr "Preferences"
 
+#: src/components/CommandPalette.tsx
+msgid "Preparing search"
+msgstr "Preparing search"
+
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Preparing share URL..."
 msgstr "Preparing share URL..."

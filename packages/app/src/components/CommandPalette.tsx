@@ -258,7 +258,14 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   const semanticAbortRef = useRef<AbortController | null>(null);
   const semanticTimerRef = useRef<number | null>(null);
   const { activeDocName, activeTarget } = useDocumentContext();
-  const { pages, pageTitles, pageMeta, folderPaths, filePaths } = usePageList();
+  const {
+    pages,
+    pageTitles,
+    pageMeta,
+    folderPaths,
+    filePaths,
+    loading: pagesLoading,
+  } = usePageList();
   const workspace = useWorkspace();
   const { states: installStates, refresh: refreshInstallStates } = useInstalledAgents();
   const { dispatch: dispatchHandoff } = useHandoffDispatch();
@@ -419,7 +426,7 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   }, [open, tagDocsTarget]);
 
   useEffect(() => {
-    if (!open || !trimmedDeferredQuery || inExclusiveMode) {
+    if (!open || !trimmedDeferredQuery || inExclusiveMode || pagesLoading) {
       setSearchResults([]);
       setSearchStatus('idle');
       setSearchTruncated(false);
@@ -456,7 +463,7 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [open, trimmedDeferredQuery, inExclusiveMode]);
+  }, [open, trimmedDeferredQuery, inExclusiveMode, pagesLoading]);
 
   const runAction = (fn: () => Promise<void> | void, fallback = t`Command failed.`) => {
     onOpenChange(false);
@@ -495,6 +502,8 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
     trimmedDeferredQuery !== '' &&
     searchStatus === 'loading' &&
     !showNavigation;
+  const showSearchPreparing =
+    !inExclusiveMode && trimmedDeferredQuery !== '' && pagesLoading && !showNavigation;
   const showCreateFile =
     !inExclusiveMode && matchesCommandQuery(t`New file`, deferredQuery, ['create file']);
   const showCreateFolder =
@@ -568,6 +577,7 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
     showRecentNavigation ||
     showNavigation ||
     showSearchLoading ||
+    showSearchPreparing ||
     showCreateFile ||
     showCreateFolder ||
     showGraphCommand ||
@@ -613,6 +623,7 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
   function fireSemanticSearch(raw: string) {
     const q = raw.trim();
     if (!q) return;
+    if (pagesLoading) return;
     semanticAbortRef.current?.abort();
     if (semanticTimerRef.current !== null) window.clearTimeout(semanticTimerRef.current);
     const controller = new AbortController();
@@ -845,6 +856,17 @@ export function CommandPalette({ bridge = null, open, onOpenChange }: CommandPal
                 </CommandGroup>
               ) : null}
             </>
+          ) : null}
+          {showSearchPreparing ? (
+            <div
+              className="flex items-center justify-center gap-2 py-6 text-muted-foreground text-sm"
+              role="status"
+              aria-live="polite"
+              data-testid="command-palette-search-preparing"
+            >
+              <Loader2 className="size-4 animate-spin" />
+              <Trans>Preparing search</Trans>
+            </div>
           ) : null}
           {showSearchLoading && !showNavigation ? (
             <CommandEmpty>
