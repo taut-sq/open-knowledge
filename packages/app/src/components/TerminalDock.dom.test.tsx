@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useRef } from 'react';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 
 const TERMINAL_PANEL_ID = 'terminal-dock-panel';
@@ -125,9 +126,16 @@ function renderDock(visible: boolean, launch?: { prompt: string; nonce: number }
   const onVisibleChange = mock((_v: boolean) => {});
   const { bridge, create, kill, viewMenuPushes, dispatchMenuAction } = makeBridge();
   const ui = (v: boolean, l?: { prompt: string; nonce: number } | null) => (
-    <TerminalDock bridge={bridge} visible={v} onVisibleChange={onVisibleChange} launch={l ?? null}>
-      <div data-testid="editor-child" />
-    </TerminalDock>
+    <TooltipProvider>
+      <TerminalDock
+        bridge={bridge}
+        visible={v}
+        onVisibleChange={onVisibleChange}
+        launch={l ?? null}
+      >
+        <div data-testid="editor-child" />
+      </TerminalDock>
+    </TooltipProvider>
   );
   const utils = render(ui(visible, launch));
   return {
@@ -207,7 +215,7 @@ describe('TerminalDock multi-session', () => {
     expect(screen.getAllByTestId('terminal-session')).toHaveLength(1);
     const firstActive = activePanelId();
 
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
 
     expect(screen.getAllByTestId('terminal-session')).toHaveLength(2);
     expect(activePanelId()).not.toBe(firstActive);
@@ -217,8 +225,8 @@ describe('TerminalDock multi-session', () => {
   test('all sessions stay mounted with exactly one active', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
 
     expect(screen.getAllByTestId('terminal-session')).toHaveLength(3);
     const tabpanels = screen.getAllByRole('tabpanel', { hidden: true });
@@ -231,7 +239,7 @@ describe('TerminalDock multi-session', () => {
   test('switching tabs changes the active session without unmounting the others', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     const secondActive = activePanelId();
 
     await user.click(screen.getByRole('tab', { name: 'Terminal 1' }));
@@ -243,7 +251,7 @@ describe('TerminalDock multi-session', () => {
   test('typing target stays scoped: the active panel is the only one shown', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
 
     expect(sessionPanels()).toHaveLength(2);
     const activeCount = document.querySelectorAll(
@@ -255,7 +263,7 @@ describe('TerminalDock multi-session', () => {
   test('selecting a tab moves focus to that session', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     const second = activePanelId();
 
     await user.click(screen.getByRole('tab', { name: 'Terminal 1' }));
@@ -271,7 +279,7 @@ describe('TerminalDock multi-session', () => {
   test('closing a non-active tab removes only it and leaves the active one running', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     const activeBefore = activePanelId();
 
     await user.click(screen.getByRole('button', { name: 'Close Terminal 1' }));
@@ -283,7 +291,7 @@ describe('TerminalDock multi-session', () => {
   test("closing a tab reaps only that session's PTY and leaves the others alive", async () => {
     const user = userEvent.setup();
     const view = renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     await waitFor(() => expect(view.create).toHaveBeenCalledTimes(2));
     expect(view.kill).not.toHaveBeenCalled();
 
@@ -297,8 +305,8 @@ describe('TerminalDock multi-session', () => {
   test('closing the active tab activates its left neighbor', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     await user.click(screen.getByRole('tab', { name: 'Terminal 2' }));
     const middle = activePanelId();
 
@@ -315,7 +323,7 @@ describe('TerminalDock multi-session', () => {
   test('closing the active leftmost tab activates its right neighbor', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     await user.click(screen.getByRole('tab', { name: 'Terminal 1' }));
     const closedId = activePanelId();
     const rightNeighborId =
@@ -332,8 +340,8 @@ describe('TerminalDock multi-session', () => {
   test('closing the active tab moves focus into the surviving neighbor', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     await user.click(screen.getByRole('tab', { name: 'Terminal 2' }));
 
     await user.click(screen.getByRole('button', { name: 'Close Terminal 2' }));
@@ -360,8 +368,8 @@ describe('TerminalDock multi-session', () => {
   test('hiding the dock preserves every session and keeps the last-active tab on reopen', async () => {
     const user = userEvent.setup();
     const view = renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     await user.click(screen.getByRole('tab', { name: 'Terminal 2' }));
     const activeBeforeHide = activePanelId();
     expect(screen.getAllByTestId('terminal-session')).toHaveLength(3);
@@ -445,7 +453,7 @@ describe('TerminalDock multi-session', () => {
   test('the Terminal menu "Kill Terminal" action closes the active tab', async () => {
     const user = userEvent.setup();
     const view = renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     expect(screen.getAllByTestId('terminal-session')).toHaveLength(2);
 
     act(() => view.dispatchMenuAction('kill-terminal'));
@@ -456,8 +464,8 @@ describe('TerminalDock multi-session', () => {
   test('Cmd+number jumps to the matching tab while the terminal is focused', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     const panels = sessionPanels();
     const thirdSink = panels[2]?.querySelector<HTMLElement>('.xterm-helper-textarea');
     act(() => thirdSink?.focus());
@@ -483,7 +491,7 @@ describe('TerminalDock multi-session', () => {
   test('Cmd+number for a tab that does not exist is left for the shell', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     const panels = sessionPanels();
     act(() => panels[1]?.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus());
     const before = activePanelId();
@@ -505,7 +513,7 @@ describe('TerminalDock multi-session', () => {
   test('Cmd+number is ignored when focus is outside the terminal dock', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     await user.click(screen.getByRole('tab', { name: 'Terminal 1' }));
     const before = activePanelId();
 
@@ -527,7 +535,7 @@ describe('TerminalDock multi-session', () => {
   test('a non-chord keystroke is not intercepted so it reaches the active shell', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
     const before = activePanelId();
     act(() => sessionPanels()[0]?.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus());
 
@@ -566,7 +574,7 @@ describe('TerminalDock multi-session', () => {
   test('wires each tab to its panel via accessible tablist/tabpanel relationships', async () => {
     const user = userEvent.setup();
     renderDock(true);
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
 
     const tablist = screen.getByRole('tablist', { name: 'Terminal sessions' });
     const tabs = within(tablist).getAllByRole('tab');

@@ -3543,8 +3543,8 @@ msgid "New template"
 msgstr "New template"
 
 #: src/components/TerminalTabStrip.tsx
-msgid "New Terminal"
-msgstr "New Terminal"
+msgid "New terminal"
+msgstr "New terminal"
 
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Next match"
@@ -4104,7 +4104,7 @@ msgid "Opens in a new tab"
 msgstr "Opens in a new tab"
 
 #: src/components/empty-state/CreateView.tsx
-#: src/components/EmptyEditorState.tsx
+#: src/components/PackCardGrid.tsx
 msgid "or create a new file <0/>"
 msgstr "or create a new file <0/>"
 

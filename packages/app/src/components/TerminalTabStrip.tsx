@@ -1,8 +1,9 @@
-import { useLingui } from '@lingui/react/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
 import { PlusIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export interface TerminalTabDescriptor {
@@ -42,7 +43,7 @@ export function TerminalTabStrip({
         <TabsList
           variant="line"
           aria-label={t`Terminal sessions`}
-          className="flex h-auto min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto bg-transparent p-0 [scrollbar-width:none]"
+          className="flex h-auto min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] scroll-fade-mask-x"
         >
           {sessions.map((session) => {
             const isActive = session.id === activeSessionId;
@@ -50,7 +51,7 @@ export function TerminalTabStrip({
               <div
                 key={session.id}
                 className={cn(
-                  'flex shrink-0 items-center rounded-md pr-0.5 transition-colors',
+                  'group flex shrink-0 items-center rounded-md pr-0.5 transition-colors',
                   isActive ? 'bg-muted' : 'hover:bg-muted/50',
                 )}
               >
@@ -67,7 +68,10 @@ export function TerminalTabStrip({
                   size="icon-xs"
                   aria-label={t`Close ${session.label}`}
                   tabIndex={isActive ? 0 : -1}
-                  className="text-muted-foreground hover:text-foreground"
+                  className={cn(
+                    'text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100',
+                    isActive && 'opacity-100',
+                  )}
                   onClick={(event) => {
                     event.stopPropagation();
                     onClose(session.id);
@@ -79,16 +83,23 @@ export function TerminalTabStrip({
             );
           })}
         </TabsList>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          aria-label={t`New Terminal`}
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={onNew}
-        >
-          <PlusIcon aria-hidden="true" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t`New terminal`}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={onNew}
+            >
+              <PlusIcon aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={8}>
+            <Trans>New terminal</Trans>
+          </TooltipContent>
+        </Tooltip>
       </div>
       {children}
     </Tabs>

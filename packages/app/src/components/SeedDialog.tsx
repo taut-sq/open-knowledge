@@ -211,7 +211,7 @@ export function SeedDialog({ open, onOpenChange, onSeedApplied, initialPackId }:
 
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl" data-ok-layer-spawned="">
+      <DialogContent className="sm:max-w-4xl" data-ok-layer-spawned="">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

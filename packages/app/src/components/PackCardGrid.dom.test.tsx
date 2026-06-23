@@ -92,6 +92,26 @@ describe('PackCardGrid runtime behavior', () => {
     expect(selected).toEqual(['knowledge-base']);
   });
 
+  test('omits the blank-file card when onCreateBlankFile is not provided', async () => {
+    await renderPackCardGrid({ packs: allPacks });
+
+    expect(screen.getAllByRole('button')).toHaveLength(allPacks.length);
+    expect(screen.queryByText(/create a new file/)).toBeNull();
+  });
+
+  test('renders a trailing blank-file card and fires the callback on click', async () => {
+    const onCreateBlankFile = mock(() => {});
+    await renderPackCardGrid({ packs: allPacks, onCreateBlankFile });
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(allPacks.length + 1);
+    const blankCard = buttons.at(-1);
+    expect(blankCard?.textContent).toContain('create a new file');
+
+    await userEvent.click(blankCard as HTMLElement);
+    expect(onCreateBlankFile).toHaveBeenCalledTimes(1);
+  });
+
   test('renders the loading skeleton when caller-owned packs are still null', async () => {
     await renderPackCardGrid({ packs: null });
 

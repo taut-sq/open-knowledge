@@ -269,7 +269,7 @@ function TerminalSession({
           onDismiss={() => setReadiness(null)}
         />
       ) : null}
-      <div ref={containerRef} data-terminal-status={status} className="min-h-0 flex-1" />
+      <div ref={containerRef} data-terminal-status={status} className="min-h-0 flex-1 px-1.5" />
       {status === 'exited' && exitInfo ? (
         <TerminalExitNotice info={exitInfo} onRestart={onRestart} />
       ) : null}

@@ -29,10 +29,10 @@ export function TerminalExitNotice({ info, onRestart }: TerminalExitNoticeProps)
   return (
     <div
       role="alert"
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 p-6 text-center text-foreground"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 dark:bg-transparent p-6 text-center"
     >
-      <p className="max-w-sm text-sm">{message}</p>
-      <Button size="sm" variant="secondary" onClick={onRestart}>
+      <p className="max-w-sm text-sm text-muted-foreground">{message}</p>
+      <Button size="sm" variant="outline" className="uppercase font-mono" onClick={onRestart}>
         {t`Restart terminal`}
       </Button>
     </div>

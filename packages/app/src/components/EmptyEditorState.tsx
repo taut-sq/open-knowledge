@@ -1,6 +1,5 @@
 import { DocumentListSuccessSchema } from '@inkeep/open-knowledge-core';
-import { Trans, useLingui } from '@lingui/react/macro';
-import { ArrowRightIcon } from 'lucide-react';
+import { useLingui } from '@lingui/react/macro';
 import { useEffect, useRef, useState } from 'react';
 import { CopyablePromptList } from '@/components/empty-state/CopyablePromptList';
 import { CreatePromptComposer } from '@/components/empty-state/CreatePromptComposer';
@@ -10,7 +9,6 @@ import { filterVisibleEntries } from '@/components/file-tree-utils';
 import { OkBlob } from '@/components/OkBlob';
 import { PackCardGrid } from '@/components/PackCardGrid';
 import { SeedDialog } from '@/components/SeedDialog';
-import { Button } from '@/components/ui/button';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { emitCreateTopLevelFile } from '@/lib/create-file-events';
 import type { OkPackId } from '@/lib/desktop-bridge-types';
@@ -165,21 +163,14 @@ function OnboardingView({
           above keep the parent's wider `gap-10` breathing room. */}
       <div className="flex w-full flex-col gap-4">
         <TemplateDivider label={isEmbedded ? t`Use a starter pack` : t`Or use a starter pack`} />
-        <PackCardGrid onPackSelect={onPackSelect} />
-        {/* Escape hatch for users who don't want a scaffolded layout — fires
-            the same window-level event the sidebar toolbar uses, so the new
-            file lands with the standard inline-rename flow (sidebar handles
-            focus + navigation). */}
-        <Button
-          variant="link"
-          className="text-muted-foreground font-normal justify-end"
-          size="sm"
-          onClick={() => emitCreateTopLevelFile()}
-        >
-          <Trans>
-            or create a new file <ArrowRightIcon aria-hidden="true" className="size-3" />
-          </Trans>
-        </Button>
+        {/* The trailing "Blank file" card is the escape hatch for users who
+            don't want a scaffolded layout — it fires the same window-level
+            event the sidebar toolbar uses, so the new file lands with the
+            standard inline-rename flow (sidebar handles focus + navigation). */}
+        <PackCardGrid
+          onPackSelect={onPackSelect}
+          onCreateBlankFile={() => emitCreateTopLevelFile()}
+        />
       </div>
     </div>
   );

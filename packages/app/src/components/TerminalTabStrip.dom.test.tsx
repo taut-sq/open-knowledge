@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { type TerminalTabDescriptor, TerminalTabStrip } from './TerminalTabStrip';
 
 const SESSIONS: readonly TerminalTabDescriptor[] = [
@@ -18,14 +19,16 @@ function renderStrip(props?: {
   const onNew = mock(() => {});
   const onClose = mock((_id: string) => {});
   render(
-    <TerminalTabStrip
-      sessions={props?.sessions ?? SESSIONS}
-      activeSessionId={props?.activeSessionId ?? 's1'}
-      onSelect={onSelect}
-      onTabActivate={onTabActivate}
-      onNew={onNew}
-      onClose={onClose}
-    />,
+    <TooltipProvider>
+      <TerminalTabStrip
+        sessions={props?.sessions ?? SESSIONS}
+        activeSessionId={props?.activeSessionId ?? 's1'}
+        onSelect={onSelect}
+        onTabActivate={onTabActivate}
+        onNew={onNew}
+        onClose={onClose}
+      />
+    </TooltipProvider>,
   );
   return { onSelect, onTabActivate, onNew, onClose };
 }
@@ -99,7 +102,7 @@ describe('TerminalTabStrip', () => {
     const user = userEvent.setup();
     const { onNew, onSelect } = renderStrip();
 
-    await user.click(screen.getByRole('button', { name: 'New Terminal' }));
+    await user.click(screen.getByRole('button', { name: 'New terminal' }));
 
     expect(onNew).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
@@ -119,7 +122,7 @@ describe('TerminalTabStrip', () => {
 
   test('every icon-only control exposes an accessible name', () => {
     renderStrip();
-    expect(screen.getByRole('button', { name: 'New Terminal' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'New terminal' })).toBeDefined();
     for (const label of ['Terminal 1', 'Terminal 2', 'Terminal 3']) {
       expect(screen.getByRole('button', { name: `Close ${label}` })).toBeDefined();
     }
