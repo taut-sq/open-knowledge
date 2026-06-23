@@ -56,6 +56,20 @@ describe('applyReducedTransparency — disable path (reduced=true)', () => {
     expect(live.setVibrancy).toHaveBeenCalledTimes(1);
     expect(dead.setVibrancy).not.toHaveBeenCalled();
   });
+
+  test('a window stub without isDestroyed does not throw (optional-chain guard)', () => {
+    const setVibrancy = mock(() => {});
+    const win: BrowserWindowVibrancyTarget = {
+      setVibrancy: setVibrancy as unknown as (mat: 'sidebar' | 'window' | null) => void,
+    };
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [win],
+      defaultVibrancy: 'sidebar',
+    };
+
+    expect(() => applyReducedTransparency(deps, true)).not.toThrow();
+    expect(setVibrancy).toHaveBeenCalledWith(null);
+  });
 });
 
 describe('applyReducedTransparency — restore path (reduced=false)', () => {
@@ -128,7 +142,7 @@ describe('applyReducedTransparency — diagnostic logging', () => {
     expect(parsed.windowCount).toBe(1);
   });
 
-  test('windowCount counts only non-destroyed windows', () => {
+  test('windowCount counts only successfully-applied windows; destroyed windows go to destroyedCount', () => {
     const live = makeWindow();
     const dead = makeWindow({ destroyed: true });
     const warn = mock(() => {});
@@ -142,6 +156,25 @@ describe('applyReducedTransparency — diagnostic logging', () => {
 
     const parsed = JSON.parse(warn.mock.calls[0]?.[0] as unknown as string);
     expect(parsed.windowCount).toBe(1);
+    expect(parsed.destroyedCount).toBe(1);
+  });
+
+  test('summary partition is complete: all counters sum to getAllWindows().length', () => {
+    const a = makeWindow();
+    const b = makeWindow({ destroyed: true });
+    const warn = mock(() => {});
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [a.win, b.win],
+      defaultVibrancy: 'sidebar',
+      warn,
+    };
+
+    applyReducedTransparency(deps, true);
+
+    const parsed = JSON.parse(warn.mock.calls[0]?.[0] as unknown as string);
+    expect(
+      parsed.windowCount + parsed.skippedCount + parsed.failedCount + parsed.destroyedCount,
+    ).toBe(deps.getAllWindows().length);
   });
 
   test('omitting warn dep does not throw (optional sink)', () => {
@@ -252,5 +285,133 @@ describe('applyReducedTransparency — per-window throw isolation', () => {
     const lines = warn.mock.calls.map((call) => JSON.parse(call[0] as unknown as string));
     const summary = lines.find((l) => l.event === 'reduced-transparency-applied');
     expect(summary?.windowCount).toBe(1);
+    expect(summary?.skippedCount).toBe(0);
+    expect(summary?.failedCount).toBe(1);
+  });
+
+  test('per-window failure warn carries the window id for attribution', () => {
+    const a = makeWindow();
+    const setVibrancy = mock(() => {
+      throw new Error('setVibrancy: native failure');
+    });
+    const b: BrowserWindowVibrancyTarget = {
+      id: 42,
+      isDestroyed: () => false,
+      setVibrancy: setVibrancy as unknown as (mat: 'sidebar' | 'window' | null) => void,
+    };
+    const warn = mock(() => {});
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [a.win, b],
+      defaultVibrancy: 'sidebar',
+      warn,
+    };
+
+    applyReducedTransparency(deps, true);
+
+    const failed = warn.mock.calls
+      .map((call) => JSON.parse(call[0] as unknown as string))
+      .find((l) => l.event === 'reduced-transparency-window-failed');
+    expect(failed?.windowId).toBe(42);
+  });
+});
+
+describe('applyReducedTransparency — per-window idempotence memo (flicker guard)', () => {
+  function summaries(warn: ReturnType<typeof mock>) {
+    return warn.mock.calls
+      .map((call) => JSON.parse(call[0] as unknown as string))
+      .filter((l) => l.event === 'reduced-transparency-applied');
+  }
+
+  test('skips a window already at the target material on a repeat call (no redundant setVibrancy)', () => {
+    const a = makeWindow();
+    const warn = mock(() => {});
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [a.win],
+      defaultVibrancy: 'sidebar',
+      warn,
+    };
+
+    applyReducedTransparency(deps, false);
+    applyReducedTransparency(deps, false);
+
+    expect(a.setVibrancy).toHaveBeenCalledTimes(1);
+    expect(a.setVibrancy.mock.calls[0]).toEqual(['sidebar']);
+
+    const lines = summaries(warn);
+    expect(lines[0]).toMatchObject({ windowCount: 1, skippedCount: 0 });
+    expect(lines[1]).toMatchObject({ windowCount: 0, skippedCount: 1 });
+  });
+
+  test('re-applies when the material actually changes (genuine reduce-transparency toggle)', () => {
+    const a = makeWindow();
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [a.win],
+      defaultVibrancy: 'sidebar',
+    };
+
+    applyReducedTransparency(deps, false); // material 'sidebar'
+    applyReducedTransparency(deps, true); // material null — changed → re-applies
+
+    expect(a.setVibrancy).toHaveBeenCalledTimes(2);
+    expect(a.setVibrancy.mock.calls[0]).toEqual(['sidebar']);
+    expect(a.setVibrancy.mock.calls[1]).toEqual([null]);
+  });
+
+  test('applies once to a newly-opened window while skipping already-memoized windows', () => {
+    const a = makeWindow();
+    const b = makeWindow();
+    const warn = mock(() => {});
+
+    applyReducedTransparency(
+      { getAllWindows: () => [a.win], defaultVibrancy: 'sidebar', warn },
+      true,
+    );
+    applyReducedTransparency(
+      { getAllWindows: () => [a.win, b.win], defaultVibrancy: 'sidebar', warn },
+      true,
+    );
+
+    expect(a.setVibrancy).toHaveBeenCalledTimes(1);
+    expect(b.setVibrancy).toHaveBeenCalledTimes(1);
+    expect(b.setVibrancy.mock.calls[0]).toEqual([null]);
+    expect(summaries(warn).at(-1)).toMatchObject({ windowCount: 1, skippedCount: 1 });
+  });
+
+  test('per-window memo tracks each transition (apply / skip / re-apply on real change)', () => {
+    const a = makeWindow();
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [a.win],
+      defaultVibrancy: 'sidebar',
+    };
+
+    applyReducedTransparency(deps, false); // sidebar — applied
+    applyReducedTransparency(deps, false); // sidebar — skipped
+    applyReducedTransparency(deps, true); // null — changed, applied
+    applyReducedTransparency(deps, true); // null — skipped
+    applyReducedTransparency(deps, false); // sidebar — changed back, applied
+
+    expect(a.setVibrancy.mock.calls).toEqual([['sidebar'], [null], ['sidebar']]);
+  });
+
+  test('a window that throws is not memoized — the next apply retries instead of skipping', () => {
+    let calls = 0;
+    const setVibrancy = mock(() => {
+      calls += 1;
+      if (calls === 1) throw new Error('setVibrancy: transient native failure');
+    });
+    const win: BrowserWindowVibrancyTarget = {
+      isDestroyed: () => false,
+      setVibrancy: setVibrancy as unknown as (mat: 'sidebar' | 'window' | null) => void,
+    };
+    const deps: ReducedTransparencyDeps = {
+      getAllWindows: () => [win],
+      defaultVibrancy: 'sidebar',
+    };
+
+    applyReducedTransparency(deps, false); // throws — NOT memoized
+    applyReducedTransparency(deps, false); // retries (would skip if memoized on failure)
+
+    expect(setVibrancy).toHaveBeenCalledTimes(2);
+    expect(setVibrancy.mock.calls).toEqual([['sidebar'], ['sidebar']]);
   });
 });
