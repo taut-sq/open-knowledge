@@ -17,6 +17,7 @@ import { parseGitUrl } from '../github/url.ts';
 import { isGitHubRepoPublic } from '../github/visibility.ts';
 import { addOkPathsToGitExclude } from '../sharing/git-exclude.ts';
 
+
 const STAGE_RANGES: [string, number, number][] = [
   ['count', 0, 10],
   ['compress', 10, 20],
@@ -76,6 +77,7 @@ export async function cloneWithBranchFallback(opts: {
     throw err;
   }
 }
+
 
 interface CloneOptions {
   json: boolean;
@@ -231,6 +233,7 @@ export function ensureOkExcludedFromGit(
   return 'already-present';
 }
 
+
 const SHELL_SAFE_TOKEN = /^[A-Za-z0-9._/:@-]+$/;
 
 function quoteIfNeeded(s: string): string {
@@ -346,6 +349,7 @@ export async function handleCloneFailure(opts: {
     printStderr: opts.printStderr,
   });
 }
+
 
 export function cloneCommand(getConfig: () => Config): Command {
   return new Command('clone')

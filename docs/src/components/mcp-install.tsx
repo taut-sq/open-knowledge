@@ -12,7 +12,7 @@ export function McpInstall({ editor, children }: { editor: string; children?: Re
         </li>
         <li>
           <strong>Web app / terminal</strong> (Linux, Intel Mac — see the{' '}
-          <a href="/docs/get-started/quickstart#ok-install-web-app-linux-intel-mac">
+          <a href="/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">
             web app guide
           </a>
           ). Run <code>ok init</code> in your project: it registers the OpenKnowledge MCP server

@@ -9,7 +9,7 @@ OpenKnowledge is a beautiful, local-first markdown editor and LLM wiki with inte
   style="border-radius: 10px"
 />
 
-Available as [macOS app](https://github.com/inkeep/open-knowledge/releases/latest/download/Open-Knowledge-arm64.dmg) or [Web app/CLI](https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-intel-mac) for Linux, Windows, Intel Mac.
+Available as [macOS app](https://github.com/inkeep/open-knowledge/releases/latest/download/Open-Knowledge-arm64.dmg) or [Web app/CLI](https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac) for Linux, Windows, Intel Mac.
 
 # Features
 

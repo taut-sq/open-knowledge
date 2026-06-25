@@ -817,6 +817,7 @@ describe('applyDragPinMutation — drag-mutable pin state', () => {
 });
 
 describe('tabParts — non-`.md` call-site shapes (folder + asset)', () => {
+
   test('folder shape: docExt `/` produces baseName-with-trailing-slash label', () => {
     expect(tabParts('docs/guides', '/')).toEqual({
       baseName: 'guides',

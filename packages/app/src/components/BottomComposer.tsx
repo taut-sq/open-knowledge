@@ -1,3 +1,4 @@
+
 import { type TargetData, TERMINAL_CLI_IDS, type TerminalCli } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { ChevronDown, Loader2, SquareTerminal, TextQuote, X } from 'lucide-react';
@@ -179,7 +180,8 @@ export function BottomComposer({
           if (overlap <= 0) return;
           const scroller = view.dom.closest('.editor-doc-scroll');
           if (scroller instanceof HTMLElement) scroller.scrollTop += overlap;
-        } catch {}
+        } catch {
+        }
       });
     };
     const card = cardRef.current;
