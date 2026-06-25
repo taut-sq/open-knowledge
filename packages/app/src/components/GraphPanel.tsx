@@ -42,6 +42,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { hashFromDocName } from '@/lib/doc-hash';
+import { openExternalUrl } from '@/lib/external-link';
 import { cn } from '@/lib/utils';
 
 const FULLSCREEN_HUB_LIMIT = 50;
@@ -390,7 +391,7 @@ export function GraphPanel({ activeDocName }: { activeDocName: string }) {
                 actionLabel: t`Open link`,
                 secondaryLabel: selectedNode.url,
                 onAction: () => {
-                  window.open(selectedNode.url, '_blank', 'noopener,noreferrer');
+                  openExternalUrl(selectedNode.url);
                   setIsExpanded(false);
                 },
               };

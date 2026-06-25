@@ -10,6 +10,7 @@ import ForceGraph2D, {
 import { usePageList } from '@/components/PageListContext';
 import { hashFromDocName } from '@/lib/doc-hash';
 import { subscribeToDocumentsChanged } from '@/lib/documents-events';
+import { openExternalUrl } from '@/lib/external-link';
 import { cn } from '@/lib/utils';
 import { clusterColor } from './graph-colors';
 import {
@@ -413,7 +414,7 @@ function applyGraphNodeClick({
   const action = resolveGraphNodeClickAction(node, docClickBehavior);
 
   if (action.kind === 'external') {
-    window.open(action.url, '_blank', 'noopener,noreferrer');
+    openExternalUrl(action.url);
     return;
   }
 
@@ -1169,7 +1170,7 @@ export function GraphView({
             showPointerCursor={(obj) => Boolean(obj && 'kind' in obj)}
             onNodeClick={(node: NodeObject<GraphNode>) => {
               if (node.kind === 'external') {
-                window.open(node.url, '_blank', 'noopener,noreferrer');
+                openExternalUrl(node.url);
                 return;
               }
               if (node.docName) {
