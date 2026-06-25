@@ -1571,6 +1571,12 @@ function createCaseOnlyRenameTempPath(sourcePath: string): string {
   throw new Error('Unable to allocate temporary path for case-only rename');
 }
 
+function writeFileIfContentDiffers(filePath: string, content: string): void {
+  const current = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : null;
+  if (current === content) return;
+  tracedWriteFileSync(filePath, content, 'utf-8');
+}
+
 function renamePathOnDisk(sourcePath: string, destinationPath: string): void {
   tracedMkdirSync(dirname(destinationPath), { recursive: true });
   if (!pathsDifferOnlyByCase(sourcePath, destinationPath)) {
@@ -2205,7 +2211,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       const filePath = safeContentPath(toDocName, contentDir);
       const liveContent = liveContents.get(fromDocName);
       if (typeof liveContent === 'string') {
-        tracedWriteFileSync(filePath, liveContent, 'utf-8');
+        writeFileIfContentDiffers(filePath, liveContent);
       }
 
       const finalContent =
@@ -2259,7 +2265,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
   function writeManagedRenameDocumentToDisk(docName: string, markdown: string): void {
     const filePath = resolveContentEntryPath(contentDir, 'file', docName);
     tracedMkdirSync(dirname(filePath), { recursive: true });
-    tracedWriteFileSync(filePath, markdown, 'utf-8');
+    writeFileIfContentDiffers(filePath, markdown);
     registerWrite(filePath, contentHash(markdown));
     setReconciledBase(docName, markdown);
 
@@ -2688,7 +2694,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           });
           let rewrittenDocs: ManagedRenameRewrittenDoc[] = [];
           await withManagedRenameRecovery(projectDir ?? contentDir, recoveryJournal, async () => {
-            tracedWriteFileSync(sourcePath, sourceContent, 'utf-8');
+            writeFileIfContentDiffers(sourcePath, sourceContent);
             registerWrite(sourcePath, contentHash(sourceContent));
 
             const renamedWithGit = await renameTrackedPathInGit(
