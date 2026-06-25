@@ -37,6 +37,7 @@ class MockTerminal {
   attachCustomKeyEventHandler = mock((h: (e: KeyboardEvent) => boolean) => {
     this.keyHandler = h;
   });
+  attachCustomWheelEventHandler = mock(() => {});
   constructor(options: Record<string, unknown>) {
     this.options = options;
   }

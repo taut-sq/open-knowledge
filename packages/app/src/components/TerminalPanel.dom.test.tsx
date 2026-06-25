@@ -21,8 +21,17 @@ class MockTerminal {
   cols = 80;
   rows = 24;
   unicode = { activeVersion: '6' };
+  modes = { mouseTrackingMode: 'none' as string };
+  mouseEncoding = 'SGR' as string;
+  get _core() {
+    return {
+      coreMouseService: { activeEncoding: this.mouseEncoding },
+      _renderService: { dimensions: { css: { cell: { height: 17 } } } },
+    };
+  }
   onDataCb: ((d: string) => void) | null = null;
   keyHandler: ((e: KeyboardEvent) => boolean) | null = null;
+  wheelHandler: ((e: WheelEvent) => boolean) | null = null;
   options: Record<string, unknown>;
   open = mock(() => {});
   focus = mock(() => {});
@@ -44,6 +53,9 @@ class MockTerminal {
   });
   attachCustomKeyEventHandler = mock((h: (e: KeyboardEvent) => boolean) => {
     this.keyHandler = h;
+  });
+  attachCustomWheelEventHandler = mock((h: (e: WheelEvent) => boolean) => {
+    this.wheelHandler = h;
   });
   constructor(options: Record<string, unknown>) {
     this.options = options;
@@ -153,6 +165,7 @@ describe('TerminalPanel', () => {
     expect(lastTerm?.options.minimumContrastRatio).toBe(4.5);
     expect(lastTerm?.unicode.activeVersion).toBe('11');
     expect(lastTerm?.options.scrollback).toBe(10000);
+    expect(lastTerm?.options.smoothScrollDuration).toBe(125);
 
     await waitFor(() => expect(terminal.create).toHaveBeenCalledTimes(1));
     expect(terminal.create).toHaveBeenCalledWith({ cols: 80, rows: 24 });
@@ -289,6 +302,58 @@ describe('TerminalPanel', () => {
     } as unknown as KeyboardEvent;
     expect(handler?.(plainEnter)).toBe(true);
     expect(plainEnterPreventDefault).not.toHaveBeenCalled();
+  });
+
+  test('wheel handler defers to xterm in normal scrollback, drives the PTY in mouse mode', async () => {
+    const { bridge, terminal } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(lastTerm?.wheelHandler).toBeTruthy());
+    const term = lastTerm;
+    if (term?.wheelHandler == null) throw new Error('wheel handler not attached');
+    const wheel = term.wheelHandler;
+
+    term.modes.mouseTrackingMode = 'none';
+    expect(wheel({ deltaY: 120, deltaMode: 0 } as unknown as WheelEvent)).toBe(true);
+    expect(terminal.input).not.toHaveBeenCalled();
+
+    term.modes.mouseTrackingMode = 'any';
+    term.mouseEncoding = 'DEFAULT';
+    expect(wheel({ deltaY: 120, deltaMode: 0 } as unknown as WheelEvent)).toBe(true);
+    expect(terminal.input).not.toHaveBeenCalled();
+
+    term.mouseEncoding = 'SGR';
+    expect(wheel({ deltaY: 120, deltaMode: 0 } as unknown as WheelEvent)).toBe(false);
+    expect(terminal.input).toHaveBeenCalledTimes(1);
+    const [ptyId, payload] = terminal.input.mock.calls[0] as [string, string];
+    expect(ptyId).toBe('pty-1');
+    expect(payload).toBe('\x1b[<65;1;1M'.repeat(4));
+
+    terminal.input.mockClear();
+    term.mouseEncoding = 'SGR_PIXELS';
+    expect(wheel({ deltaY: 120, deltaMode: 0 } as unknown as WheelEvent)).toBe(false);
+    expect(terminal.input).toHaveBeenCalledTimes(1);
+  });
+
+  test('mode transition resets the wheel accumulator (no stale carry across apps)', async () => {
+    const { bridge, terminal } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(lastTerm?.wheelHandler).toBeTruthy());
+    const term = lastTerm;
+    if (term?.wheelHandler == null) throw new Error('wheel handler not attached');
+    const wheel = term.wheelHandler;
+    term.mouseEncoding = 'SGR';
+
+    term.modes.mouseTrackingMode = 'any';
+    expect(wheel({ deltaY: 30, deltaMode: 0 } as unknown as WheelEvent)).toBe(false);
+    expect(terminal.input).toHaveBeenCalledTimes(1);
+
+    term.modes.mouseTrackingMode = 'none';
+    expect(wheel({ deltaY: 5, deltaMode: 0 } as unknown as WheelEvent)).toBe(true);
+
+    term.modes.mouseTrackingMode = 'any';
+    terminal.input.mockClear();
+    expect(wheel({ deltaY: 10, deltaMode: 0 } as unknown as WheelEvent)).toBe(false);
+    expect(terminal.input).not.toHaveBeenCalled();
   });
 
   test('disposes the terminal, kills the PTY, and unsubscribes on unmount', async () => {

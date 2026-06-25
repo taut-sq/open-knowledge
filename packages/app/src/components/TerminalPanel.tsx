@@ -17,6 +17,7 @@ import { TerminalCliMissingBanner } from './TerminalCliMissingBanner';
 import { type TerminalExitInfo, TerminalExitNotice } from './TerminalExitNotice';
 import { TerminalRefusalNotice } from './TerminalRefusalNotice';
 import { xtermThemeForMode } from './terminal-theme';
+import { nextWheelReports, sgrWheelReport } from './terminal-wheel';
 
 interface TerminalPanelProps {
   /** Desktop bridge — the panel is rendered only on the Electron host, where
@@ -121,6 +122,7 @@ function TerminalSession({
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
       fontSize: 13,
       scrollback: 10000,
+      smoothScrollDuration: 125,
       theme: xtermThemeForMode(initialResolvedThemeRef.current),
     });
     termRef.current = term;
@@ -165,6 +167,46 @@ function TerminalSession({
         return false;
       }
       return true;
+    });
+
+    let wheelRowAccumulator = 0;
+    let warnedMissingCellHeight = false;
+    term.attachCustomWheelEventHandler((event) => {
+      const core = (
+        term as unknown as {
+          _core?: {
+            coreMouseService?: { activeEncoding?: string };
+            _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } };
+          };
+        }
+      )._core;
+      const encoding = core?.coreMouseService?.activeEncoding;
+      const sgrTrackingActive =
+        term.modes.mouseTrackingMode !== 'none' &&
+        (encoding === 'SGR' || encoding === 'SGR_PIXELS');
+      if (!sgrTrackingActive) {
+        wheelRowAccumulator = 0; // reset between gestures/apps; defer to xterm
+        return true;
+      }
+      const ptyId = ptyIdRef.current;
+      if (ptyId === null || event.deltaY === 0) return true;
+      const measuredCellHeight = core?._renderService?.dimensions?.css?.cell?.height;
+      if (measuredCellHeight === undefined && !warnedMissingCellHeight) {
+        warnedMissingCellHeight = true;
+        console.warn(
+          '[terminal] xterm cell-height internal not found; wheel scroll using fallback. An xterm upgrade may have moved _core._renderService.dimensions.css.cell.height.',
+        );
+      }
+      const cellHeight = measuredCellHeight ?? 17;
+      const { count, button, accumulator } = nextWheelReports(
+        event.deltaY,
+        event.deltaMode,
+        wheelRowAccumulator,
+        { cellHeight, sensitivity: 1, maxRowsPerEvent: 4, viewportRows: term.rows },
+      );
+      wheelRowAccumulator = accumulator;
+      if (count > 0) bridge.terminal.input(ptyId, sgrWheelReport(button).repeat(count));
+      return false;
     });
 
     void (async () => {
