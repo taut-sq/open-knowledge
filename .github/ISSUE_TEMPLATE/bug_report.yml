@@ -1,0 +1,78 @@
+name: Bug report
+description: Report something that isn't working in Open Knowledge
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the fields below so we can reproduce it quickly.
+
+        For setup help or "how do I…" questions, please use [Discord](https://discord.com/invite/YujKpFN49) or the [docs](https://openknowledge.ai) instead — those get faster answers than an issue.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true
+        - label: I'm on the latest version (or I've noted my version below)
+          required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that reliably trigger the bug.
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Web app
+        - CLI only
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install Open Knowledge?
+      options:
+        - Desktop app (DMG)
+        - CLI (npm / npx)
+        - Web app
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Desktop: Help → About. CLI: run with --version."
+      placeholder: "e.g. 0.16.1"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, errors, or screenshots
+      description: Paste any console output or attach screenshots. Text is rendered as code.
+      render: shell
+    validations:
+      required: false
