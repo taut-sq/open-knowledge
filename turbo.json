@@ -12,7 +12,8 @@
     "dev:electron": {
       "dependsOn": ["^build"],
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["OK_INSTANCE"]
     },
     "build:desktop:dir": {
       "dependsOn": ["build:desktop"],

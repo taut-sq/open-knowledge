@@ -138,6 +138,7 @@ import { EMBED_HOST_PATTERNS, rewriteEmbedRequestHeaders } from './embed-referer
 import { discoverProject, validateFolderPick } from './folder-admission.ts';
 import { ensureGitAvailable } from './git-preflight-handler.ts';
 import { readCanonicalGitHubRemoteUrl } from './git-remote.ts';
+import { deriveInstanceUserDataDir } from './instance-isolation.ts';
 import { handleBuildAndOpen, handleDetectClaudeDesktop } from './ipc/install-skill.ts';
 import {
   createLocalOpState,
@@ -2419,6 +2420,25 @@ installStdioBrokenPipeGuard(process, {
     );
   },
 });
+
+if (!app.isPackaged && process.env.OK_INSTANCE) {
+  const relocatedUserData = deriveInstanceUserDataDir(
+    app.getPath('userData'),
+    process.env.OK_INSTANCE,
+  );
+  if (relocatedUserData) {
+    mkdirSync(relocatedUserData, { recursive: true });
+    app.setPath('userData', relocatedUserData);
+    getRootDesktopLogger().info(
+      {
+        event: 'desktop.parallel-instance',
+        instance: process.env.OK_INSTANCE,
+        userData: relocatedUserData,
+      },
+      'relocated userData for parallel dev instance',
+    );
+  }
+}
 
 if (isDriverBootSmokeMode(process.env)) {
   app.whenReady().then(() => {
