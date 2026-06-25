@@ -1,4 +1,5 @@
 import { indentWithTab } from '@codemirror/commands';
+import { search } from '@codemirror/search';
 import { Compartment, EditorSelection, EditorState } from '@codemirror/state';
 import { placeholder as cmPlaceholder, EditorView, keymap } from '@codemirror/view';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
@@ -141,6 +142,9 @@ export function SourceEditor({
             doc: ytext.toString(),
             extensions: [
               basicSetup,
+              search({
+                scrollToMatch: (range) => EditorView.scrollIntoView(range, { y: 'start' }),
+              }),
               keymap.of([indentWithTab]),
               yCollab(ytext, provider.awareness),
               ...createNestedCMExtensions({

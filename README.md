@@ -1,6 +1,8 @@
-# OpenKnowledge
+# Open Knowledge
 
-OpenKnowledge is a markdown-powered document editor with integrations for Claude, Codex, and Cursor.
+Open Knowledge is a local-first knowledge base for teams that want docs, help-center content, SOPs, and agent-facing knowledge to live in one structured editing system.
+
+The project includes a desktop app, web app, server, CLI, shared core packages, and docs site. It uses Bun workspaces and Turbo for builds.
 
 ## Install
 
