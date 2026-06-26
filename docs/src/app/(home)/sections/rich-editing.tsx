@@ -600,7 +600,7 @@ export function RichEditing() {
       <TemplateAnimationStyles />
       <SectionHeading
         tag="The editor"
-        description="A Notion or Google-docs editor experience that's just markdown under the hood."
+        description="A Notion-like editor that's just markdown under the hood."
         className="max-w-2xl"
       >
         A canvas for your knowledge.
