@@ -1,3 +1,4 @@
+
 import { FrontmatterValueSchema } from '@inkeep/open-knowledge-core';
 import { z } from 'zod';
 import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';

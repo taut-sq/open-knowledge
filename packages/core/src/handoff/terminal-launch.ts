@@ -1,3 +1,4 @@
+
 import { MCP_SERVER_NAME } from '../constants/mcp.ts';
 import type { HandoffTarget } from './types.ts';
 
@@ -25,6 +26,12 @@ export interface TerminalCliInfo {
    *  the deep-link path) and brand-icon rendering. Single source of truth so
    *  the renderer doesn't re-declare a parallel `cli → HandoffTarget` map. */
   readonly handoffTarget: HandoffTarget;
+  /** Flag that carries the starting prompt for CLIs whose POSITIONAL argument is
+   *  NOT the prompt. OpenCode's positional is the project directory, so its
+   *  prompt must be passed as `--prompt '<text>'`; claude/codex/cursor take the
+   *  prompt positionally (omit this). When set, {@link buildCliLaunchCommand}
+   *  inserts it immediately before the quoted prompt. */
+  readonly promptFlag?: string;
 }
 
 const CLAUDE_MCP_PREAPPROVE_ARG = `--settings ${shellSingleQuote(
@@ -56,6 +63,7 @@ export const TERMINAL_CLIS = {
     displayName: 'OpenCode',
     docsUrl: 'https://opencode.ai/docs',
     handoffTarget: 'opencode',
+    promptFlag: '--prompt',
   },
 } as const satisfies Record<TerminalCli, TerminalCliInfo>;
 
@@ -78,7 +86,8 @@ export function buildCliLaunchCommand(
   const info: TerminalCliInfo = TERMINAL_CLIS[cli];
   const preApprove =
     opts.mcpPreApprove === true && info.mcpPreApproveArg ? `${info.mcpPreApproveArg} ` : '';
-  return `${info.bin} ${preApprove}${shellSingleQuote(prompt)}\r`;
+  const promptFlag = info.promptFlag ? `${info.promptFlag} ` : '';
+  return `${info.bin} ${preApprove}${promptFlag}${shellSingleQuote(prompt)}\r`;
 }
 
 export function buildClaudeLaunchCommand(prompt: string, opts: BuildCliLaunchOptions = {}): string {

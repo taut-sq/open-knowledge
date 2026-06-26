@@ -555,6 +555,7 @@ function ActivityEntry({
   const [warmSnapshot] = useState(() => peekRenameSnapshot(entry.docName));
   const warmHtml = warmSnapshot?.html ?? null;
 
+
   const [hasEmittedFirstToggle, setHasEmittedFirstToggle] = useState(false);
   useEffect(() => {
     if (

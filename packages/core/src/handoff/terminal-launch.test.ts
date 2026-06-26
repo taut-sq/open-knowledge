@@ -78,7 +78,7 @@ describe('buildCliLaunchCommand', () => {
     expect(buildCliLaunchCommand('claude', 'hi')).toBe("claude 'hi'\r");
     expect(buildCliLaunchCommand('codex', 'hi')).toBe("codex 'hi'\r");
     expect(buildCliLaunchCommand('cursor', 'hi')).toBe("cursor-agent 'hi'\r");
-    expect(buildCliLaunchCommand('opencode', 'hi')).toBe("opencode 'hi'\r");
+    expect(buildCliLaunchCommand('opencode', 'hi')).toBe("opencode --prompt 'hi'\r");
   });
 
   it('escapes the prompt identically for every CLI regardless of fixed args', () => {
@@ -111,7 +111,7 @@ describe('claude MCP pre-approval', () => {
       "cursor-agent 'hi'\r",
     );
     expect(buildCliLaunchCommand('opencode', 'hi', { mcpPreApprove: true })).toBe(
-      "opencode 'hi'\r",
+      "opencode --prompt 'hi'\r",
     );
   });
 

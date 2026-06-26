@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 import { AutoStartDisabledError } from '../../autostart.ts';
 import { resolveLockDir } from '../../config/paths.ts';
@@ -152,7 +153,8 @@ export function register(server: ServerInstance, deps: GetPreviewUrlDeps): void 
       if (args.armPaneTarget && routeFragment) {
         try {
           armPaneTarget(lockDir, routeFragment);
-        } catch {}
+        } catch {
+        }
       }
 
       const armNote =

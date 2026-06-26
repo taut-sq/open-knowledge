@@ -1,3 +1,4 @@
+
 import type { DocumentListEntry, InlineAssetMediaKind } from '@inkeep/open-knowledge-core';
 
 export interface DocumentEntry {
