@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const RELEASES_API_URL = 'https://api.github.com/repos/inkeep/open-knowledge/releases?per_page=15';
 
-export const DMG_ASSET_NAME = 'Open-Knowledge-arm64.dmg';
+export const DMG_ASSET_NAME = 'OpenKnowledge-arm64.dmg';
 
 export const STABLE_DMG_URL = `https://github.com/inkeep/open-knowledge/releases/latest/download/${DMG_ASSET_NAME}`;
 
