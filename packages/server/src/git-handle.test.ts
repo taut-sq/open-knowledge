@@ -4,22 +4,28 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { buildGitEnv, createGitInstance } from './git-handle.ts';
+import { applyGitEnv, buildGitEnv, createGitInstance, type GitHandle } from './git-handle.ts';
 import { withParentLock } from './git-mutex.ts';
 
-describe('buildGitEnv', () => {
-  function withEnv(key: string, value: string | undefined, fn: () => void): void {
-    const saved = process.env[key];
-    try {
+function withEnvEntries(entries: Record<string, string | undefined>, fn: () => void): void {
+  const saved = new Map<string, string | undefined>();
+  for (const key of Object.keys(entries)) {
+    saved.set(key, process.env[key]);
+    const value = entries[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    fn();
+  } finally {
+    for (const [key, value] of saved) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
-      fn();
-    } finally {
-      if (saved === undefined) delete process.env[key];
-      else process.env[key] = saved;
     }
   }
+}
 
+describe('buildGitEnv', () => {
   test('forces LANG/LC_ALL=C for locale-stable stderr', () => {
     const env = buildGitEnv();
     expect(env.LANG).toBe('C');
@@ -31,19 +37,49 @@ describe('buildGitEnv', () => {
   });
 
   test('preserves PATH so a bare-command credential helper resolves', () => {
-    withEnv('PATH', '/custom/bin:/usr/bin', () => {
+    withEnvEntries({ PATH: '/custom/bin:/usr/bin' }, () => {
       expect(buildGitEnv().PATH).toBe('/custom/bin:/usr/bin');
     });
   });
 
+  test('preserves user and SSH auth environment for Git transports', () => {
+    withEnvEntries(
+      {
+        HOME: '/Users/alice',
+        USERPROFILE: 'C:\\Users\\alice',
+        HOMEDRIVE: 'C:',
+        HOMEPATH: '\\Users\\alice',
+        ProgramData: 'C:\\ProgramData',
+        ALLUSERSPROFILE: 'C:\\ProgramData',
+        SSH_AUTH_SOCK: '/tmp/ssh-agent.sock',
+      },
+      () => {
+        const env = buildGitEnv();
+        expect(env.HOME).toBe('/Users/alice');
+        expect(env.USERPROFILE).toBe('C:\\Users\\alice');
+        expect(env.HOMEDRIVE).toBe('C:');
+        expect(env.HOMEPATH).toBe('\\Users\\alice');
+        expect(env.ProgramData).toBe('C:\\ProgramData');
+        expect(env.ALLUSERSPROFILE).toBe('C:\\ProgramData');
+        expect(env.SSH_AUTH_SOCK).toBe('/tmp/ssh-agent.sock');
+      },
+    );
+  });
+
+  test('does not pass through GIT_SSH_COMMAND without explicit simple-git opt-in', () => {
+    withEnvEntries({ GIT_SSH_COMMAND: 'ssh -vv' }, () => {
+      expect('GIT_SSH_COMMAND' in buildGitEnv()).toBe(false);
+    });
+  });
+
   test('preserves ELECTRON_RUN_AS_NODE so the packaged credential helper runs as Node', () => {
-    withEnv('ELECTRON_RUN_AS_NODE', '1', () => {
+    withEnvEntries({ ELECTRON_RUN_AS_NODE: '1' }, () => {
       expect(buildGitEnv().ELECTRON_RUN_AS_NODE).toBe('1');
     });
   });
 
   test('omits ELECTRON_RUN_AS_NODE on a non-Electron host (var unset)', () => {
-    withEnv('ELECTRON_RUN_AS_NODE', undefined, () => {
+    withEnvEntries({ ELECTRON_RUN_AS_NODE: undefined }, () => {
       expect('ELECTRON_RUN_AS_NODE' in buildGitEnv()).toBe(false);
     });
   });
@@ -62,6 +98,11 @@ describe('buildGitEnv', () => {
 describe('createGitInstance (credential.helper config)', () => {
   let tmpDir: string;
 
+  function readEnv(handle: GitHandle): Record<string, string> {
+    // biome-ignore lint/suspicious/noExplicitAny: probing internal simple-git executor for spawn-env assertion
+    return ((handle.git as any)._executor?.env ?? {}) as Record<string, string>;
+  }
+
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'ok-git-handle-test-'));
     execSync('git init -q', { cwd: tmpDir });
@@ -77,6 +118,31 @@ describe('createGitInstance (credential.helper config)', () => {
     });
     const version = await handle.git.raw(['--version']);
     expect(version).toContain('git version');
+  });
+
+  test('merges author overrides without dropping git auth env', () => {
+    withEnvEntries({ USERPROFILE: 'C:\\Users\\alice' }, () => {
+      const handle = createGitInstance(tmpDir, { gitIndexFile: '.git/custom-index' });
+      applyGitEnv(handle, {
+        GIT_AUTHOR_NAME: 'Alice',
+        GIT_AUTHOR_EMAIL: 'alice@example.com',
+      });
+
+      const env = readEnv(handle);
+      expect(env.USERPROFILE).toBe('C:\\Users\\alice');
+      expect(env.GIT_INDEX_FILE).toBe(join(tmpDir, '.git/custom-index'));
+      expect(env.GIT_AUTHOR_NAME).toBe('Alice');
+      expect(env.GIT_AUTHOR_EMAIL).toBe('alice@example.com');
+    });
+  });
+
+  test('pins commit.gpgsign and core.autocrlf off, overriding repo config', async () => {
+    execSync('git config commit.gpgsign true', { cwd: tmpDir });
+    execSync('git config core.autocrlf true', { cwd: tmpDir });
+
+    const handle = createGitInstance(tmpDir);
+    expect((await handle.git.raw(['config', '--get', 'commit.gpgsign'])).trim()).toBe('false');
+    expect((await handle.git.raw(['config', '--get', 'core.autocrlf'])).trim()).toBe('false');
   });
 });
 
