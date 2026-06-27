@@ -433,13 +433,13 @@ describe("syncPublicPr metadata-event composition (conflict-hold fail-open guard
     expect(r.draftMutation).toBeNull();
     expect(r.comment).toContain("No action is needed from you");
     expect(r.comment.toLowerCase()).not.toContain("rebase");
-    expect(r.comment).not.toContain("review and merge happen"); // not the 'synced' body
+    expect(r.comment).not.toContain("review and merge your PR"); // not the 'synced' body
   });
 
   test("a metadata event on a clean PR readies it and posts 'synced'", async () => {
     const r = await runMetadataSync({ headCommitMessage: CLEAN_HEAD, internalPrStartsDraft: true });
     expect(r.draftMutation).toBe("to-ready");
-    expect(r.comment).toContain("review and merge happen"); // the 'synced' body
+    expect(r.comment).toContain("review and merge your PR"); // the 'synced' body
   });
 
   test("a metadata event on a non-draft PR whose head now carries conflicts re-drafts it", async () => {
