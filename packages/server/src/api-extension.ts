@@ -399,6 +399,7 @@ import {
 } from './apply-managed-rename.ts';
 import {
   type BacklinkIndex,
+  computeBrokenOutboundLinks,
   type GraphNode as IndexedGraphNode,
   isOrphanMode,
 } from './backlink-index.ts';
@@ -2198,6 +2199,9 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     return admitted;
   }
 
+  const linkedFileExists = (contentRootRelativePath: string): boolean =>
+    existsSync(resolve(contentDir, contentRootRelativePath));
+
   function createSerializedRunner() {
     let pending = Promise.resolve();
     return async function runSerialized<T>(task: () => Promise<T>): Promise<T> {
@@ -3718,9 +3722,17 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const hints = computeOrphanHints(resolvedDocName);
 
-        const renderWarnings = await validateMermaidFences(
-          session.dc.document.getText('source').toString(),
+        const writtenSource = session.dc.document.getText('source').toString();
+
+        const renderWarnings = await validateMermaidFences(writtenSource, resolvedDocName);
+
+        const admittedForLinks = collectAdmittedDocNames();
+        admittedForLinks.add(resolvedDocName);
+        const brokenLinks = computeBrokenOutboundLinks(
+          writtenSource,
           resolvedDocName,
+          admittedForLinks,
+          linkedFileExists,
         );
 
         const subscriberCount = getSubscriberCount(resolvedDocName);
@@ -3757,6 +3769,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
                 ? { warning: writeMdWarning }
                 : {}),
             ...(writeMdAdvisories.length > 0 ? { warnings: writeMdAdvisories } : {}),
+            brokenLinks,
           },
           { handler: 'agent-write-md' },
         );
@@ -3985,6 +3998,16 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
 
         const fmWarning = buildReconcileWarning(fmReconcile);
+
+        const admittedForLinks = collectAdmittedDocNames();
+        admittedForLinks.add(resolvedDocName);
+        const brokenLinks = computeBrokenOutboundLinks(
+          session.dc.document.getText('source').toString(),
+          resolvedDocName,
+          admittedForLinks,
+          linkedFileExists,
+        );
+
         successResponse(
           res,
           200,
@@ -3996,6 +4019,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             appliedKeys,
             ...(summaryResponse ? { summary: summaryResponse } : {}),
             ...(fmWarning ? { warning: fmWarning, warnings: [fmWarning] } : {}),
+            brokenLinks,
           },
           { handler: 'frontmatter-patch' },
         );
@@ -5168,9 +5192,17 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const { response: summaryResponse } = summaryResponseFields(normalizedSummary);
 
-        const renderWarnings = await validateMermaidFences(
-          session.dc.document.getText('source').toString(),
+        const patchedSource = session.dc.document.getText('source').toString();
+
+        const renderWarnings = await validateMermaidFences(patchedSource, docName);
+
+        const admittedForLinks = collectAdmittedDocNames();
+        admittedForLinks.add(docName);
+        const brokenLinks = computeBrokenOutboundLinks(
+          patchedSource,
           docName,
+          admittedForLinks,
+          linkedFileExists,
         );
 
         const patchWarning = buildReconcileWarning(patchReconcile);
@@ -5196,6 +5228,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
                 ? { warning: patchWarning }
                 : {}),
             ...(patchAdvisories.length > 0 ? { warnings: patchAdvisories } : {}),
+            brokenLinks,
           },
           { handler: 'agent-patch' },
         );

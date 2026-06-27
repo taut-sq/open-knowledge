@@ -39,7 +39,7 @@ The set of files the engine treats as your knowledge base is the configured cont
 
 ## Links and backlinks
 
-Internal cross-references are written with **standard markdown links**: `[text](./relative/path.md)` or `[text](/absolute/from/content-root.md)`. Whenever document A links to document B, OpenKnowledge automatically records the inverse on B: a **backlink** from B back to A.
+Internal cross-references are written with **standard markdown links**. The recommended form is **relative** — `[text](./sibling.md)`, `[text](../folder/doc.md)` — which stays portable across GitHub, Obsidian, VS Code, and published sites. A **root-absolute** form (`[text](/folder/doc.md)`, where the leading slash means the content root) is equally valid and convenient for cross-folder links. The two never mix: never glue `./` onto a content-root path, since `./folder/doc.md` written from a doc already inside `folder/` resolves to the doubled, broken `folder/folder/doc.md` — `write`/`edit` flag exactly this in their `brokenLinks` response. Whenever document A links to document B, OpenKnowledge automatically records the inverse on B: a **backlink** from B back to A.
 
 You never write backlinks by hand. They are computed from the links you already write, and together they form the **link graph**: the network of relationships across your knowledge base.
 

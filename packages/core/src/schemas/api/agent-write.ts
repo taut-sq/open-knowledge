@@ -128,6 +128,20 @@ export type AdvisoryWarning = z.infer<typeof AdvisoryWarningSchema>;
 
 export const AdvisoryWarningsSchema = z.array(AdvisoryWarningSchema).min(1);
 
+export const BROKEN_LINK_REASONS = ['no-such-doc', 'no-such-file', 'unresolvable'] as const;
+export type BrokenLinkReason = (typeof BROKEN_LINK_REASONS)[number];
+
+export const BrokenLinkSchema = z
+  .object({
+    href: z.string(),
+    resolvedTo: z.string().nullable(),
+    reason: z.enum(BROKEN_LINK_REASONS),
+  })
+  .loose() satisfies StandardSchemaV1;
+export type BrokenLink = z.infer<typeof BrokenLinkSchema>;
+
+export const BrokenLinksSchema = z.array(BrokenLinkSchema);
+
 export const AgentWriteSuccessSchema = z
   .object({
     timestamp: z.string().min(1),
@@ -147,6 +161,7 @@ export const AgentWriteMdSuccessSchema = z
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
     warnings: AdvisoryWarningsSchema.optional(),
+    brokenLinks: BrokenLinksSchema,
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentWriteMdSuccess = z.infer<typeof AgentWriteMdSuccessSchema>;
@@ -159,6 +174,7 @@ export const AgentPatchSuccessSchema = z
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
     warnings: AdvisoryWarningsSchema.optional(),
+    brokenLinks: BrokenLinksSchema,
   })
   .loose() satisfies StandardSchemaV1;
 export type AgentPatchSuccess = z.infer<typeof AgentPatchSuccessSchema>;
@@ -192,6 +208,7 @@ export const FrontmatterPatchSuccessSchema = z
     summary: SummaryResponseFieldSchema.optional(),
     warning: WriteWarningSchema.optional(),
     warnings: AdvisoryWarningsSchema.optional(),
+    brokenLinks: BrokenLinksSchema,
   })
   .loose() satisfies StandardSchemaV1;
 export type FrontmatterPatchSuccess = z.infer<typeof FrontmatterPatchSuccessSchema>;

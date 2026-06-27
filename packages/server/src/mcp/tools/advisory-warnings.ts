@@ -1,6 +1,8 @@
 import {
   type AdvisoryWarning,
   AdvisoryWarningSchema,
+  type BrokenLink,
+  BrokenLinkSchema,
   type RenderWarning,
   type WriteWarning,
 } from '@inkeep/open-knowledge-core';
@@ -12,6 +14,35 @@ export function parseAdvisoryWarnings(value: unknown): AdvisoryWarning[] | undef
     return parsed.success ? [parsed.data] : [];
   });
   return warnings.length > 0 ? warnings : undefined;
+}
+
+export function parseBrokenLinks(value: unknown): BrokenLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const parsed = BrokenLinkSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+export function formatBrokenLinkLines(links: BrokenLink[]): string[] {
+  if (links.length === 0) return [];
+  const header = `⚠ ${links.length} broken outbound link${
+    links.length === 1 ? '' : 's'
+  } — fix or remove (the write still landed):`;
+  return [header, ...links.map((l) => `  • ${formatBrokenLink(l)}`)];
+}
+
+export function formatBrokenLinkBrief(links: BrokenLink[]): string | null {
+  if (links.length === 0) return null;
+  return `⚠ ${links.length} broken outbound link${
+    links.length === 1 ? '' : 's'
+  } (see brokenLinks).`;
+}
+
+function formatBrokenLink(link: BrokenLink): string {
+  return link.resolvedTo
+    ? `${link.href} → ${link.resolvedTo} (${link.reason})`
+    : `${link.href} (${link.reason})`;
 }
 
 function integrityEntries(warnings: AdvisoryWarning[]): WriteWarning[] {

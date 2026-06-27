@@ -97,6 +97,7 @@ describe('POST /api/agent-patch', () => {
         timestamp: expect.any(String),
         subscriberCount: expect.any(Number),
         systemSubscriberCount: expect.any(Number),
+        brokenLinks: [],
       });
       expect(ytext.toString()).toBe(
         '# Notes\n\nProject Alpha appears first. Later, Project Alpha (linked) appears second.\n',
@@ -172,6 +173,7 @@ describe('POST /api/agent-patch', () => {
         timestamp: expect.any(String),
         subscriberCount: expect.any(Number),
         systemSubscriberCount: expect.any(Number),
+        brokenLinks: [],
       });
       expect(ytext.toString()).toBe(
         '# Notes\n\nProject Alpha (linked) appears first. Later, Project Alpha appears second.\n',

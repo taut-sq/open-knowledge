@@ -195,7 +195,12 @@ export function register(server: ServerInstance, deps: MoveDeps): void {
             'Template move only: `true` = tracked `git mv` (history preserved), `false` = plain disk rename (untracked / local-only `.ok/`).',
           ),
         renamed: z
-          .array(z.object({ fromDocName: z.string(), toDocName: z.string() }))
+          .array(
+            z.object({
+              fromDocName: z.string(),
+              toDocName: z.string(),
+            }),
+          )
           .optional()
           .describe('docName remappings performed.'),
         rewrittenDocs: looseObjectArray

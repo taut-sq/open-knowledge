@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import type { RenderWarning, WriteWarning } from '@inkeep/open-knowledge-core';
+import type { BrokenLink, RenderWarning, WriteWarning } from '@inkeep/open-knowledge-core';
 import {
   formatAdvisoryBriefs,
   formatAdvisoryLines,
+  formatBrokenLinkBrief,
+  formatBrokenLinkLines,
   formatRenderWarningsBrief,
   formatRenderWarningsLine,
   parseAdvisoryWarnings,
+  parseBrokenLinks,
 } from './advisory-warnings.ts';
 
 function mermaidWarning(overrides: Partial<RenderWarning> = {}): RenderWarning {
@@ -116,5 +119,98 @@ describe('render-family bounds phrasing', () => {
     const warnings = Array.from({ length: 10 }, (_, i) => mermaidWarning({ fenceIndex: i + 1 }));
     expect(formatRenderWarningsLine(warnings)).toContain('10+');
     expect(formatRenderWarningsBrief(warnings)).toContain('10+');
+  });
+});
+
+const noSuchDoc: BrokenLink = {
+  href: './wiki/x',
+  resolvedTo: 'wiki/wiki/x',
+  reason: 'no-such-doc',
+};
+const unresolvable: BrokenLink = {
+  href: '../../escape.md',
+  resolvedTo: null,
+  reason: 'unresolvable',
+};
+const noSuchFile: BrokenLink = {
+  href: '../src/foo.py',
+  resolvedTo: 'src/foo.py',
+  reason: 'no-such-file',
+};
+
+describe('parseBrokenLinks', () => {
+  test('parses a well-formed array (all three reasons)', () => {
+    expect(parseBrokenLinks([noSuchDoc, noSuchFile, unresolvable])).toEqual([
+      noSuchDoc,
+      noSuchFile,
+      unresolvable,
+    ]);
+  });
+
+  test('drops malformed entries but keeps valid ones', () => {
+    const mixed = [
+      noSuchDoc,
+      { href: 'x', resolvedTo: null, reason: 'broken-anchor' }, // invalid reason
+      { href: 42 }, // wrong types
+      unresolvable,
+    ];
+    expect(parseBrokenLinks(mixed)).toEqual([noSuchDoc, unresolvable]);
+  });
+
+  test('returns [] for a non-array (absent / wrong-typed field)', () => {
+    expect(parseBrokenLinks(undefined)).toEqual([]);
+    expect(parseBrokenLinks(null)).toEqual([]);
+    expect(parseBrokenLinks('nope')).toEqual([]);
+    expect(parseBrokenLinks({})).toEqual([]);
+  });
+
+  test('returns [] for an empty array (the all-resolve confirmation)', () => {
+    expect(parseBrokenLinks([])).toEqual([]);
+  });
+});
+
+describe('formatBrokenLinkLines', () => {
+  test('no links → no lines (clean write stays quiet)', () => {
+    expect(formatBrokenLinkLines([])).toEqual([]);
+  });
+
+  test('one link → singular header + a bullet with resolvedTo', () => {
+    const lines = formatBrokenLinkLines([noSuchDoc]);
+    expect(lines[0]).toContain('1 broken outbound link —');
+    expect(lines[0]).not.toContain('links —');
+    expect(lines[1]).toBe('  • ./wiki/x → wiki/wiki/x (no-such-doc)');
+  });
+
+  test('null resolvedTo omits the arrow', () => {
+    const lines = formatBrokenLinkLines([unresolvable]);
+    expect(lines[1]).toBe('  • ../../escape.md (unresolvable)');
+    expect(lines[1]).not.toContain('→');
+  });
+
+  test('a no-such-file entry renders the resolved path + reason', () => {
+    const lines = formatBrokenLinkLines([noSuchFile]);
+    expect(lines[1]).toBe('  • ../src/foo.py → src/foo.py (no-such-file)');
+  });
+
+  test('N links → plural header + one bullet each', () => {
+    const lines = formatBrokenLinkLines([noSuchDoc, unresolvable]);
+    expect(lines[0]).toContain('2 broken outbound links —');
+    expect(lines).toHaveLength(3);
+  });
+});
+
+describe('formatBrokenLinkBrief', () => {
+  test('no links → null (nothing appended to the batch line)', () => {
+    expect(formatBrokenLinkBrief([])).toBeNull();
+  });
+
+  test('one link → singular brief', () => {
+    expect(formatBrokenLinkBrief([noSuchDoc])).toBe('⚠ 1 broken outbound link (see brokenLinks).');
+  });
+
+  test('N links → plural brief', () => {
+    expect(formatBrokenLinkBrief([noSuchDoc, unresolvable])).toBe(
+      '⚠ 2 broken outbound links (see brokenLinks).',
+    );
   });
 });

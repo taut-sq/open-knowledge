@@ -12,7 +12,12 @@ import { mergePatch } from '../../content/frontmatter-merge.ts';
 import type { TemplateFrontmatter } from '../../content/templates-write.ts';
 import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
-import { formatAdvisoryLines, parseAdvisoryWarnings } from './advisory-warnings.ts';
+import {
+  formatAdvisoryLines,
+  formatBrokenLinkLines,
+  parseAdvisoryWarnings,
+  parseBrokenLinks,
+} from './advisory-warnings.ts';
 import { resolveWithinRoot } from './path-safety.ts';
 import { buildPreviewAttachWarning, resolvePreviewUrl, START_UI_TEXT_HINT } from './preview-url.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
@@ -190,6 +195,7 @@ async function handleDocBody(
     result,
     normalized.docName,
     cwd,
+    contentDir,
     autoOpen,
     'Edit applied successfully.',
   );
@@ -199,6 +205,7 @@ async function handleDocFrontmatter(
   doc: { path: string; frontmatter: FrontmatterPatch },
   args: { summary?: string },
   cwd: string,
+  contentDir: string,
   url: string,
   deps: EditDeps,
   autoOpen: boolean,
@@ -240,6 +247,7 @@ async function handleDocFrontmatter(
     result,
     normalized.docName,
     cwd,
+    contentDir,
     autoOpen,
     `Frontmatter patched (${opSummary || `${Object.keys(doc.frontmatter).length} key(s)`}).`,
   );
@@ -249,23 +257,22 @@ function composeWritePreviewResult(
   result: Awaited<ReturnType<typeof httpPost>>,
   docName: string,
   cwd: string,
+  _contentDir: string,
   autoOpen: boolean,
   leadLine: string,
 ) {
   const lockDir = resolveLockDir(cwd);
   const preview = resolvePreviewUrl(docName, { lockDir });
-  const subscriberCount =
-    typeof result.subscriberCount === 'number' ? result.subscriberCount : undefined;
   const systemSubscriberCount =
     typeof result.systemSubscriberCount === 'number' ? result.systemSubscriberCount : undefined;
   const noPreviewAnywhere = systemSubscriberCount === 0;
-  const noPreviewOnThisDoc = subscriberCount === 0;
   const summaryResult =
     result.summary && typeof result.summary === 'object'
       ? (result.summary as { value: string; truncatedFrom?: number; hint?: string })
       : undefined;
   const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
   const advisoryWarnings = parseAdvisoryWarnings(result.warnings);
+  const brokenLinks = parseBrokenLinks(result.brokenLinks);
 
   const lines: string[] = [leadLine];
   if (noPreviewAnywhere && !preview) lines.push(START_UI_TEXT_HINT);
@@ -273,17 +280,11 @@ function composeWritePreviewResult(
   if (advisoryWarnings) {
     lines.push(...formatAdvisoryLines(advisoryWarnings));
   }
+  lines.push(...formatBrokenLinkLines(brokenLinks));
   const text = lines.join('\n');
-  if (
-    !preview &&
-    !noPreviewAnywhere &&
-    !noPreviewOnThisDoc &&
-    !summaryResult &&
-    !advisoryWarnings
-  ) {
-    return textResult(text);
-  }
-  const document: Record<string, unknown> = {};
+  const document: Record<string, unknown> = {
+    brokenLinks,
+  };
   if (summaryResult) document.summary = summaryResult;
   if (advisoryWarnings) document.warnings = advisoryWarnings;
   const warning = noPreviewAnywhere ? buildPreviewAttachWarning(preview, autoOpen) : undefined;
@@ -649,7 +650,9 @@ export function register(server: ServerInstance, deps: EditDeps): void {
         document: z
           .object(documentResultBaseShape)
           .optional()
-          .describe('Document edit result (present when there is a doc-specific signal).'),
+          .describe(
+            'Document edit result. Always present on a successful document edit (body or frontmatter) — it carries `brokenLinks` (possibly `[]`) plus any `summary`/`warnings`. Absent only for folder/template edits.',
+          ),
         folder: z
           .object({
             ok: z.boolean(),
@@ -726,6 +729,7 @@ export function register(server: ServerInstance, deps: EditDeps): void {
             { path: args.document.path, frontmatter: args.document.frontmatter },
             args,
             cwd,
+            contentDir,
             url,
             deps,
             autoOpen,

@@ -135,11 +135,19 @@ describe('MCP move tool — real roundtrip against live OK server (QA-004 / QA-0
     expect(result.isError).toBeUndefined();
     const structured = result.structuredContent as {
       ok: boolean;
-      renamed: Array<{ fromDocName: string; toDocName: string }>;
+      renamed: Array<{
+        fromDocName: string;
+        toDocName: string;
+      }>;
       rewrittenDocs: Array<{ docName: string; rewrites: number }>;
     };
     expect(structured.ok).toBe(true);
-    expect(structured.renamed).toEqual([{ fromDocName: 'auth', toDocName: 'sso' }]);
+    expect(structured.renamed).toEqual([
+      {
+        fromDocName: 'auth',
+        toDocName: 'sso',
+      },
+    ]);
     const rewrittenNames = structured.rewrittenDocs.map((d) => d.docName);
     expect(rewrittenNames).toContain('index');
 

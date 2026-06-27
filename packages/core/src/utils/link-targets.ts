@@ -1,3 +1,4 @@
+import { DEFAULT_DOC_EXTENSION } from '../constants/doc-extensions.ts';
 import { type ResolvedInternalHref, resolveInternalHref } from './resolve-internal-href.ts';
 
 export interface DocLinkTarget extends ResolvedInternalHref {
@@ -144,6 +145,7 @@ export function buildRelativeMarkdownHref(
   sourceDocName: string,
   targetDocName: string,
   anchor: string | null = null,
+  ext: string = DEFAULT_DOC_EXTENSION,
 ): string {
   const sourceDirSegments = splitDocNameSegments(sourceDocName);
   sourceDirSegments.pop();
@@ -169,5 +171,13 @@ export function buildRelativeMarkdownHref(
     relativePath = `./${relativePath}`;
   }
 
-  return `${relativePath}.md${anchor ? `#${anchor}` : ''}`;
+  return `${relativePath}${ext}${anchor ? `#${anchor}` : ''}`;
+}
+
+export function buildAbsoluteMarkdownHref(
+  docName: string,
+  ext: string = DEFAULT_DOC_EXTENSION,
+  anchor: string | null = null,
+): string {
+  return `/${docName}${ext}${anchor ? `#${anchor}` : ''}`;
 }

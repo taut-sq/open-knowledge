@@ -2,6 +2,7 @@ import { type Dirent, existsSync, mkdirSync } from 'node:fs';
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import {
+  type BrokenLinkReason,
   classifyMarkdownHref,
   classifyWikiLinkTarget,
   getWikiLinkText,
@@ -12,6 +13,7 @@ import {
   type OrphanMode,
   parseGlobalSkillBundleDoc,
   parseProjectSkillBundleDoc,
+  resolveAssetProjectPath,
   resolveInternalHref,
   resolveSkillBundleWikiTarget,
   skillLiveDocName,
@@ -657,6 +659,122 @@ function extractExternalMarkdownLinksFromMarkdown(
   }
 
   return links;
+}
+
+export interface BrokenOutboundLink {
+  href: string;
+  resolvedTo: string | null;
+  reason: BrokenLinkReason;
+}
+
+export function computeBrokenOutboundLinks(
+  markdown: string,
+  sourceDocName: string,
+  admittedDocs: Iterable<string>,
+  fileExists?: (contentRootRelativePath: string) => boolean,
+): BrokenOutboundLink[] {
+  const admitted = admittedDocs instanceof Set ? admittedDocs : new Set(admittedDocs);
+
+  let body: string;
+  try {
+    ({ body } = stripFrontmatter(markdown));
+  } catch {
+    body = markdown;
+  }
+
+  const source = body.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  const lines = source.split('\n');
+  const broken: BrokenOutboundLink[] = [];
+  const seen = new Set<string>();
+  let fence: FenceState | null = null;
+
+  const record = (href: string, resolvedTo: string | null, reason: BrokenLinkReason): void => {
+    if (seen.has(href)) return;
+    seen.add(href);
+    broken.push({ href, resolvedTo, reason });
+  };
+
+  const recordMarkdownLink = (rawHref: string): void => {
+    const trimmed = rawHref.trim();
+    if (trimmed.startsWith('#')) return;
+    const classified = classifyMarkdownHref(trimmed, sourceDocName);
+    if (!classified) {
+      record(trimmed, null, 'unresolvable');
+      return;
+    }
+    if (classified.kind === 'doc') {
+      if (!admitted.has(classified.docName)) {
+        record(trimmed, classified.docName, 'no-such-doc');
+      }
+      return;
+    }
+    if (classified.kind === 'asset') {
+      if (!fileExists) return;
+      const filePath = resolveAssetProjectPath(classified.url, sourceDocName);
+      if (filePath === null) {
+        record(trimmed, null, 'unresolvable');
+        return;
+      }
+      if (!fileExists(filePath)) {
+        record(trimmed, filePath, 'no-such-file');
+      }
+      return;
+    }
+  };
+
+  const recordWikiLink = (target: string, anchor: string | null): void => {
+    const classified = classifyWikiLinkTarget(target, anchor);
+    if (!classified || classified.kind !== 'doc') return;
+    if (!admitted.has(classified.docName)) {
+      record(`[[${target}${anchor ? `#${anchor}` : ''}]]`, classified.docName, 'no-such-doc');
+    }
+  };
+
+  for (const line of lines) {
+    if (fence) {
+      if (isFenceClose(line, fence)) fence = null;
+      continue;
+    }
+    const nextFence = matchFence(line);
+    if (nextFence) {
+      fence = nextFence;
+      continue;
+    }
+
+    let idx = leadingMarkdownPrefixLength(line);
+    while (idx < line.length) {
+      if (line[idx] === '\\' && idx + 1 < line.length) {
+        idx += 2;
+        continue;
+      }
+      if (line[idx] === '`') {
+        const inlineCode = readInlineCode(line, idx);
+        if (inlineCode) {
+          idx = inlineCode.nextIndex;
+          continue;
+        }
+      }
+      if (line[idx] === '[' && line[idx + 1] === '[') {
+        const wikiLink = readWikiLink(line, idx);
+        if (wikiLink) {
+          recordWikiLink(wikiLink.target, wikiLink.anchor);
+          idx = wikiLink.nextIndex;
+          continue;
+        }
+      }
+      if (line[idx] === '[' && line[idx - 1] !== '!') {
+        const mdLink = readMarkdownLink(line, idx);
+        if (mdLink) {
+          recordMarkdownLink(mdLink.href);
+          idx = mdLink.nextIndex;
+          continue;
+        }
+      }
+      idx++;
+    }
+  }
+
+  return broken;
 }
 
 function serializeState(state: BranchGraphState): SerializedBranchGraphState {

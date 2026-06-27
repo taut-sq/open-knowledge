@@ -1,9 +1,16 @@
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { AdvisoryWarningSchema, validateDocName } from '@inkeep/open-knowledge-core';
+import {
+  AdvisoryWarningSchema,
+  BrokenLinkSchema,
+  validateDocName,
+} from '@inkeep/open-knowledge-core';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Config } from '../../config/schema.ts';
+import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
+import { resolveWithinRoot } from './path-safety.ts';
 
 export type ServerInstance = McpServer;
 export type ConfigOrResolver = Config | ((cwd?: string) => Promise<Config>);
@@ -70,6 +77,23 @@ export const previewAttachWarningField = z
   .optional()
   .describe('Preview-attach hint (`{ action, previewUrl?, message? }`) when relevant.');
 
+const brokenLinksOutputField = z
+  .array(BrokenLinkSchema)
+  .describe(
+    'Outbound internal links in the just-written doc that do not resolve. Always present — `[]` means every link resolves. Each: `{ href (as written), resolvedTo (the docName or content-root file path it pointed at, or null), reason: "no-such-doc" | "no-such-file" | "unresolvable" }`. Report-only — the write landed regardless; fix in a follow-up edit.',
+  );
+
+export function docExtensionOnDisk(
+  contentDir: string,
+  docName: string,
+): (typeof SUPPORTED_DOC_EXTENSIONS)[number] | undefined {
+  for (const ext of SUPPORTED_DOC_EXTENSIONS) {
+    const contained = resolveWithinRoot(contentDir, `${docName}${ext}`);
+    if (contained.ok && existsSync(contained.abs)) return ext;
+  }
+  return undefined;
+}
+
 export const documentResultBaseShape = {
   summary: summaryOutputSchema.optional(),
   warnings: z
@@ -79,6 +103,7 @@ export const documentResultBaseShape = {
     .describe(
       "Advisory entries discriminated by `kind`. Write-integrity kinds — `content-divergence` (converged Y.Text didn't byte-match what you composed) and `disk-edit-reconciled` (an out-of-band disk edit was folded in before your write) — mean re-read the doc. The renderability kind `mermaid-parse-error` means the write landed but that fence will not render — fix it and re-edit.",
     ),
+  brokenLinks: brokenLinksOutputField,
 } as const;
 
 export function nestDocResult(

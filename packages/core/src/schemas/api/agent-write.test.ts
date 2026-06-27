@@ -254,6 +254,7 @@ describe('AgentWriteMdSuccessSchema', () => {
       timestamp: '2026-04-30T00:00:00.000Z',
       subscriberCount: 0,
       systemSubscriberCount: 0,
+      brokenLinks: [],
     });
     expect(result.success).toBe(true);
   });
@@ -270,8 +271,42 @@ describe('AgentWriteMdSuccessSchema', () => {
           message: 'No backlinks; consider linking from [[folder/README]].',
         },
       ],
+      brokenLinks: [],
     });
     expect(result.success).toBe(true);
+  });
+
+  test('parses populated brokenLinks across all three reason kinds', () => {
+    const result = AgentWriteMdSuccessSchema.safeParse({
+      timestamp: '2026-04-30T00:00:00.000Z',
+      subscriberCount: 0,
+      systemSubscriberCount: 0,
+      brokenLinks: [
+        { href: './wiki/x', resolvedTo: 'wiki/wiki/x', reason: 'no-such-doc' },
+        { href: '../src/foo.py', resolvedTo: 'src/foo.py', reason: 'no-such-file' },
+        { href: '../../escape.md', resolvedTo: null, reason: 'unresolvable' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test('requires brokenLinks (always-present confirmation field)', () => {
+    const result = AgentWriteMdSuccessSchema.safeParse({
+      timestamp: '2026-04-30T00:00:00.000Z',
+      subscriberCount: 0,
+      systemSubscriberCount: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects an invalid brokenLinks reason', () => {
+    const result = AgentWriteMdSuccessSchema.safeParse({
+      timestamp: '2026-04-30T00:00:00.000Z',
+      subscriberCount: 0,
+      systemSubscriberCount: 0,
+      brokenLinks: [{ href: './x', resolvedTo: null, reason: 'broken-anchor' }],
+    });
+    expect(result.success).toBe(false);
   });
 
   test('rejects negative subscriberCount', () => {
@@ -279,6 +314,7 @@ describe('AgentWriteMdSuccessSchema', () => {
       timestamp: '2026-04-30T00:00:00.000Z',
       subscriberCount: -1,
       systemSubscriberCount: 0,
+      brokenLinks: [],
     });
     expect(result.success).toBe(false);
   });
@@ -289,6 +325,7 @@ describe('AgentWriteMdSuccessSchema', () => {
       subscriberCount: 0,
       systemSubscriberCount: 0,
       hints: [{ type: 'something-else', parentCandidates: [], message: '' }],
+      brokenLinks: [],
     });
     expect(result.success).toBe(false);
   });
@@ -300,6 +337,7 @@ describe('AgentPatchSuccessSchema', () => {
       timestamp: '2026-04-30T00:00:00.000Z',
       subscriberCount: 0,
       systemSubscriberCount: 0,
+      brokenLinks: [],
     });
     expect(result.success).toBe(true);
   });

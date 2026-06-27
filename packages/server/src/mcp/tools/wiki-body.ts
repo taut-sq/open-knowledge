@@ -29,7 +29,7 @@ Default when the user says nothing: \`internal\` / \`standard\`.
 ## Source-reference convention (how wiki pages point at code)
 
 - **Intra-wiki navigation** → OK doc links (\`[Auth flow](../flows/auth.md)\`). These build the full backlink / hub / orphan graph. Link liberally — density is how the wiki stays navigable.
-- **Code references, \`internal\`** → a relative markdown link to the source file plus an inline code-span for the symbol — e.g. the \`bootServer()\` symbol in [boot.ts](../../packages/server/src/boot.ts). Relative links click-open in the asset preview and produce **no dead-link noise** (the link graph only tracks \`.md\`/\`.mdx\` edges, so source links are never reported dead). A cosmetic \`#Lxx\` is fine but not navigable.
+- **Code references, \`internal\`** → a relative markdown link to the source file plus an inline code-span for the symbol — e.g. the \`bootServer()\` symbol in [boot.ts](../../packages/server/src/boot.ts). Relative source links click-open in the asset preview and stay out of the navigation graph (the \`links\` graph tracks only \`.md\`/\`.mdx\` edges, so source links never show as graph dead-links or orphans) — but the write/edit \`brokenLinks\` response DOES validate them: a wrong-depth path resolving to a missing file is reported \`no-such-file\`, and one that overshoots the content root is \`unresolvable\`. So count the \`../\` hops from the page's own folder, not the wiki root. A cosmetic \`#Lxx\` is fine but not navigable.
 - **Code references, \`public\`** → GitHub blob URLs (\`https://github.com/<org>/<repo>/blob/<branch>/path/to/file.ts\`) so a reader without the repo can follow them. Detect the remote with \`exec\` (or native \`git remote get-url origin\`); if there is none, fall back to relative links.
 
 Never invent paths — every source reference must point at a file you actually read.
@@ -105,7 +105,7 @@ Atomic pages for domain terms and core abstractions (one term each): definition,
 2. Run \`links({ kind: ["orphans", "hubs", "dead"] })\`:
    - **orphans** — pages nothing links to. Adopt each by linking it from OVERVIEW or a relevant section page (or, rarely, justify it as intentionally standalone).
    - **hubs** — ranks by *inbound* links. Confirm your **concept/module pages** show up here — that's the signal cross-linking actually happened. Don't expect \`OVERVIEW\`: a freshly authored nav page has almost no inbound links, so it won't appear (and that's correct — its coverage was checked in step 1).
-   - **dead** — fix or remove every dead link. (Source-file links never appear here — only \`.md\`/\`.mdx\` edges are tracked.)
+   - **dead** — fix or remove every dead link. (Source-file links don't appear in this graph — only \`.md\`/\`.mdx\` edges are tracked — but they ARE validated by \`brokenLinks\` on each write/edit, per the code-reference rule above.)
 3. Append a \`wiki/log.md\` entry (see *Log discipline*).
 4. Tell the user the wiki is ready and surface the OVERVIEW preview URL.
 

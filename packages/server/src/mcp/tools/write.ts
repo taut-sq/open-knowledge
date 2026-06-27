@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import {
   type DocExtension,
@@ -19,18 +19,20 @@ import { mergePatch } from '../../content/frontmatter-merge.ts';
 import { parentFolderOf } from '../../content/nested-folder-rules.ts';
 import { applySubstitution, todayIsoUtc } from '../../content/substitution.ts';
 import { resolveTemplatesAvailable } from '../../content/templates-resolver.ts';
-import { SUPPORTED_DOC_EXTENSIONS } from '../../doc-extensions.ts';
 import type { AgentIdentity } from '../agent-identity.ts';
 import {
   formatAdvisoryBriefs,
   formatAdvisoryLines,
+  formatBrokenLinkBrief,
+  formatBrokenLinkLines,
   parseAdvisoryWarnings,
+  parseBrokenLinks,
 } from './advisory-warnings.ts';
-import { resolveWithinRoot } from './path-safety.ts';
 import { buildPreviewAttachWarning, resolvePreviewUrl, START_UI_TEXT_HINT } from './preview-url.ts';
 import type { ConfigOrResolver, ServerInstance, ServerUrlOrResolver } from './shared.ts';
 import {
   agentIdentityFields,
+  docExtensionOnDisk,
   documentResultBaseShape,
   HOCUSPOCUS_NOT_RUNNING_ERROR,
   httpPost,
@@ -125,14 +127,6 @@ function emptyAppendNoOpNote(position: string, markdown: string | undefined): st
   return `No content to ${position} — document unchanged. To clear a document, use \`position: "replace"\` with empty \`content\`.`;
 }
 
-function docExtensionOnDisk(contentDir: string, docName: string): '.md' | '.mdx' | null {
-  for (const ext of SUPPORTED_DOC_EXTENSIONS) {
-    const contained = resolveWithinRoot(contentDir, `${docName}${ext}`);
-    if (contained.ok && existsSync(contained.abs)) return ext;
-  }
-  return null;
-}
-
 function requestedDocExtension(rawDocName: string): '.md' | '.mdx' | null {
   const lower = rawDocName.toLowerCase();
   if (lower.endsWith('.mdx')) return '.mdx';
@@ -211,7 +205,7 @@ async function writeOneDoc(
   let effectiveMarkdown = spec.content ?? '';
   const hasFrontmatter = spec.frontmatter !== undefined && Object.keys(spec.frontmatter).length > 0;
 
-  const existingExt = docExtensionOnDisk(contentDir, docName);
+  const existingExt = docExtensionOnDisk(contentDir, docName) ?? null;
   const docExists = existingExt !== null;
   const requestedExt = spec.extension ?? requestedDocExtension(spec.path);
 
@@ -600,12 +594,14 @@ async function handleBatch(
     if (!r.ok) return { docName: r.docName, ok: false as const, error: r.error };
     const preview = resolvePreviewUrl(r.docName, { lockDir });
     const warnings = parseAdvisoryWarnings(r.raw.warnings);
+    const brokenLinks = parseBrokenLinks(r.raw.brokenLinks);
     return {
       docName: r.docName,
       ok: true as const,
       position: r.position,
       ...(preview ? { previewUrl: preview.url } : {}),
       ...(warnings ? { warnings } : {}),
+      brokenLinks,
     };
   });
   const okCount = docOut.filter((d) => d.ok).length;
@@ -620,6 +616,10 @@ async function handleBatch(
     const baseParts = [`Wrote ${spec.path} (${r.position}).`];
     if (d?.ok && d.warnings) {
       baseParts.push(...formatAdvisoryBriefs(d.warnings));
+    }
+    if (d?.ok) {
+      const brokenBrief = formatBrokenLinkBrief(d.brokenLinks);
+      if (brokenBrief) baseParts.push(brokenBrief);
     }
     return baseParts.join(' ');
   });
@@ -654,12 +654,9 @@ async function handleSingleDoc(
 
   const result = w.raw;
   const preview = resolvePreviewUrl(w.docName, { lockDir });
-  const subscriberCount =
-    typeof result.subscriberCount === 'number' ? result.subscriberCount : undefined;
   const systemSubscriberCount =
     typeof result.systemSubscriberCount === 'number' ? result.systemSubscriberCount : undefined;
   const noPreviewAnywhere = systemSubscriberCount === 0;
-  const noPreviewOnThisDoc = subscriberCount === 0;
   const hints = Array.isArray(result.hints) ? result.hints : undefined;
   const summaryResult =
     result.summary && typeof result.summary === 'object'
@@ -667,6 +664,7 @@ async function handleSingleDoc(
       : undefined;
   const summaryHint = typeof summaryResult?.hint === 'string' ? summaryResult.hint : undefined;
   const advisoryWarnings = parseAdvisoryWarnings(result.warnings);
+  const brokenLinks = parseBrokenLinks(result.brokenLinks);
 
   const noOpNote = emptyAppendNoOpNote(w.position, spec.content);
   const lines: string[] = [
@@ -688,19 +686,12 @@ async function handleSingleDoc(
   if (advisoryWarnings) {
     lines.push(...formatAdvisoryLines(advisoryWarnings));
   }
+  lines.push(...formatBrokenLinkLines(brokenLinks));
   const text = lines.join('\n');
 
-  if (
-    !preview &&
-    !noPreviewAnywhere &&
-    !noPreviewOnThisDoc &&
-    !hints &&
-    !summaryResult &&
-    !advisoryWarnings
-  ) {
-    return textResult(text);
-  }
-  const document: Record<string, unknown> = {};
+  const document: Record<string, unknown> = {
+    brokenLinks,
+  };
   if (hints) document.hints = hints;
   if (summaryResult) document.summary = summaryResult;
   if (advisoryWarnings) document.warnings = advisoryWarnings;
@@ -842,7 +833,9 @@ export function register(server: ServerInstance, deps: WriteDeps): void {
             ...documentResultBaseShape,
           })
           .optional()
-          .describe('Single-document write result (present when there is a doc-specific signal).'),
+          .describe(
+            'Single-document write result. Always present on a successful single-doc write — it carries `brokenLinks` (possibly `[]`) plus any `summary`/`hints`/`warnings`.',
+          ),
         folder: z
           .object({
             ok: z.boolean(),
@@ -895,7 +888,7 @@ export function register(server: ServerInstance, deps: WriteDeps): void {
         documents: looseObjectArray
           .optional()
           .describe(
-            'Batch write: per-doc result `{ docName, ok, position?, previewUrl?, warnings?, error? }`.',
+            'Batch write: per-doc result `{ docName, ok, position?, previewUrl?, warnings?, brokenLinks, error? }`. `brokenLinks` (possibly `[]`) is present on each successful entry, same as a single-doc write.',
           ),
         previewUrl: previewUrlOutputField.optional(),
         previewUrlSource: previewUrlSourceField,

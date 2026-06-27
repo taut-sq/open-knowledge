@@ -13,6 +13,8 @@ import { join } from 'node:path';
 import { LOCAL_DIR } from '@inkeep/open-knowledge-core';
 import {
   BacklinkIndex,
+  type BrokenOutboundLink,
+  computeBrokenOutboundLinks,
   type ExtractedWikiLink,
   extractMarkdownLinksFromMarkdown,
   extractWikiLinksFromMarkdown,
@@ -1207,5 +1209,170 @@ describe('reconcileWithDisk', () => {
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('computeBrokenOutboundLinks', () => {
+  test('returns [] when every outbound link resolves (AC2.1)', () => {
+    const md = 'See [sibling](./real.md) and [root](/docs/guide.md) and [[Existing]].';
+    const admitted = new Set(['notes/real', 'docs/guide', 'Existing']);
+    expect(computeBrokenOutboundLinks(md, 'notes/a', admitted)).toEqual([]);
+  });
+
+  test('flags the `./`-onto-content-root doubling footgun as no-such-doc (AC2.2)', () => {
+    const md = 'See [tasks](./wiki/modules/tasks).';
+    expect(computeBrokenOutboundLinks(md, 'wiki/OVERVIEW', new Set())).toEqual<
+      BrokenOutboundLink[]
+    >([
+      {
+        href: './wiki/modules/tasks',
+        resolvedTo: 'wiki/wiki/modules/tasks',
+        reason: 'no-such-doc',
+      },
+    ]);
+  });
+
+  test('flags a root-escaping relative link as unresolvable (AC2.3)', () => {
+    const md = 'Bad [escape](../escape.md).';
+    expect(computeBrokenOutboundLinks(md, 'readme', new Set())).toEqual<BrokenOutboundLink[]>([
+      { href: '../escape.md', resolvedTo: null, reason: 'unresolvable' },
+    ]);
+  });
+
+  test('flags a relative path that pops past the content root as unresolvable', () => {
+    const md = 'Deep [out](../../way-out.md).';
+    expect(computeBrokenOutboundLinks(md, 'a/b', new Set())).toEqual<BrokenOutboundLink[]>([
+      { href: '../../way-out.md', resolvedTo: null, reason: 'unresolvable' },
+    ]);
+  });
+
+  test('an empty-href markdown construct `[x]()` is not a link (mirrors the indexer)', () => {
+    expect(computeBrokenOutboundLinks('See [x]() here.', 'notes/a', new Set())).toEqual([]);
+  });
+
+  test('flags a broken wiki-link with the reconstructed [[…]] href (AC2.4)', () => {
+    const md = 'Missing [[Ghost Page]] reference, and an [[Existing]] one.';
+    const admitted = new Set(['Existing']);
+    expect(computeBrokenOutboundLinks(md, 'notes/a', admitted)).toEqual<BrokenOutboundLink[]>([
+      { href: '[[Ghost Page]]', resolvedTo: 'Ghost Page', reason: 'no-such-doc' },
+    ]);
+  });
+
+  test('flags a broken `![[doc]]` embed (validated like the index does)', () => {
+    const md = 'Embed: ![[missing-doc]] here.';
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set())).toEqual<BrokenOutboundLink[]>([
+      { href: '[[missing-doc]]', resolvedTo: 'missing-doc', reason: 'no-such-doc' },
+    ]);
+  });
+
+  test('resolves a path-qualified wiki-link (`[[folder/slug|Alias]]`) vault-root, not source-dir-relative', () => {
+    const md = 'Met [[people/alice-chen|Alice Chen]]; stub [[people/bob-jones|Bob]].';
+    const admitted = new Set(['people/alice-chen']);
+    expect(computeBrokenOutboundLinks(md, 'meetings/2026-01-01', admitted)).toEqual<
+      BrokenOutboundLink[]
+    >([{ href: '[[people/bob-jones]]', resolvedTo: 'people/bob-jones', reason: 'no-such-doc' }]);
+  });
+
+  test('skips external URLs, image embeds, and anchors; file links skipped when no oracle is passed', () => {
+    const md = [
+      'Web [site](https://example.com/missing).',
+      'Mail [me](mailto:a@b.com).',
+      'Asset [pdf](./missing.pdf) and ![alt](./missing.png).',
+      'Image embed ![[missing.png]].',
+      'Anchor [top](#section).',
+    ].join('\n');
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set())).toEqual([]);
+  });
+
+  test('does not scan links inside fenced or inline code', () => {
+    const md = [
+      'Inline `[x](./missing.md)` stays code.',
+      '```',
+      '[fenced](./also-missing.md)',
+      '[[FencedWiki]]',
+      '```',
+    ].join('\n');
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set())).toEqual([]);
+  });
+
+  test('does not scan the frontmatter region', () => {
+    const md = ['---', 'title: Has a [fake](./missing.md) in YAML', '---', 'Body only.'].join('\n');
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set())).toEqual([]);
+  });
+
+  test('dedupes repeated identical broken hrefs', () => {
+    const md = 'First [a](./missing.md), again [b](./missing.md).';
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set())).toEqual<BrokenOutboundLink[]>([
+      { href: './missing.md', resolvedTo: 'notes/missing', reason: 'no-such-doc' },
+    ]);
+  });
+
+  test('treats a self-link to the admitted source doc as valid', () => {
+    const md = 'See [self](./a.md).';
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set(['notes/a']))).toEqual([]);
+  });
+
+  const fileOracle = (existing: string[]) => {
+    const set = new Set(existing);
+    return (p: string) => set.has(p);
+  };
+
+  test('a correct-depth source-file link that exists on disk is clean', () => {
+    const md = 'Probe in [jacobian.py](../../microreservoir/entk/jacobian.py).';
+    expect(
+      computeBrokenOutboundLinks(
+        md,
+        'wiki/modules/entk',
+        new Set(),
+        fileOracle(['microreservoir/entk/jacobian.py']),
+      ),
+    ).toEqual([]);
+  });
+
+  test('an over-deep source-file link (one extra `../`) is unresolvable — the wiki bug', () => {
+    const md = 'Probe in [jacobian.py](../../../microreservoir/entk/jacobian.py).';
+    expect(
+      computeBrokenOutboundLinks(
+        md,
+        'wiki/modules/entk',
+        new Set(),
+        fileOracle(['microreservoir/entk/jacobian.py']),
+      ),
+    ).toEqual<BrokenOutboundLink[]>([
+      {
+        href: '../../../microreservoir/entk/jacobian.py',
+        resolvedTo: null,
+        reason: 'unresolvable',
+      },
+    ]);
+  });
+
+  test('an in-root file link to a missing file is no-such-file (resolvedTo = the path)', () => {
+    const md = 'See [data](../data/missing.json).';
+    expect(
+      computeBrokenOutboundLinks(md, 'wiki/OVERVIEW', new Set(), fileOracle([]))[0],
+    ).toEqual<BrokenOutboundLink>({
+      href: '../data/missing.json',
+      resolvedTo: 'data/missing.json',
+      reason: 'no-such-file',
+    });
+  });
+
+  test('a content-root-absolute file link resolves from the root', () => {
+    const md = 'Config at [pkg](/package.json) and [gone](/nope.json).';
+    expect(
+      computeBrokenOutboundLinks(md, 'wiki/modules/cli', new Set(), fileOracle(['package.json'])),
+    ).toEqual<BrokenOutboundLink[]>([
+      { href: '/nope.json', resolvedTo: 'nope.json', reason: 'no-such-file' },
+    ]);
+  });
+
+  test('external URLs and wiki image embeds are not file-validated even with an oracle', () => {
+    const md = [
+      'Web [pdf](https://example.com/x.pdf).',
+      'Embed ![[diagram.png]].',
+      'Image ![alt](./local.png).',
+    ].join('\n');
+    expect(computeBrokenOutboundLinks(md, 'notes/a', new Set(), fileOracle([]))).toEqual([]);
   });
 });

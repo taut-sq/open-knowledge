@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  buildAbsoluteMarkdownHref,
   buildRelativeMarkdownHref,
   classifyMarkdownHref,
   classifyWikiLinkTarget,
@@ -173,5 +174,25 @@ describe('buildRelativeMarkdownHref', () => {
     expect(buildRelativeMarkdownHref('guides/nested/page', 'guides/install', null)).toBe(
       '../install.md',
     );
+  });
+
+  test('honors a non-default extension for the target', () => {
+    expect(buildRelativeMarkdownHref('docs/index', 'docs/guide', null, '.mdx')).toBe('./guide.mdx');
+  });
+});
+
+describe('buildAbsoluteMarkdownHref', () => {
+  test('builds a root-absolute href from an extension-less docName', () => {
+    expect(buildAbsoluteMarkdownHref('wiki/modules/tasks')).toBe('/wiki/modules/tasks.md');
+  });
+
+  test('appends an anchor when given', () => {
+    expect(buildAbsoluteMarkdownHref('docs/guide', '.md', 'install')).toBe(
+      '/docs/guide.md#install',
+    );
+  });
+
+  test('honors a non-default extension', () => {
+    expect(buildAbsoluteMarkdownHref('guides/widget', '.mdx')).toBe('/guides/widget.mdx');
   });
 });
