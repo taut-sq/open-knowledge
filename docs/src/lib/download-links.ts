@@ -113,8 +113,6 @@ export const SUCCESS_CACHE_CONTROL = 'public, max-age=0, s-maxage=300, stale-whi
 
 export const FALLBACK_CACHE_CONTROL = 'no-store';
 
-export const STABLE_CACHE_CONTROL = 'public, max-age=0, s-maxage=3600';
-
 export function toRedirectResponse(redirect: BetaRedirect): Response {
   return new Response(null, {
     status: 302,

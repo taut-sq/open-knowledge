@@ -1,6 +1,5 @@
 import { DownloadIcon } from 'lucide-react';
-import Link from 'next/link';
-import { STABLE_DMG_URL } from '@/lib/download-links';
+import { DOWNLOAD_ROUTE } from '@/lib/site';
 
 type DownloadButtonProps = {
   href?: string;
@@ -8,11 +7,11 @@ type DownloadButtonProps = {
 };
 
 export function DownloadButton({
-  href = STABLE_DMG_URL,
+  href = DOWNLOAD_ROUTE,
   label = 'DOWNLOAD FOR MAC',
 }: DownloadButtonProps) {
   return (
-    <Link
+    <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
@@ -20,6 +19,6 @@ export function DownloadButton({
     >
       {label}
       <DownloadIcon className="size-4" aria-hidden="true" />
-    </Link>
+    </a>
   );
 }

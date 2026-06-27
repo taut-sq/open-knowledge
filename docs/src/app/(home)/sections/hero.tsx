@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ClaudeIcon } from '@/components/icons/claude';
 import { CodexBrandIcon } from '@/components/icons/codex';
 import { CursorIcon } from '@/components/icons/cursor';
-import { DOWNLOAD_URL, SITE_HEADLINE } from '@/lib/site';
+import { DOWNLOAD_ROUTE, SITE_HEADLINE } from '@/lib/site';
 import { cn } from '@/lib/utils';
 import { DotTexture } from '../dot-texture';
 import { MarketingButton } from '../marketing-button';
@@ -46,7 +46,7 @@ export function Hero() {
 
         <div className="mt-6 flex items-center justify-center gap-4">
           <MarketingButton
-            href={DOWNLOAD_URL}
+            href={DOWNLOAD_ROUTE}
             target="_blank"
             size="md"
             showIcon

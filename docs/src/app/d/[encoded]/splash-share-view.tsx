@@ -1,12 +1,8 @@
 import { DotIcon, GitBranchIcon } from 'lucide-react';
 import Link from 'next/link';
 import { OkWordmark } from '@/components/ok-wordmark';
-import {
-  buildCloneCommand,
-  SPLASH_DOWNLOAD_URL,
-  SPLASH_INSTALL_COMMAND,
-  type SplashView,
-} from '@/lib/share-splash';
+import { buildCloneCommand, SPLASH_INSTALL_COMMAND, type SplashView } from '@/lib/share-splash';
+import { DOWNLOAD_ROUTE } from '@/lib/site';
 import { DotTexture } from '../../(home)/dot-texture';
 import { SiteFooter } from '../../(home)/footer';
 import { SplashButtonLabel, splashPrimaryButton } from './splash-buttons';
@@ -133,7 +129,7 @@ export function SplashFallback({ heading }: { heading: string }) {
           </h1>
 
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            <a href={SPLASH_DOWNLOAD_URL} className={splashPrimaryButton}>
+            <a href={DOWNLOAD_ROUTE} className={splashPrimaryButton}>
               <SplashButtonLabel direction="down">DOWNLOAD FOR MAC</SplashButtonLabel>
             </a>
             <SplashCliButton installCommand={SPLASH_INSTALL_COMMAND} />

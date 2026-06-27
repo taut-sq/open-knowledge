@@ -8,7 +8,7 @@ import { DiscordIcon } from '@/components/icons/discord';
 import { GitHubIcon } from '@/components/icons/github';
 import { XIcon } from '@/components/icons/x';
 import { OkWordmark } from '@/components/ok-wordmark';
-import { DOWNLOAD_URL } from '@/lib/site';
+import { DOWNLOAD_ROUTE } from '@/lib/site';
 import { MarketingButton } from './marketing-button';
 
 type NavLink = {
@@ -127,7 +127,7 @@ export function SiteNav() {
               </Link>
             );
           })}
-          <MarketingButton href={DOWNLOAD_URL} size="sm">
+          <MarketingButton href={DOWNLOAD_ROUTE} size="sm">
             Download
           </MarketingButton>
         </nav>
@@ -186,7 +186,7 @@ export function SiteNav() {
               </Link>
             );
           })}
-          <MarketingButton href={DOWNLOAD_URL} size="md" className="text-base" showIcon>
+          <MarketingButton href={DOWNLOAD_ROUTE} size="md" className="text-base" showIcon>
             Download
           </MarketingButton>
         </nav>

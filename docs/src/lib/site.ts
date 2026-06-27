@@ -25,5 +25,7 @@ export function metaDescription(
 
 export const DOWNLOAD_URL = STABLE_DMG_URL;
 
+export const DOWNLOAD_ROUTE = '/download/stable';
+
 export const EXAMPLE_KB_SHARE_URL =
   'https://openknowledge.ai/d/AWh0dHBzOi8vZ2l0aHViLmNvbS9pbmtlZXAvdGVjaC1pcG9zL2Jsb2IvbWFpbi9SRUFETUUubWQ';

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { DOWNLOAD_URL } from '@/lib/site';
+import { DOWNLOAD_ROUTE } from '@/lib/site';
 import { useIsInView } from '@/lib/use-is-in-view';
 import { cn } from '@/lib/utils';
 import { DotTexture } from '../dot-texture';
@@ -104,7 +104,7 @@ export function CallToAction() {
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-5">
             <MarketingButton
-              href={DOWNLOAD_URL}
+              href={DOWNLOAD_ROUTE}
               target="_blank"
               size="lg"
               showIcon

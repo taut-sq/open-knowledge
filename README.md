@@ -13,7 +13,7 @@
 <div >
   <a href="https://openknowledge.ai">website</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="https://github.com/inkeep/open-knowledge/releases/latest/download/OpenKnowledge-arm64.dmg">macOS app</a>
+  <a href="https://openknowledge.ai/download/stable">macOS app</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">web view + cli</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>

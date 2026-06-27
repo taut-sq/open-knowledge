@@ -183,6 +183,9 @@ export function MarketingButton({
   const ArrowIcon = iconDirection === 'down' ? ArrowDown : ArrowRight;
   const ChevronsIcon = iconDirection === 'down' ? ChevronsDown : ChevronsRight;
   const isFileLink = typeof href === 'string' && href.split('?')[0]?.toLowerCase().endsWith('.pdf');
+  const isRedirectRoute =
+    typeof href === 'string' && (href.startsWith('/download/') || href.startsWith('/updates/'));
+  const useRawAnchor = isFileLink || isRedirectRoute;
   const computedDownload = typeof download !== 'undefined' ? download : isFileLink ? '' : undefined;
 
   const buttonContent = (
@@ -251,7 +254,7 @@ export function MarketingButton({
     const defaultRel = target === '_blank' ? 'noopener noreferrer' : undefined;
     const finalRel = rel || defaultRel;
 
-    if (isFileLink) {
+    if (useRawAnchor) {
       return (
         <a
           href={href}
