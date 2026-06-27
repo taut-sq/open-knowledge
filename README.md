@@ -1,3 +1,4 @@
+# OpenKnowledge 
 <p>
   <a  href="https://openknowledge.ai"><picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/ok-wordmark-dark.svg">
@@ -9,26 +10,26 @@
 <b>OpenKnowledge</b> is a beautiful WYSIWYG markdown editing app with integrations for Claude, Codex, and other harnesses. For notes, knowledge bases, specs, and LLM wikis. Private, local, and free.
 </p>
 
-<img
-  src="assets/hero.webp"
-  alt="OpenKnowledge editor with an AI agent drafting a launch recap"
-  width="100%"
-  style="border-radius: 10px"
-/>
-
 <div >
-  <a href="https://openknowledge.ai">Site</a>
+  <a href="https://openknowledge.ai">Website</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://github.com/inkeep/open-knowledge/releases/latest/download/OpenKnowledge-arm64.dmg">macOS app</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">Web App + CLI</a>
+  <a href="https://openknowledge.ai/docs/get-started/quickstart#ok-install-web-app-linux-windows-intel-mac">Web view + CLI</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://x.com/OpenKnowledgeAI">𝕏</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="https://discord.com/invite/YujKpFN49">Discord</a>
 </div>
 
-<br/>
+</br>
+
+<img
+  src="assets/hero.webp"
+  alt="OpenKnowledge editor with an AI agent drafting a launch recap"
+  width="100%"
+  style="border-radius: 10px"
+/>
 
 # Features
 
@@ -77,12 +78,12 @@ OpenKnowledge is licensed under the [GNU General Public License v3.0 or later](.
 
 ## Support
 
-Feel free to file an issue or ask questions on the <a href="https://discord.com/invite/YujKpFN49">Discord</a> community.
+Feel free to <a href="https://github.com/inkeep/open-knowledge/issues/new/choose">file an issue</a> or ask questions on the <a href="https://discord.com/invite/YujKpFN49">Discord</a> community.
 
-<p align="center">
+<p>
   ⭐️ If you'd like to support this project, consider starring the repo ⭐️
 </p>
 
-<p align="center">
-  Follow us on <a href="https://x.com/OpenKnowledgeAI">𝕏</a> for product updates.
+<p>
+  🔔 Follow us on <a href="https://x.com/OpenKnowledgeAI">𝕏</a> for product updates. 🔔
 </p>
