@@ -11,7 +11,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { ensureCliOnPath, pathInstallMarkerPath } from './path-install.ts';
+import {
+  computePathLeg,
+  type EnsureCliOnPathResult,
+  ensureCliOnPath,
+  pathInstallMarkerPath,
+} from './path-install.ts';
 
 const EXE = '/Applications/OpenKnowledge.app/Contents/MacOS/OpenKnowledge';
 const WRAPPER = '/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
@@ -33,6 +38,7 @@ describe('ensureCliOnPath', () => {
       spawn: async () => ({ code: 0, stdout: `${h}/.ok/bin:/usr/bin`, stderr: '' }),
     });
     expect(result.status).toBe('installed');
+    if (result.status === 'installed') expect(result.summary).toContain('~/.zshrc');
     expect(readlinkSync(join(h, '.ok', 'bin', 'ok'))).toBe(WRAPPER);
     expect(readlinkSync(join(h, '.ok', 'bin', 'open-knowledge'))).toBe(WRAPPER);
     expect(readFileSync(join(h, '.ok', 'env.sh'), 'utf8')).toContain(
@@ -77,7 +83,7 @@ describe('ensureCliOnPath', () => {
       env: { HOME: h, SHELL: '/bin/zsh' },
       spawn: async () => ({ code: 0, stdout: `${h}/.ok/bin`, stderr: '' }),
     });
-    expect(repaired.status).toBe('installed');
+    expect(repaired.status).toBe('installed-silent');
     expect(readlinkSync(join(h, '.ok', 'bin', 'ok'))).toBe(WRAPPER);
   });
 
@@ -177,6 +183,7 @@ describe('ensureCliOnPath', () => {
       logger: { event: (e) => events.push(e) },
     });
     expect(result.status).toBe('installed');
+    if (result.status === 'installed') expect(result.summary).toContain('leftover ok symlink');
     expect(() => lstatSync(join(bin, 'ok'))).toThrow();
     expect(readlinkSync(join(bin, 'open-knowledge'))).toBe('/elsewhere/ok.sh');
     const marker = JSON.parse(readFileSync(markerPath, 'utf8'));
@@ -280,8 +287,35 @@ describe('ensureCliOnPath', () => {
     const newWrapper =
       '/Users/someone/Applications/OpenKnowledge.app/Contents/Resources/cli/bin/ok.sh';
     const result = await ensureCliOnPath(opts(newExe));
-    expect(result.status).toBe('installed');
+    expect(result.status).toBe('installed-silent');
     expect(readlinkSync(join(h, '.ok', 'bin', 'ok'))).toBe(newWrapper);
     expect(readlinkSync(join(h, '.ok', 'bin', 'open-knowledge'))).toBe(newWrapper);
+  });
+});
+
+describe('computePathLeg', () => {
+  const marker = {} as Extract<EnsureCliOnPathResult, { status: 'installed' }>['marker'];
+
+  test('installed → installed leg with its summary (the only success that toasts)', () => {
+    expect(computePathLeg({ status: 'installed', marker, summary: 'Added ok to PATH.' })).toEqual({
+      status: 'installed',
+      summary: 'Added ok to PATH.',
+    });
+  });
+
+  test('installed-silent → none (symlink-only repoint stays silent)', () => {
+    expect(computePathLeg({ status: 'installed-silent', marker })).toEqual({ status: 'none' });
+  });
+
+  test('failed-all → failed leg carrying the error', () => {
+    expect(computePathLeg({ status: 'failed-all', error: 'EACCES' })).toEqual({
+      status: 'failed',
+      summary: 'EACCES',
+    });
+  });
+
+  test('skipped / healthy-current → none', () => {
+    expect(computePathLeg({ status: 'skipped', reason: 'platform' })).toEqual({ status: 'none' });
+    expect(computePathLeg({ status: 'healthy-current', marker })).toEqual({ status: 'none' });
   });
 });

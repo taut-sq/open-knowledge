@@ -183,7 +183,7 @@ import {
   recordFirstRunShareHandoff,
   recordOnboardingFlow,
 } from './onboarding-telemetry.ts';
-import { type EnsureCliOnPathResult, ensureCliOnPath } from './path-install.ts';
+import { computePathLeg, type EnsureCliOnPathResult, ensureCliOnPath } from './path-install.ts';
 import { installStdioBrokenPipeGuard } from './process-safety-net.ts';
 import {
   checkAndRepairProjectMcpOnProjectOpen,
@@ -1434,12 +1434,7 @@ function dispatchStartupReclaimToastWhenReady(results: {
   path: EnsureCliOnPathResult;
 }): void {
   const { mcp, path } = results;
-  const pathLeg =
-    path.status === 'installed'
-      ? ({ status: 'installed', summary: path.summary } as const)
-      : path.status === 'failed-all'
-        ? ({ status: 'failed', summary: path.error } as const)
-        : ({ status: 'none' } as const);
+  const pathLeg = computePathLeg(path);
   if (mcp.status === 'failed') {
     dispatchToastWhenReady({
       kind: 'startup-reclaim',

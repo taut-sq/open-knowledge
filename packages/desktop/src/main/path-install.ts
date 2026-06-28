@@ -82,7 +82,34 @@ export type EnsureCliOnPathResult =
   | { status: 'skipped'; reason: string }
   | { status: 'healthy-current'; marker: PathInstallMarker }
   | { status: 'installed'; marker: PathInstallMarker; summary: string }
+  | { status: 'installed-silent'; marker: PathInstallMarker }
   | { status: 'failed-all'; error: string };
+
+/** The PATH leg of the combined startup-reclaim toast (consumed by the main
+ *  process dispatcher + serialized to the renderer). `none` = stay silent. */
+export type StartupToastPathLeg =
+  | { status: 'none' }
+  | { status: 'installed'; summary: string }
+  | { status: 'failed'; summary: string };
+
+export function computePathLeg(result: EnsureCliOnPathResult): StartupToastPathLeg {
+  switch (result.status) {
+    case 'installed':
+      return { status: 'installed', summary: result.summary };
+    case 'failed-all':
+      return { status: 'failed', summary: result.error };
+    case 'installed-silent':
+    case 'healthy-current':
+    case 'skipped':
+      return { status: 'none' };
+    default: {
+      const _exhaustive: never = result;
+      throw new Error(
+        `unhandled ensureCliOnPath status: ${(_exhaustive as { status: string }).status}`,
+      );
+    }
+  }
+}
 
 interface EnsureCliOnPathOpts {
   executablePath: string;
@@ -482,11 +509,8 @@ export async function ensureCliOnPath(opts: EnsureCliOnPathOpts): Promise<Ensure
       parts.push(
         `Removed ${cleanup.removedCount} leftover ok symlink(s) created by an older version.`,
       );
-    return {
-      status: 'installed',
-      marker,
-      summary: parts.length > 0 ? parts.join(' ') : 'Installed CLI shims.',
-    };
+    if (parts.length === 0) return { status: 'installed-silent', marker };
+    return { status: 'installed', marker, summary: parts.join(' ') };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
