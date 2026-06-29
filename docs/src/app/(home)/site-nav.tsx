@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, X } from 'lucide-react';
+import { Menu, Star, X } from 'lucide-react';
 import Link from 'next/link';
 import type { FC, SVGProps } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -17,16 +17,12 @@ type NavLink = {
   external: boolean;
   icon?: FC<SVGProps<SVGSVGElement>>;
   iconOnly?: boolean;
+  showStars?: boolean;
 };
 
-const navLinks: NavLink[] = [
-  { href: '/docs', label: 'Docs', external: false },
-  {
-    href: 'https://github.com/inkeep/open-knowledge',
-    label: 'GitHub',
-    external: true,
-    icon: GitHubIcon,
-  },
+const docsLink: NavLink = { href: '/docs', label: 'Docs', external: false };
+
+const socialLinks: NavLink[] = [
   {
     href: 'https://x.com/OpenKnowledgeAI',
     label: 'X',
@@ -43,9 +39,124 @@ const navLinks: NavLink[] = [
   },
 ];
 
+const githubLink: NavLink = {
+  href: 'https://github.com/inkeep/open-knowledge',
+  label: 'GitHub',
+  external: true,
+  icon: GitHubIcon,
+  showStars: true,
+};
+
+const mobileLinks: NavLink[] = [docsLink, ...socialLinks, githubLink];
+
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function SiteNav() {
+const starFormatter = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+const fullStarFormatter = new Intl.NumberFormat('en-US');
+
+function NavLinkContent({ link }: { link: NavLink }) {
+  const Icon = link.icon;
+  return (
+    <>
+      {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+      {link.iconOnly ? null : link.label}
+    </>
+  );
+}
+
+function NavItem({ link, className }: { link: NavLink; className: string }) {
+  const ariaLabel = link.iconOnly ? link.label : undefined;
+  return link.external ? (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={ariaLabel}
+      className={className}
+    >
+      <NavLinkContent link={link} />
+    </a>
+  ) : (
+    <Link href={link.href} aria-label={ariaLabel} className={className}>
+      <NavLinkContent link={link} />
+    </Link>
+  );
+}
+
+function StarCount({ stars }: { stars: number }) {
+  return (
+    <>
+      <Star
+        className="size-3.5 shrink-0 text-golden-sun-300 fill-golden-sun-300"
+        aria-hidden="true"
+      />
+      {starFormatter.format(stars)}
+    </>
+  );
+}
+
+function GitHubStarButton({
+  link,
+  stars,
+  variant,
+}: {
+  link: NavLink;
+  stars: number | null;
+  variant: 'pill' | 'row';
+}) {
+  const Icon = link.icon;
+  const title = stars != null ? `${fullStarFormatter.format(stars)} GitHub stars` : undefined;
+
+  if (variant === 'row') {
+    return (
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noreferrer"
+        title={title}
+        className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-slide-text transition-colors hover:bg-slide-bg-elevated"
+      >
+        <span className="flex items-center gap-2">
+          {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+          {link.label}
+        </span>
+        {stars != null ? (
+          <span className="flex items-center gap-1.5 tabular-nums text-slide-muted">
+            <StarCount stars={stars} />
+          </span>
+        ) : null}
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-stretch overflow-hidden rounded-full border text-slide-muted hover:text-slide-text transition-colors hover:bg-slide-bg-elevated h-9"
+    >
+      <span className="flex items-center gap-1.5 px-2.5 py-1.5">
+        {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+        {link.label}
+      </span>
+      {stars != null ? (
+        <span
+          title={title}
+          className="flex items-center gap-1.5 border-l px-2.5 py-1.5 tabular-nums"
+        >
+          <StarCount stars={stars} />
+        </span>
+      ) : null}
+    </a>
+  );
+}
+
+export function SiteNav({ stars }: { stars: number | null }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -92,41 +203,34 @@ export function SiteNav() {
   return (
     <header className="sticky top-0 z-50 bg-fd-background/80 backdrop-blur supports-backdrop-filter:bg-fd-background/70">
       <div className="container mx-auto flex h-16 items-center justify-between px-6">
-        <Link href="/" aria-label="OpenKnowledge home" className="inline-flex items-center">
-          <OkWordmark aria-label="OpenKnowledge" className="h-8 w-auto text-slide-text" />
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/" aria-label="OpenKnowledge home" className="inline-flex items-center">
+            <OkWordmark aria-label="OpenKnowledge" className="h-8 w-auto text-slide-text" />
+          </Link>
+          <nav
+            aria-label="Primary"
+            className="hidden items-center gap-6 text-sm text-slide-muted md:flex uppercase font-mono"
+          >
+            <NavItem
+              link={docsLink}
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-slide-text"
+            />
+          </nav>
+        </div>
 
-        <nav className="hidden items-center gap-6 text-sm text-slide-muted md:flex uppercase font-mono">
-          {navLinks.map((link) => {
-            const Icon = link.icon;
-            const content = (
-              <>
-                {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
-                {link.iconOnly ? null : link.label}
-              </>
-            );
-            return link.external ? (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={link.iconOnly ? link.label : undefined}
-                className="inline-flex items-center gap-1.5 transition-colors hover:text-slide-text"
-              >
-                {content}
-              </a>
-            ) : (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-label={link.iconOnly ? link.label : undefined}
-                className="inline-flex items-center gap-1.5 transition-colors hover:text-slide-text"
-              >
-                {content}
-              </Link>
-            );
-          })}
+        <nav
+          aria-label="Secondary"
+          className="hidden items-center gap-6 text-sm text-slide-muted md:flex uppercase font-mono"
+        >
+          {socialLinks.map((link) => (
+            <NavItem
+              key={link.href}
+              link={link}
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-slide-text"
+            />
+          ))}
+          <span aria-hidden="true" className="h-5 w-px bg-slide-border" />
+          <GitHubStarButton link={githubLink} stars={stars} variant="pill" />
           <MarketingButton href={DOWNLOAD_ROUTE} size="sm">
             Download
           </MarketingButton>
@@ -155,37 +259,21 @@ export function SiteNav() {
         hidden={!open}
         className="border-t bg-fd-background md:hidden"
       >
-        <nav className="container mx-auto flex flex-col gap-1 px-6 py-4 text-base uppercase font-mono">
-          {navLinks.map((link) => {
-            const Icon = link.icon;
-            const content = (
-              <>
-                {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
-                {link.iconOnly ? null : link.label}
-              </>
-            );
-            return link.external ? (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={link.iconOnly ? link.label : undefined}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-slide-text transition-colors hover:bg-slide-bg-elevated"
-              >
-                {content}
-              </a>
+        <nav
+          aria-label="Mobile"
+          className="container mx-auto flex flex-col gap-1 px-6 py-4 text-base uppercase font-mono"
+        >
+          {mobileLinks.map((link) =>
+            link.showStars ? (
+              <GitHubStarButton key={link.href} link={link} stars={stars} variant="row" />
             ) : (
-              <Link
+              <NavItem
                 key={link.href}
-                href={link.href}
-                aria-label={link.iconOnly ? link.label : undefined}
+                link={link}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-slide-text transition-colors hover:bg-slide-bg-elevated"
-              >
-                {content}
-              </Link>
-            );
-          })}
+              />
+            ),
+          )}
           <MarketingButton href={DOWNLOAD_ROUTE} size="md" className="text-base" showIcon>
             Download
           </MarketingButton>

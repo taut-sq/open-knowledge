@@ -1,9 +1,11 @@
+import { getGitHubStars } from '@/lib/github-stars';
 import { SiteNav } from './site-nav';
 
-export default function Layout({ children }: LayoutProps<'/'>) {
+export default async function Layout({ children }: LayoutProps<'/'>) {
+  const stars = await getGitHubStars();
   return (
     <>
-      <SiteNav />
+      <SiteNav stars={stars} />
       <main>{children}</main>
     </>
   );
