@@ -46,6 +46,9 @@ export function EditorHeader({ onSignIn, onSetIdentity, onOpenSearch }: EditorHe
     if (activeDocName && !managedArtifact) {
       return buildDocShareInput(activeDocName);
     }
+    if (!activeTarget && !activeDocName) {
+      return buildFolderShareInput('');
+    }
     return null;
   })();
 

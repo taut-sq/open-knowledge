@@ -1349,6 +1349,11 @@ msgstr ""
 msgid "Connect OpenKnowledge to other tools you use."
 msgstr ""
 
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
+msgid "Connect this project to GitHub to share."
+msgstr ""
+
 #: src/components/ConsentDialogBody.tsx
 #: src/components/CreateProjectDialog.tsx
 msgid "Connect to AI tools"
@@ -5548,6 +5553,8 @@ msgstr ""
 msgid "Setup OpenKnowledge in this folder?"
 msgstr ""
 
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/ShareButton.tsx
 msgid "Share"
 msgstr ""

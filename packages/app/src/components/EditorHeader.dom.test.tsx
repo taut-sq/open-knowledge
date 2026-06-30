@@ -19,6 +19,7 @@ let activeDocName: string | null = 'docs/notes';
 let activeTarget: unknown = { kind: 'doc' };
 let sidebarState: 'expanded' | 'collapsed' = 'expanded';
 let isDraggingRail = false;
+let lastShareInput: unknown;
 
 mock.module('@/editor/DocumentContext', () => ({
   useDocumentContext: () => ({ activeDocName, activeTarget }),
@@ -38,7 +39,14 @@ mock.module('./EditorTabs', () => ({
 }));
 
 mock.module('./ShareButton', () => ({
-  ShareButton: () => <button type="button">Share</button>,
+  ShareButton: ({ input }: { input: unknown }) => {
+    lastShareInput = input;
+    return (
+      <button type="button" disabled={input === null}>
+        Share
+      </button>
+    );
+  },
 }));
 
 mock.module('./PublishToGitHubDialog', () => ({
@@ -92,6 +100,7 @@ describe('EditorHeader runtime behavior', () => {
     activeTarget = { kind: 'doc' };
     sidebarState = 'expanded';
     isDraggingRail = false;
+    lastShareInput = undefined;
   });
 
   test('exports the EditorHeader component', async () => {
@@ -165,5 +174,45 @@ describe('EditorHeader runtime behavior', () => {
     expect(screen.queryByTestId('open-in-agent-menu')).toBeNull();
     expect(screen.queryByText('projectName')).toBeNull();
     expect(screen.queryByText('assetFileName')).toBeNull();
+  });
+
+  test('an active doc yields a doc-scope share input', async () => {
+    activeDocName = 'docs/notes';
+    activeTarget = { kind: 'doc' };
+    await renderHeader();
+
+    expect(lastShareInput).toEqual({ kind: 'doc', docName: 'docs/notes' });
+  });
+
+  test('a selected folder yields a folder-scope share input', async () => {
+    activeDocName = null;
+    activeTarget = { kind: 'folder', folderPath: 'guides' };
+    await renderHeader();
+
+    expect(lastShareInput).toEqual({ kind: 'folder', folderRelativePath: 'guides' });
+  });
+
+  test('nothing open or selected defaults to sharing the project root', async () => {
+    activeDocName = null;
+    activeTarget = null;
+    await renderHeader();
+
+    expect(lastShareInput).toEqual({ kind: 'folder', folderRelativePath: '' });
+  });
+
+  test('a managed-artifact doc (skill/template) keeps the share trigger disabled', async () => {
+    activeDocName = '__skill__/project/my-skill';
+    activeTarget = { kind: 'doc' };
+    await renderHeader();
+
+    expect(lastShareInput).toBeNull();
+  });
+
+  test('a non-shareable asset target keeps the share trigger disabled', async () => {
+    activeDocName = null;
+    activeTarget = { kind: 'asset', assetPath: 'img/logo.png' };
+    await renderHeader();
+
+    expect(lastShareInput).toBeNull();
   });
 });

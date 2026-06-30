@@ -8,6 +8,7 @@ import {
   FolderPlus,
   FoldVertical,
   ListCollapse,
+  Share2,
   SquarePen,
   UnfoldVertical,
 } from 'lucide-react';
@@ -62,6 +63,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDocumentContext } from '@/editor/DocumentContext';
 import { useFolderConfig } from '@/hooks/use-folder-config';
+import { useGitSyncStatusDetailed } from '@/hooks/use-git-sync-status';
 import { useIsEmbedded } from '@/hooks/use-is-embedded';
 import { useConfigContext } from '@/lib/config-provider';
 import { subscribeToCreateTopLevelFile } from '@/lib/create-file-events';
@@ -77,6 +79,8 @@ import {
 } from '@/lib/file-tree-menu-action-events';
 import { VISIBLE_TARGETS } from '@/lib/handoff/targets';
 import { ProfilerBoundary } from '@/lib/perf';
+import { scheduleClipboardWrite } from '@/lib/share/clipboard-adapter';
+import { buildFolderShareInput, runShareAction } from '@/lib/share/run-share-action';
 import { useWorkspace } from '@/lib/use-workspace';
 import { cn } from '@/lib/utils';
 
@@ -184,6 +188,8 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
 
   const bridge = typeof window !== 'undefined' ? window.okDesktop : undefined;
   const workspace = useWorkspace();
+  const { status: gitSyncStatus } = useGitSyncStatusDetailed();
+  const hasRemote = gitSyncStatus?.hasRemote === true;
   const projectName =
     bridge?.config?.projectName ||
     workspace?.contentDir.split('/').filter(Boolean).pop() ||
@@ -198,6 +204,9 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
   const showEmptySpaceTreeStateSection = showEmptySpaceExpandAll || showEmptySpaceCollapseAll;
 
   const handleSidebarSurfaceContextMenu: MouseEventHandler<HTMLDivElement> = (event) => {
+    if (event.target instanceof Element && event.target.closest('[data-sidebar-root-context]')) {
+      return;
+    }
     if (isInteractiveSidebarControl(event.target)) {
       event.preventDefault();
       event.stopPropagation();
@@ -229,6 +238,23 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
       console.warn('[FileSidebar] clipboard write failed:', err);
       toast.error(t`Could not copy full path`);
     }
+  };
+  const handleEmptySpaceShare = () => {
+    void runShareAction(
+      {
+        ...buildFolderShareInput(''),
+        hasRemote,
+        onClickWhenNoRemote: () => {
+          toast.error(t`Connect this project to GitHub to share.`);
+        },
+      },
+      {
+        clipboardWrite: scheduleClipboardWrite,
+        toastSuccess: (msg) => toast.success(msg),
+        toastError: (msg) => toast.error(msg),
+        logEvent: (msg) => console.log(msg),
+      },
+    );
   };
   const handleEmptySpaceShowHiddenFilesToggle = (checked: boolean) => {
     if (projectLocalBinding === null) return;
@@ -604,7 +630,10 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
                     headers + their content share the same gutter alignment. */}
                 <SidebarGroup className="min-h-0">
                   <SidebarGroupLabel asChild className="shrink-0">
-                    <CollapsibleTrigger className="flex w-full items-center gap-1.5">
+                    <CollapsibleTrigger
+                      data-sidebar-root-context
+                      className="flex w-full items-center gap-1.5"
+                    >
                       <FolderOpen className="size-3.5 shrink-0" />
                       <span className="truncate">{projectName}</span>
                       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/files:rotate-90" />
@@ -756,6 +785,12 @@ function FileSidebarInner({ onOpenSearch }: FileSidebarProps) {
             installStates={handoffInstallStates}
             dispatch={dispatchHandoff}
           />
+          {hasRemote ? (
+            <ContextMenuItem onSelect={handleEmptySpaceShare} data-testid="empty-space-menu-share">
+              <Share2 aria-hidden="true" />
+              <Trans>Share</Trans>
+            </ContextMenuItem>
+          ) : null}
           <ContextMenuItem
             disabled={!workspace}
             onSelect={handleEmptySpaceCopyFullPath}

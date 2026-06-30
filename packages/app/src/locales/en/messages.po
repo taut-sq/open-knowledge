@@ -1354,6 +1354,11 @@ msgstr "Connect GitHub to continue."
 msgid "Connect OpenKnowledge to other tools you use."
 msgstr "Connect OpenKnowledge to other tools you use."
 
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
+msgid "Connect this project to GitHub to share."
+msgstr "Connect this project to GitHub to share."
+
 #: src/components/ConsentDialogBody.tsx
 #: src/components/CreateProjectDialog.tsx
 msgid "Connect to AI tools"
@@ -5553,6 +5558,8 @@ msgstr "Setup files include: <0>.ok/</0>, AI-tool MCP configs (<1>.mcp.json</1> 
 msgid "Setup OpenKnowledge in this folder?"
 msgstr "Setup OpenKnowledge in this folder?"
 
+#: src/components/FileSidebar.tsx
+#: src/components/FileTree.tsx
 #: src/components/ShareButton.tsx
 msgid "Share"
 msgstr "Share"

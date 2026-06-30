@@ -39,6 +39,7 @@ import {
   Info,
   Pencil,
   RefreshCw,
+  Share2,
   SquarePen,
   Trash2,
   TriangleAlert,
@@ -179,6 +180,7 @@ import { captureRenameSnapshots } from '@/editor/editor-cache';
 import { assetTabId, docTabId, folderTabId, remapPathForFolderRenames } from '@/editor/editor-tabs';
 import { useConflicts } from '@/hooks/use-conflicts';
 import { useFolderConfig } from '@/hooks/use-folder-config';
+import { useGitSyncStatusDetailed } from '@/hooks/use-git-sync-status';
 import { useConfigContext } from '@/lib/config-provider';
 import {
   hashFromAssetPath,
@@ -195,6 +197,13 @@ import {
 import { parseServerResponse, parseSuccessOrWarn } from '@/lib/parse-server-response';
 import { createRefreshScheduler } from '@/lib/refresh-scheduler';
 import { getRelaunchInFlightSnapshot, useRelaunchInFlight } from '@/lib/relaunch-store';
+import { scheduleClipboardWrite } from '@/lib/share/clipboard-adapter';
+import {
+  buildDocShareInput,
+  buildFolderShareInput,
+  runShareAction,
+  type ShareTargetInput,
+} from '@/lib/share/run-share-action';
 import {
   consumeShowAllStream,
   isNdjsonResponse,
@@ -656,6 +665,46 @@ function FileTreeMenu({
   const closeForInlineSurface = () => context.close({ restoreFocus: false });
   const close = () => context.close();
 
+  const { status: gitSyncStatus } = useGitSyncStatusDetailed();
+  const hasRemote = gitSyncStatus?.hasRemote === true;
+  const shareInput: ShareTargetInput | null =
+    isAsset || target.kind === 'asset'
+      ? null
+      : isFolder
+        ? buildFolderShareInput(treeDirectoryPathToFolderPath(item.path))
+        : buildDocShareInput(treeFilePathToDocName(item.path));
+  const canShare = hasRemote && shareInput !== null;
+  const handleShare = () => {
+    if (!shareInput) return;
+    void runShareAction(
+      {
+        ...shareInput,
+        hasRemote,
+        onClickWhenNoRemote: () => {
+          toast.error(t`Connect this project to GitHub to share.`);
+        },
+      },
+      {
+        clipboardWrite: scheduleClipboardWrite,
+        toastSuccess: (msg) => toast.success(msg),
+        toastError: (msg) => toast.error(msg),
+        logEvent: (msg) => console.log(msg),
+      },
+    );
+  };
+  const shareMenuItem = canShare ? (
+    <DropdownMenuItem
+      data-testid="file-tree-menu-share"
+      onSelect={() => {
+        close();
+        handleShare();
+      }}
+    >
+      <Share2 aria-hidden="true" />
+      <Trans>Share</Trans>
+    </DropdownMenuItem>
+  ) : null;
+
   const handleShowHiddenFilesToggle = (checked: boolean) => {
     if (projectLocalBinding === null) return;
     const result = projectLocalBinding.patch({
@@ -753,6 +802,7 @@ function FileTreeMenu({
               isElectronHost={handoff.isElectronHost}
               dispatch={handoff.dispatch}
             />
+            {shareMenuItem}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Copy aria-hidden="true" />
@@ -892,6 +942,7 @@ function FileTreeMenu({
                 dispatch={handoff.dispatch}
               />
             )}
+            {shareMenuItem}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Copy aria-hidden="true" />
