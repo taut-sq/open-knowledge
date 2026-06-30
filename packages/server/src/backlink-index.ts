@@ -1163,6 +1163,10 @@ export class BacklinkIndex {
       .slice(0, limit);
   }
 
+  getIndexedDocNames(branch = this.activeBranch): string[] {
+    return [...this.getState(branch).forward.keys()];
+  }
+
   getDeadLinks(
     admittedDocs: Iterable<string>,
     sourceDocNames?: readonly string[],

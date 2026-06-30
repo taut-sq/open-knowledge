@@ -2172,6 +2172,12 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     };
   }
 
+  function isDocNameContentExcluded(docName: string): boolean {
+    if (!contentFilter) return false;
+    const relPath = isSupportedDocFile(docName) ? docName : `${docName}${getDocExtension(docName)}`;
+    return contentFilter.isExcluded(relPath);
+  }
+
   function collectAdmittedDocNames(): Set<string> {
     const admitted = new Set<string>();
     for (const [docName, entry] of getFileIndex()) {
@@ -2196,11 +2202,25 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     } catch (err) {
       log.warn({ err }, '[collectAdmittedDocNames] managed-artifact enumeration failed');
     }
+    for (const docName of backlinkIndex?.getIndexedDocNames() ?? []) {
+      if (admitted.has(docName)) continue;
+      if (!isDocNameContentExcluded(docName)) admitted.add(docName);
+    }
     return admitted;
   }
 
   const linkedFileExists = (contentRootRelativePath: string): boolean =>
     existsSync(resolve(contentDir, contentRootRelativePath));
+
+  function registerWrittenDocInFileIndex(docName: string, content: string): void {
+    if (isDocNameContentExcluded(docName)) return;
+    mutateFileIndex?.({
+      kind: getFileIndex().has(docName) ? 'update' : 'create',
+      path: resolveContentEntryPath(contentDir, 'file', docName),
+      docName,
+      content,
+    });
+  }
 
   function createSerializedRunner() {
     let pending = Promise.resolve();
@@ -3724,6 +3744,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
 
         const writtenSource = session.dc.document.getText('source').toString();
 
+        registerWrittenDocInFileIndex(resolvedDocName, writtenSource);
+
         const renderWarnings = await validateMermaidFences(writtenSource, resolvedDocName);
 
         const admittedForLinks = collectAdmittedDocNames();
@@ -3998,6 +4020,11 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
 
         const fmWarning = buildReconcileWarning(fmReconcile);
+
+        registerWrittenDocInFileIndex(
+          resolvedDocName,
+          session.dc.document.getText('source').toString(),
+        );
 
         const admittedForLinks = collectAdmittedDocNames();
         admittedForLinks.add(resolvedDocName);
@@ -5193,6 +5220,8 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         const { response: summaryResponse } = summaryResponseFields(normalizedSummary);
 
         const patchedSource = session.dc.document.getText('source').toString();
+
+        registerWrittenDocInFileIndex(docName, patchedSource);
 
         const renderWarnings = await validateMermaidFences(patchedSource, docName);
 

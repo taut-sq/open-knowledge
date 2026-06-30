@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { createApiExtension } from './api-extension.ts';
 import { BacklinkIndex } from './backlink-index.ts';
+import { type ContentFilter, createContentFilter } from './content-filter.ts';
 import type { FileIndexEntry } from './file-watcher.ts';
 
 interface CapturedResponse {
@@ -41,7 +42,7 @@ async function callRoute(
   url: string,
   fileIndex: ReadonlyMap<string, FileIndexEntry>,
   backlinkIndex?: BacklinkIndex,
-  options?: { method?: string; enableTestRoutes?: boolean },
+  options?: { method?: string; enableTestRoutes?: boolean; contentFilter?: ContentFilter },
 ): Promise<CapturedResponse> {
   const ext = createApiExtension({
     hocuspocus: {} as never,
@@ -50,6 +51,7 @@ async function callRoute(
     getFileIndex: () => fileIndex,
     backlinkIndex,
     enableTestRoutes: options?.enableTestRoutes,
+    ...(options?.contentFilter ? { contentFilter: options.contentFilter } : {}),
   });
   const req = makeReq(url, options?.method ?? 'GET');
   const { res, captured } = makeRes();
@@ -386,6 +388,51 @@ describe('graph endpoints', () => {
     }
   });
 
+  test('link/title consumers resolve a graph-indexed doc the file index is missing (PRD-7201)', async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ok-graph-api-prd7201-'));
+    const contentDir = join(projectDir, 'content');
+    mkdirSync(join(contentDir, 'evidence'), { recursive: true });
+    try {
+      writeFileSync(
+        join(contentDir, 'alpha.md'),
+        '# Alpha\n\nLinks to [[evidence/beta]].\n',
+        'utf-8',
+      );
+      writeFileSync(join(contentDir, 'evidence', 'beta.md'), '# Beta\n\nBody.\n', 'utf-8');
+
+      const backlinkIndex = new BacklinkIndex({ projectDir, contentDir });
+      await backlinkIndex.rebuildFromDisk();
+
+      const fileIndex = new Map<string, FileIndexEntry>([
+        [
+          'alpha',
+          {
+            size: 10,
+            modified: new Date(0).toISOString(),
+            canonicalPath: '',
+            inode: 0,
+            aliases: [],
+          },
+        ],
+      ]);
+
+      const forward = JSON.parse(
+        (await callRoute(contentDir, '/api/forward-links?docName=alpha', fileIndex, backlinkIndex))
+          .body,
+      ) as { forwardLinks: Array<{ kind: string; docName: string; title: string }> };
+      expect(forward.forwardLinks).toEqual([
+        expect.objectContaining({ kind: 'doc', docName: 'evidence/beta', title: 'Beta' }),
+      ]);
+
+      const dead = JSON.parse(
+        (await callRoute(contentDir, '/api/dead-links', fileIndex, backlinkIndex)).body,
+      ) as { deadLinks: Array<{ target: string }> };
+      expect(dead.deadLinks).toEqual([]);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test('returns 503 when the backlink index is unavailable', async () => {
     const projectDir = mkdtempSync(join(tmpdir(), 'ok-dead-links-unavailable-'));
     const contentDir = join(projectDir, 'content');
@@ -407,6 +454,7 @@ describe('graph endpoints', () => {
     const contentDir = join(projectDir, 'content');
     mkdirSync(contentDir, { recursive: true });
     try {
+      writeFileSync(join(contentDir, '.okignore'), 'secret.md\n', 'utf-8');
       writeFileSync(join(contentDir, 'public.md'), '# Public\n\nLinks to [[secret]].\n', 'utf-8');
       writeFileSync(
         join(contentDir, 'secret.md'),
@@ -429,9 +477,20 @@ describe('graph endpoints', () => {
       const backlinkIndex = new BacklinkIndex({ projectDir, contentDir });
       await backlinkIndex.rebuildFromDisk();
 
+      const contentFilter = createContentFilter({ projectDir, contentDir });
+
       const forward = JSON.parse(
-        (await callRoute(contentDir, '/api/forward-links?docName=public', fileIndex, backlinkIndex))
-          .body,
+        (
+          await callRoute(
+            contentDir,
+            '/api/forward-links?docName=public',
+            fileIndex,
+            backlinkIndex,
+            {
+              contentFilter,
+            },
+          )
+        ).body,
       ) as {
         forwardLinks: Array<{ kind: 'doc'; docName: string; title: string }>;
       };
@@ -440,12 +499,17 @@ describe('graph endpoints', () => {
       expect(forward.forwardLinks[0].title).toBe('secret');
 
       const hubs = JSON.parse(
-        (await callRoute(contentDir, '/api/hubs', fileIndex, backlinkIndex)).body,
+        (await callRoute(contentDir, '/api/hubs', fileIndex, backlinkIndex, { contentFilter }))
+          .body,
       ) as { hubs: Array<{ docName: string; title: string; count: number }> };
       expect(hubs.hubs).toContainEqual({ docName: 'secret', title: 'secret', count: 1 });
 
       const linkGraph = JSON.parse(
-        (await callRoute(contentDir, '/api/link-graph', fileIndex, backlinkIndex)).body,
+        (
+          await callRoute(contentDir, '/api/link-graph', fileIndex, backlinkIndex, {
+            contentFilter,
+          })
+        ).body,
       ) as {
         nodes: Array<{
           id: string;

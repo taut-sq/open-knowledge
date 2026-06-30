@@ -373,6 +373,30 @@ describe('BacklinkIndex', () => {
     }
   });
 
+  test('getIndexedDocNames returns one entry per indexed doc and never a referenced-but-missing target', () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'ok-backlinks-indexed-names-'));
+    const contentDir = join(projectDir, 'content');
+    mkdirSync(contentDir, { recursive: true });
+    try {
+      const index = new BacklinkIndex({ projectDir, contentDir });
+      index.updateDocument('report', [
+        { target: 'evidence/new-target', anchor: null, snippet: 'see new target' },
+        { target: 'evidence/ghost', anchor: null, snippet: 'see ghost' },
+      ]);
+      index.updateDocument('evidence/new-target', []);
+
+      expect(new Set(index.getIndexedDocNames())).toEqual(
+        new Set(['report', 'evidence/new-target']),
+      );
+      expect(index.getIndexedDocNames()).not.toContain('evidence/ghost');
+
+      index.deleteDocument('evidence/new-target');
+      expect(index.getIndexedDocNames()).toEqual(['report']);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
   test('getDeadLinks reports a target as dead again after deleteDocument removes its forward node', () => {
     const projectDir = mkdtempSync(join(tmpdir(), 'ok-backlinks-dead-after-delete-'));
     const contentDir = join(projectDir, 'content');
