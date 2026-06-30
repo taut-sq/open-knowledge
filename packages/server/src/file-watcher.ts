@@ -14,6 +14,7 @@ import {
 } from './doc-extensions.ts';
 import { classifyFsPath, normalizeFsPath } from './fs-traced.ts';
 import { getLogger } from './logger.ts';
+import { extractPageIcon, extractPageTitle } from './page-identity.ts';
 import { toPosix } from './path-utils.ts';
 import { isWithinContentDir } from './persistence.ts';
 import { containsConflictMarkers } from './reconciliation.ts';
@@ -79,6 +80,8 @@ export interface FileIndexEntry {
   inode: number;
   aliases: string[];
   kind: 'markdown' | 'file';
+  title?: string;
+  icon?: string;
 }
 
 export interface FolderIndexEntry {
@@ -86,6 +89,13 @@ export interface FolderIndexEntry {
   modified: string;
   canonicalPath: string;
   inode: number;
+}
+
+function derivePageMeta(
+  content: string,
+  docName: string,
+): { title: string; icon: string | undefined } {
+  return { title: extractPageTitle(content, docName), icon: extractPageIcon(content) };
 }
 
 function markdownIndexView(
@@ -554,6 +564,7 @@ async function seedLastKnownHashes(
                 inode: canonStat.ino,
                 aliases: [aliasDocName],
                 kind: 'markdown',
+                ...derivePageMeta(content, canonicalDocName),
               });
             } catch (err) {
               const code = (err as NodeJS.ErrnoException).code;
@@ -626,6 +637,7 @@ async function seedLastKnownHashes(
             inode: lst.ino,
             aliases: [],
             kind: 'markdown',
+            ...derivePageMeta(content, docName),
           });
         } catch (err) {
           const code = (err as NodeJS.ErrnoException).code;
@@ -717,6 +729,7 @@ export function updateFileIndex(event: DiskEvent, fileIndex: Map<string, FileInd
         inode: existing?.inode ?? 0,
         aliases: existing?.aliases ?? [],
         kind: 'markdown',
+        ...derivePageMeta(event.content, docName),
       });
       break;
     }
@@ -748,6 +761,7 @@ export function updateFileIndex(event: DiskEvent, fileIndex: Map<string, FileInd
         inode: existing?.inode ?? 0,
         aliases: existing?.aliases ?? [],
         kind: 'markdown',
+        ...derivePageMeta(event.content, event.newDocName),
       });
       break;
     }

@@ -230,8 +230,11 @@ function buildFileIndex(dir: string, base = ''): ReadonlyMap<string, FileIndexEn
   return index;
 }
 
-async function callPages(contentDir: string, method = 'GET'): Promise<CapturedResponse> {
-  const fileIndex = buildFileIndex(contentDir);
+async function callPagesWithIndex(
+  contentDir: string,
+  fileIndex: ReadonlyMap<string, FileIndexEntry>,
+  method = 'GET',
+): Promise<CapturedResponse> {
   const ext = createApiExtension({
     hocuspocus: {} as unknown as Parameters<typeof createApiExtension>[0]['hocuspocus'],
     sessionManager: {} as unknown as Parameters<typeof createApiExtension>[0]['sessionManager'],
@@ -246,6 +249,10 @@ async function callPages(contentDir: string, method = 'GET'): Promise<CapturedRe
     }
   ).onRequest({ request: req, response: res });
   return captured;
+}
+
+async function callPages(contentDir: string, method = 'GET'): Promise<CapturedResponse> {
+  return callPagesWithIndex(contentDir, buildFileIndex(contentDir), method);
 }
 
 describe('GET /api/pages', () => {
@@ -295,6 +302,68 @@ describe('GET /api/pages', () => {
       const noIconEntry = byName.get('no-icon');
       expect(noIconEntry).toBeDefined();
       expect(noIconEntry?.icon ?? undefined).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('serves cached title/icon from the index without reading disk', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ok-pages-cache-'));
+    try {
+      const index = new Map<string, FileIndexEntry>([
+        [
+          'ghost',
+          {
+            size: 123,
+            modified: new Date(0).toISOString(),
+            canonicalPath: join(dir, 'ghost.md'),
+            inode: 1,
+            aliases: [],
+            kind: 'markdown',
+            title: 'Cached Title',
+            icon: '🎯',
+          },
+        ],
+      ]);
+
+      const result = await callPagesWithIndex(dir, index);
+      expect(result.status).toBe(200);
+      const body = JSON.parse(result.body) as {
+        pages?: Array<{ docName: string; title: string; icon?: string }>;
+      };
+      const entry = (body.pages ?? []).find((p) => p.docName === 'ghost');
+      expect(entry?.title).toBe('Cached Title');
+      expect(entry?.icon).toBe('🎯');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('bare entry whose file is missing falls back to the docName title (ENOENT path)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ok-pages-bare-'));
+    try {
+      const index = new Map<string, FileIndexEntry>([
+        [
+          'orphan',
+          {
+            size: 0,
+            modified: new Date(0).toISOString(),
+            canonicalPath: join(dir, 'orphan.md'),
+            inode: 1,
+            aliases: [],
+            kind: 'markdown',
+          },
+        ],
+      ]);
+
+      const result = await callPagesWithIndex(dir, index);
+      expect(result.status).toBe(200);
+      const body = JSON.parse(result.body) as {
+        pages?: Array<{ docName: string; title: string; icon?: string }>;
+      };
+      const entry = (body.pages ?? []).find((p) => p.docName === 'orphan');
+      expect(entry?.title).toBe('orphan');
+      expect(entry?.icon ?? undefined).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

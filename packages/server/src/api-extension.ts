@@ -8060,16 +8060,22 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           icon?: string;
         }[] = [];
         for (const [docName, entry] of index) {
-          let title = docName;
-          let icon: string | undefined;
           const docExt = getDocExtension(docName);
-          try {
-            const filePath = resolve(contentDir, `${docName}${docExt}`);
-            const content = readFileSync(filePath, 'utf-8');
-            title = extractPageTitle(content, docName);
-            icon = extractPageIcon(content);
-          } catch (err) {
-            console.warn(`[pages] Failed to read title for ${docName}:`, err);
+          let title: string;
+          let icon: string | undefined;
+          if (entry.title !== undefined) {
+            title = entry.title;
+            icon = entry.icon;
+          } else {
+            title = docName;
+            try {
+              const filePath = resolve(contentDir, `${docName}${docExt}`);
+              const content = readFileSync(filePath, 'utf-8');
+              title = extractPageTitle(content, docName);
+              icon = extractPageIcon(content);
+            } catch (err) {
+              console.warn(`[pages] Failed to read title for ${docName}:`, err);
+            }
           }
           pages.push({ docName, title, docExt, size: entry.size, modified: entry.modified, icon });
         }

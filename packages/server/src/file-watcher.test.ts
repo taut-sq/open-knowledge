@@ -391,6 +391,27 @@ describe('startWatcher file index', () => {
     }
   });
 
+  test('initial scan caches page title + icon on each markdown entry', async () => {
+    writeFileSync(
+      resolve(contentDir, 'with-meta.md'),
+      '---\ntitle: Meta Title\nicon: 📝\n---\n\n# Heading Ignored\n',
+    );
+    writeFileSync(resolve(contentDir, 'heading-only.md'), '# Heading Title\n');
+    writeFileSync(resolve(contentDir, 'plain.md'), 'just body text, no heading\n');
+
+    const handle = await startWatcher(contentDir, async () => {});
+    try {
+      const index = handle.getFileIndex();
+      expect(index.get('with-meta')?.title).toBe('Meta Title');
+      expect(index.get('with-meta')?.icon).toBe('📝');
+      expect(index.get('heading-only')?.title).toBe('Heading Title');
+      expect(index.get('heading-only')?.icon).toBeUndefined();
+      expect(index.get('plain')?.title).toBe('plain');
+    } finally {
+      await handle.unsubscribe();
+    }
+  });
+
   test('initial scan preserves uppercase .MD/.MDX extension casing', async () => {
     writeFileSync(resolve(contentDir, 'Upper.MD'), '# Upper\n');
     writeFileSync(resolve(contentDir, 'Mixed.MdX'), '# Mixed\n');
@@ -517,6 +538,61 @@ describe('startWatcher file index', () => {
     expect(index.has('old-name')).toBe(false);
     expect(index.has('new-name')).toBe(true);
     expect(index.get('new-name')?.size).toBe(Buffer.byteLength('# Renamed\n', 'utf-8'));
+  });
+
+  test('file index caches title + icon on create/update/rename/conflict events', () => {
+    const { updateFileIndex } = require('./file-watcher.ts');
+    const index = new Map();
+
+    updateFileIndex(
+      {
+        kind: 'create' as const,
+        path: resolve(contentDir, 'doc.md'),
+        docName: 'doc',
+        content: '---\ntitle: Created\nicon: 🚀\n---\n\nBody\n',
+      },
+      index,
+    );
+    expect(index.get('doc')?.title).toBe('Created');
+    expect(index.get('doc')?.icon).toBe('🚀');
+
+    updateFileIndex(
+      {
+        kind: 'update' as const,
+        path: resolve(contentDir, 'doc.md'),
+        docName: 'doc',
+        content: '# Edited Title\n',
+      },
+      index,
+    );
+    expect(index.get('doc')?.title).toBe('Edited Title');
+    expect(index.get('doc')?.icon).toBeUndefined();
+
+    updateFileIndex(
+      {
+        kind: 'rename' as const,
+        oldPath: resolve(contentDir, 'doc.md'),
+        newPath: resolve(contentDir, 'renamed.md'),
+        oldDocName: 'doc',
+        newDocName: 'renamed',
+        content: '---\ntitle: Renamed Title\nicon: 🔖\n---\n\nBody\n',
+      },
+      index,
+    );
+    expect(index.get('renamed')?.title).toBe('Renamed Title');
+    expect(index.get('renamed')?.icon).toBe('🔖');
+
+    updateFileIndex(
+      {
+        kind: 'conflict' as const,
+        path: resolve(contentDir, 'renamed.md'),
+        docName: 'renamed',
+        content: '---\ntitle: Conflicted\nicon: ⚠️\n---\n<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n',
+      },
+      index,
+    );
+    expect(index.get('renamed')?.title).toBe('Conflicted');
+    expect(index.get('renamed')?.icon).toBe('⚠️');
   });
 
   test('getFileIndex returns empty map when no .md files exist', async () => {
