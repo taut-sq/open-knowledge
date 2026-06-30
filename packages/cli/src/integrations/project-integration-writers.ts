@@ -4,7 +4,7 @@ import {
   type EditorMcpTarget,
   type McpInstallOptions,
 } from '../commands/editors.ts';
-import { writeEditorMcpConfig } from '../commands/init.ts';
+import { type McpDeclineReason, writeEditorMcpConfig } from '../commands/init.ts';
 import { writeProjectSkill } from './write-project-skill.ts';
 
 type IntegrationId = 'mcp-config' | 'project-skill';
@@ -12,9 +12,10 @@ type IntegrationId = 'mcp-config' | 'project-skill';
 export interface IntegrationWriteOutcome {
   readonly integration: IntegrationId;
   readonly editorId: EditorId;
-  readonly action: 'written' | 'overwritten' | 'skipped-unsupported' | 'failed';
+  readonly action: 'written' | 'overwritten' | 'skipped-unsupported' | 'declined' | 'failed';
   readonly path?: string;
   readonly error?: string;
+  readonly reason?: McpDeclineReason;
 }
 
 export interface ProjectIntegrationWriter {
@@ -54,6 +55,15 @@ export const mcpConfigWriter: ProjectIntegrationWriter = {
           action: 'failed',
           path: result.configPath,
           error: result.error ?? 'unknown failure',
+        };
+      }
+      if (result.action === 'declined') {
+        return {
+          integration: 'mcp-config',
+          editorId: target.id,
+          action: 'declined',
+          path: result.configPath,
+          ...(result.declineReason !== undefined ? { reason: result.declineReason } : {}),
         };
       }
       return {

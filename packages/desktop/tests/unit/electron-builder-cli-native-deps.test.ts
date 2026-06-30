@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -34,6 +34,31 @@ function readExtraResourceTargets(): string[] {
   } catch {
     return [];
   }
+}
+
+type ExtraResourceRule = { from?: string; to?: string; filter?: string[] | string };
+
+function readExtraResources(): ExtraResourceRule[] {
+  try {
+    const cfg = parse(readFileSync(builderYml, 'utf8')) as { extraResources?: ExtraResourceRule[] };
+    return cfg.extraResources ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function readAsarUnpack(): string[] {
+  try {
+    const cfg = parse(readFileSync(builderYml, 'utf8')) as { asarUnpack?: string[] };
+    return cfg.asarUnpack ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function asFilterList(filter: string[] | string | undefined): string[] {
+  if (Array.isArray(filter)) return filter;
+  return filter ? [filter] : [];
 }
 
 describe('bundled CLI can resolve tsdown neverBundle native addons', () => {
@@ -78,5 +103,94 @@ describe('bundled CLI can resolve tsdown neverBundle native addons', () => {
         true,
       );
     }
+  });
+});
+
+describe('@inkeep/open-knowledge-native-config ships its napi loader + platform binary', () => {
+  const NATIVE_CONFIG = '@inkeep/open-knowledge-native-config';
+  const nativeConfigDir = resolve(desktopRoot, '..', 'native-config');
+
+  test('an extraResources rule copies the addon into cli/node_modules shipping loader AND binary', () => {
+    const rule = readExtraResources().find((r) => r.to === `cli/node_modules/${NATIVE_CONFIG}`);
+    expect(
+      rule,
+      `electron-builder.yml has no extraResources rule copying ${NATIVE_CONFIG} into ` +
+        'cli/node_modules. The bundled CLI cannot resolve the toml_edit addon from ' +
+        'cli/dist/ → the Codex TOML write degrades to a non-destructive decline.',
+    ).toBeDefined();
+    const filter = asFilterList(rule?.filter);
+    expect(filter).toContain('index.js');
+    expect(
+      filter.includes('*.node'),
+      `The ${NATIVE_CONFIG} extraResources filter must include '*.node' — without the ` +
+        "platform binary the loader is shipped but require('./<binary>.node') throws.",
+    ).toBe(true);
+  });
+
+  test('asarUnpack unpacks the addon for the in-process desktop main consumer', () => {
+    expect(readAsarUnpack()).toContain(`**/${NATIVE_CONFIG}/**`);
+  });
+
+  test('the addon source dir exists at the extraResources `from` path', () => {
+    expect(existsSync(nativeConfigDir)).toBe(true);
+    expect(existsSync(resolve(nativeConfigDir, 'package.json'))).toBe(true);
+  });
+
+  test('the napi-built loader + a platform binary exist after a build', () => {
+    const loader = resolve(nativeConfigDir, 'index.js');
+    const nodeBinaries = existsSync(nativeConfigDir)
+      ? readdirSync(nativeConfigDir).filter((f) => f.endsWith('.node'))
+      : [];
+    if (!existsSync(loader) || nodeBinaries.length === 0) {
+      console.warn(
+        `[electron-builder-cli-native-deps] SKIP: ${NATIVE_CONFIG} not built ` +
+          `(no index.js / *.node in ${nativeConfigDir}). Run \`bun run build\` first; ` +
+          'the gate builds it upstream of this tier.',
+      );
+      return;
+    }
+    expect(nodeBinaries.length).toBeGreaterThan(0);
+    if (process.platform === 'darwin' && process.arch === 'arm64') {
+      expect(nodeBinaries).toContain('native-config.darwin-arm64.node');
+    }
+  });
+});
+
+describe('@inkeep/open-knowledge-native-config ships bundled in cli/dist/native', () => {
+  const cliDist = resolve(desktopRoot, '..', 'cli', 'dist');
+
+  test('the cli/dist extraResources rule does not filter out the native bundle', () => {
+    const rule = readExtraResources().find((r) => r.to === 'cli/dist');
+    expect(
+      rule,
+      'electron-builder.yml must copy ../cli/dist into the packaged app so the ' +
+        'bundled native-config (cli/dist/native) reaches the spawned CLI subprocess.',
+    ).toBeDefined();
+    const filter = asFilterList(rule?.filter);
+    expect(filter).toContain('**/*');
+    for (const excluded of ['!**/*.node', '!**/*.js', '!**/package.json', '!**/native/**']) {
+      expect(
+        filter.includes(excluded),
+        `the cli/dist filter must not exclude '${excluded}' — it would strip the bundled addon.`,
+      ).toBe(false);
+    }
+  });
+
+  test('the bundled loader + platform binary exist in cli/dist/native after a build', () => {
+    const nativeBundle = resolve(cliDist, 'native');
+    const loader = resolve(nativeBundle, 'index.js');
+    const pkgJson = resolve(nativeBundle, 'package.json');
+    const nodeBinaries = existsSync(nativeBundle)
+      ? readdirSync(nativeBundle).filter((f) => f.endsWith('.node'))
+      : [];
+    if (!existsSync(loader) || nodeBinaries.length === 0) {
+      console.warn(
+        '[electron-builder-cli-native-deps] SKIP: cli/dist/native not built ' +
+          `(no index.js / *.node in ${nativeBundle}). Run \`bun run build\` first.`,
+      );
+      return;
+    }
+    expect(existsSync(pkgJson)).toBe(true);
+    expect(nodeBinaries.length).toBeGreaterThan(0);
   });
 });

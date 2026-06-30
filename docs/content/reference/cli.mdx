@@ -20,12 +20,16 @@ npm install -g @inkeep/open-knowledge
 
 ## Set up a project
 
-Run `ok init` in any folder to turn it into an OpenKnowledge project. It scaffolds a `.ok/` directory and registers the OpenKnowledge MCP server with the AI editors it detects on your machine (Claude Code, Cursor, Codex, OpenCode).
+Run `ok init` in any folder to turn it into an OpenKnowledge project. It scaffolds a `.ok/` directory and registers the OpenKnowledge MCP server with the AI editors it detects on your machine (Claude Code, Cursor, Codex, OpenCode). It only ever adds its own entry — your other settings, comments, and formatting are left untouched.
 
 ```bash
 cd my-project
 ok init
 ```
+
+<Callout type="info" title="If an editor shows “left unchanged”">
+  When an editor's config can't be parsed safely — it's not valid JSON/TOML, has two MCP server blocks, or is unusually large — OpenKnowledge leaves the file **byte-for-byte untouched** and prints `left unchanged (<reason>)` instead of registering. It never rewrites or resets a config it can't fully understand. Fix the underlying config (the editor itself usually reports the parse error) and re-run `ok init`.
+</Callout>
 
 Once you have initialized your project, launch the app in your browser:
 

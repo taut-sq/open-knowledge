@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   buildManagedServerEntry,
   type EditorMcpTarget,
+  type McpDeclineReason,
   type McpEntryClassification,
 } from '@inkeep/open-knowledge';
 import type { McpWiringEditorId } from '../shared/ipc-channels.ts';
@@ -34,7 +35,11 @@ function buildCli(
       target: EditorMcpTarget;
       classification?: McpEntryClassification;
       readThrows?: Error;
-      writeOutcome?: { action: 'overwritten' | 'failed'; error?: string };
+      writeOutcome?: {
+        action: 'overwritten' | 'declined' | 'failed';
+        reason?: McpDeclineReason;
+        error?: string;
+      };
     }
   >,
 ): { cli: ProjectMcpReclaimCliSurface; writes: string[] } {
@@ -170,7 +175,7 @@ describe('checkAndRepairProjectMcpOnProjectOpen', () => {
     expect(writes).toEqual([]);
   });
 
-  test('incompatible entry → reclaimed (write occurs, no rename)', async () => {
+  test('incompatible entry → reclaimed (write occurs in place, no rename)', async () => {
     const { cli, writes } = buildCli({
       claude: {
         target: fakeTarget('claude' as McpWiringEditorId, '/p/.mcp.json'),
@@ -180,19 +185,55 @@ describe('checkAndRepairProjectMcpOnProjectOpen', () => {
         },
       },
     });
-    const renames: Array<{ oldPath: string; newPath: string }> = [];
     const r = await checkAndRepairProjectMcpOnProjectOpen({
       projectDir: '/p',
       executablePath: EXE,
       isPackaged: true,
       platform: 'darwin',
       cli,
-      backupFs: { renameSync: (o, n) => renames.push({ oldPath: o, newPath: n }) },
     });
     expect(r.status).toBe('done');
     if (r.status === 'done') expect(r.perEditor[0]?.status).toBe('reclaimed');
     expect(writes).toEqual(['claude']);
-    expect(renames).toEqual([]);
+  });
+
+  test('write declines (read-then-write race) → declined, not a false reclaimed', async () => {
+    const { cli, writes } = buildCli({
+      claude: {
+        target: fakeTarget('claude' as McpWiringEditorId, '/p/.mcp.json'),
+        classification: {
+          kind: 'present',
+          entry: { command: 'npx', args: ['-y', '@inkeep/open-knowledge', 'mcp'] },
+        },
+        writeOutcome: { action: 'declined', reason: 'unparseable' },
+      },
+    });
+    const events: Array<Record<string, unknown>> = [];
+    const r = await checkAndRepairProjectMcpOnProjectOpen({
+      projectDir: '/p',
+      executablePath: EXE,
+      isPackaged: true,
+      platform: 'darwin',
+      cli,
+      logger: { event: (e) => events.push(e) },
+    });
+    expect(r.status).toBe('done');
+    if (r.status === 'done') {
+      const e = r.perEditor.find((p) => p.editor === 'claude');
+      expect(e?.status).toBe('declined');
+      if (e?.status === 'declined') expect(e.reason).toBe('unparseable');
+    }
+    expect(writes).toEqual(['claude']);
+    expect(events.some((e) => e.event === 'project-mcp-reclaim-reclaimed')).toBe(false);
+    const decline = events.find((e) => e.event === 'mcp-config-decline');
+    expect(decline).toMatchObject({
+      event: 'mcp-config-decline',
+      scope: 'project',
+      surface: 'desktop-project-open',
+      editorId: 'claude',
+      reason: 'unparseable',
+    });
+    expect(decline).not.toHaveProperty('configPath');
   });
 
   test('incompatible entry emits mcp-config-migrate before the write', async () => {
@@ -238,14 +279,13 @@ describe('checkAndRepairProjectMcpOnProjectOpen', () => {
     });
   });
 
-  test('corrupt file → renamed to .broken-<iso> sidecar then fresh write', async () => {
+  test('declined (unparseable) file → left untouched, no write, no rename, decline signal', async () => {
     const { cli, writes } = buildCli({
       claude: {
         target: fakeTarget('claude' as McpWiringEditorId, '/p/.mcp.json'),
-        classification: { kind: 'corrupt', error: 'file is empty' },
+        classification: { kind: 'decline', reason: 'unparseable' },
       },
     });
-    const renames: Array<{ oldPath: string; newPath: string }> = [];
     const events: Array<Record<string, unknown>> = [];
     const r = await checkAndRepairProjectMcpOnProjectOpen({
       projectDir: '/p',
@@ -253,55 +293,58 @@ describe('checkAndRepairProjectMcpOnProjectOpen', () => {
       isPackaged: true,
       platform: 'darwin',
       cli,
-      backupFs: { renameSync: (o, n) => renames.push({ oldPath: o, newPath: n }) },
-      now: () => new Date('2026-05-19T20:00:00.000Z'),
       logger: { event: (e) => events.push(e) },
     });
     expect(r.status).toBe('done');
     if (r.status === 'done') {
       const e = r.perEditor[0];
-      expect(e?.status).toBe('reclaimed-from-corrupt');
-      if (e?.status === 'reclaimed-from-corrupt') {
-        expect(e.backupPath).toBe('/p/.mcp.json.broken-2026-05-19T20-00-00-000Z');
+      expect(e?.status).toBe('declined');
+      if (e?.status === 'declined') {
+        expect(e.reason).toBe('unparseable');
+        expect(e.configPath).toBe('/p/.mcp.json');
       }
     }
-    expect(renames).toEqual([
-      { oldPath: '/p/.mcp.json', newPath: '/p/.mcp.json.broken-2026-05-19T20-00-00-000Z' },
-    ]);
-    expect(writes).toEqual(['claude']);
-    expect(events.some((e) => e.event === 'project-mcp-reclaim-corrupt-backup')).toBe(true);
-    expect(events.some((e) => e.event === 'project-mcp-reclaim-reclaimed-from-corrupt')).toBe(true);
+    expect(writes).toEqual([]);
+    expect(events.some((e) => e.event === 'project-mcp-reclaim-corrupt-backup')).toBe(false);
+    expect(events.some((e) => e.event === 'project-mcp-reclaim-reclaimed-from-corrupt')).toBe(
+      false,
+    );
+    const decline = events.find((e) => e.event === 'mcp-config-decline');
+    expect(decline).toMatchObject({
+      event: 'mcp-config-decline',
+      scope: 'project',
+      surface: 'desktop-project-open',
+      editorId: 'claude',
+      reason: 'unparseable',
+    });
+    expect(decline).not.toHaveProperty('configPath');
   });
 
-  test('corrupt file with backup rename failure → failed, no write attempted', async () => {
+  test('a declined editor does not block a sibling reclaim in the same sweep', async () => {
     const { cli, writes } = buildCli({
       claude: {
         target: fakeTarget('claude' as McpWiringEditorId, '/p/.mcp.json'),
-        classification: { kind: 'corrupt', error: 'invalid JSON' },
+        classification: { kind: 'decline', reason: 'unparseable' },
+      },
+      cursor: {
+        target: fakeTarget('cursor' as McpWiringEditorId, '/p/.cursor/mcp.json'),
+        classification: { kind: 'present', entry: { command: 'old' } },
+        writeOutcome: { action: 'overwritten' },
       },
     });
-    const events: Array<Record<string, unknown>> = [];
     const r = await checkAndRepairProjectMcpOnProjectOpen({
       projectDir: '/p',
       executablePath: EXE,
       isPackaged: true,
       platform: 'darwin',
       cli,
-      backupFs: {
-        renameSync: () => {
-          throw new Error('EROFS: read-only filesystem');
-        },
-      },
-      logger: { event: (e) => events.push(e) },
     });
     expect(r.status).toBe('done');
     if (r.status === 'done') {
-      const e = r.perEditor[0];
-      expect(e?.status).toBe('failed');
-      if (e?.status === 'failed') expect(e.error).toContain('EROFS');
+      expect(r.perEditor.find((e) => e.editor === 'claude')?.status).toBe('declined');
+      expect(r.perEditor.find((e) => e.editor === 'cursor')?.status).toBe('reclaimed');
     }
-    expect(writes).toEqual([]);
-    expect(events.some((e) => e.event === 'project-mcp-reclaim-backup-failed')).toBe(true);
+    expect(writes).toEqual(['cursor']);
   });
 
   test('write failure surfaces as failed entry', async () => {

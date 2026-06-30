@@ -24,6 +24,7 @@ export {
   LAUNCH_UI_CHAIN_SENTINEL,
   LAUNCH_UI_CHAIN_V1,
   type LaunchJsonResult,
+  type McpDeclineReason,
   type McpEntryClassification,
   readExistingMcpEntry,
   scaffoldLaunchJson,
@@ -31,6 +32,11 @@ export {
   writeEditorMcpConfig,
   writeUserMcpConfigs,
 } from './commands/init.ts';
+export {
+  buildMcpConfigDeclineEvent,
+  type McpConfigDeclineEvent,
+  type McpConfigDeclineScope,
+} from './commands/mcp-decline-event.ts';
 export {
   buildMcpConfigMigrateEvent,
   type McpConfigMigrateEvent,

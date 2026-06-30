@@ -155,6 +155,91 @@ jobs:
       - name: Install
         run: bash scripts/bun-install-ci.sh
 
+      # The cross-platform native-config `.node` binaries are produced by the
+      # standalone native-config-prebuild workflow (kept separate so the beta
+      # cadence stays pure-JS-fast). Stage the latest successful run's bundle
+      # into packages/native-config/ so the cli `build:native` step copies all
+      # eight platforms into dist/native/ before publish. The bundle must come
+      # from a prebuild run whose head commit is an ancestor of the release
+      # commit (provenance), so the native code we ship was built from source
+      # actually in this release rather than a later main commit racing the cut.
+      # Beta is resilient by design: a missing, failed, stale, or incomplete
+      # bundle warns and ships host-only, with non-host platforms on the
+      # non-destructive smol-toml fallback, so a beta is never worse than
+      # host-only and the cadence never blocks. Stable @latest is held higher:
+      # an incomplete set hard-fails the cut rather than silently shipping
+      # degraded native fidelity to the default install channel. Binaries are
+      # ABI-stable (napi6); the latest qualifying run's set is reused until
+      # native-config changes and a fresh prebuild run completes.
+      - name: Stage native-config prebuilt binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Stable @latest cuts arrive as repository_dispatch (publish-stable);
+          # beta + manual recovery arrive as push/workflow_dispatch. Only stable
+          # hard-fails on an incomplete native-config set.
+          IS_STABLE: ${{ github.event_name == 'repository_dispatch' }}
+        run: |
+          # Record the staged-binary outcome in the job summary, then either
+          # warn-and-proceed (beta) or hard-fail (stable). A stable @latest
+          # publish shipping host-only native binaries is a fidelity regression,
+          # so it pages rather than ships silently degraded.
+          summarize() {
+            echo "Staged native-config binaries: $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          degrade_or_fail() {
+            # $1: human-readable reason, $2: staged-count label for the summary
+            summarize "$2 — $1"
+            if [ "$IS_STABLE" = "true" ]; then
+              echo "::error::$1; refusing to cut a stable @latest release with an incomplete native-config binary set"
+              exit 1
+            fi
+            echo "::warning::$1; CLI ships the host binary only (other platforms use the smol-toml fallback)"
+            exit 0
+          }
+
+          # Scope to runs on `main` triggered by `push` only. The prebuild also
+          # runs on `pull_request` (including from the public mirror's external
+          # PRs), so without this filter the latest-green run could be an
+          # unmerged branch whose Rust source is not what shipped to main — a
+          # supply-chain gap for native code executed on every CLI invocation.
+          run_id=$(gh run list --workflow=native-config-prebuild.yml --branch main --event push \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+          if [ -z "$run_id" ]; then
+            degrade_or_fail "no successful native-config-prebuild run on main found" "0/8"
+          fi
+
+          # Provenance: the prebuild run's head commit must be an ancestor of the
+          # release commit, so the binaries staged were built from source that is
+          # actually in this release. fetch-depth:0 in checkout has full history.
+          head_sha=$(gh run view "$run_id" --json headSha -q .headSha 2>/dev/null || true)
+          if [ -z "$head_sha" ]; then
+            degrade_or_fail "could not resolve head commit of native-config-prebuild run $run_id" "0/8"
+          fi
+          if ! git merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null; then
+            degrade_or_fail "native-config-prebuild run $run_id (commit $head_sha) is not an ancestor of the release commit" "0/8"
+          fi
+
+          if ! gh run download "$run_id" --name native-config-bindings-all --dir /tmp/nc-bindings; then
+            degrade_or_fail "could not download native-config-bindings-all from run $run_id" "0/8"
+          fi
+          find /tmp/nc-bindings -name '*.node' -exec cp -f {} packages/native-config/ \;
+          count=$(find packages/native-config -maxdepth 1 -name '*.node' | wc -l | tr -d ' ')
+          echo "staged $count native-config prebuilt binaries from run $run_id (commit $head_sha)"
+          if [ "$count" -lt 8 ]; then
+            degrade_or_fail "staged only $count/8 native-config binaries" "$count/8"
+          fi
+          summarize "$count/8 from run $run_id (commit $head_sha)"
+
+      # `bun run build` builds the native-config addon's host `.node` via
+      # `napi build` (turbo dep of the cli build), which needs a Rust toolchain.
+      # Pin it explicitly rather than relying on whatever `ubuntu-latest`
+      # preinstalls, so an image change can't silently break the whole publish at
+      # the unguarded cargo invocation. Mirrors native-config-prebuild.yml.
+      - name: Setup Rust toolchain for the native-config build
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
       # `bun changeset publish` invokes `npm publish` per package, which
       # in turn fires the cli's `prepublishOnly` (-> `bun run build`). The
       # cli's own build chain includes `cp -r ../app/dist dist/public`

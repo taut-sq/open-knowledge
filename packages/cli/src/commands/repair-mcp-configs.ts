@@ -13,7 +13,7 @@ export interface RepairOutcome {
   scope: 'user' | 'project';
   editorId: EditorId;
   configPath: string;
-  outcome: 'no-entry' | 'canonical' | 'repaired' | 'write-failed';
+  outcome: 'no-entry' | 'canonical' | 'repaired' | 'write-failed' | 'declined';
   error?: string;
 }
 
@@ -160,6 +160,17 @@ function repairOne(opts: RepairOneOptions): RepairOutcome {
       error,
     });
     return { ...base, outcome: 'write-failed', error };
+  }
+
+  if (result.action === 'declined') {
+    opts.logger({
+      event: 'mcp-config-repair-declined',
+      scope: opts.scope,
+      editorId: opts.editorId,
+      configPath: opts.configPath,
+      reason: result.declineReason,
+    });
+    return { ...base, outcome: 'declined' };
   }
 
   return { ...base, outcome: 'repaired' };

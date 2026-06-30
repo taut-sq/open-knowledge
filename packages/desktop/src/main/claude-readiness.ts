@@ -1,3 +1,4 @@
+import type { McpEntryClassification } from '@inkeep/open-knowledge';
 import type { ClaudeReadiness, CliReadiness } from '../shared/bridge-contract.ts';
 import { getLogger } from './desktop-logger.ts';
 
@@ -14,7 +15,9 @@ export const CLAUDE_PROBE_ARGS: readonly string[] = cliProbeArgs('claude');
 
 const PROBE_TIMEOUT_MS = 5000;
 
-export type McpEntryKind = 'present' | 'absent' | 'no-entry' | 'corrupt';
+/** The classifications `classifyExistingMcpEntry` can return — derived from the
+ *  CLI's authoritative union so a new kind can't silently drift this copy. */
+export type McpEntryKind = McpEntryClassification['kind'];
 
 /** Minimal child-process surface the probe drives — injected so the spawn is a
  *  test seam. Custom method names avoid the EventEmitter overload friction of
@@ -68,7 +71,7 @@ export function interpretClaudeProbe(code: number | null): ClaudeOnPath {
 }
 
 /** Only an actually-present `open-knowledge` entry counts as wired; absent /
- *  no-entry / corrupt all mean the terminal's `claude` would see no OK tools. */
+ *  no-entry / decline all mean the terminal's `claude` would see no OK tools. */
 export function mcpStatusFromClassification(kind: McpEntryKind): McpWiringStatus {
   return kind === 'present' ? 'wired' : 'needs-rewire';
 }

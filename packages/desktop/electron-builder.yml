@@ -33,6 +33,14 @@ extraResources:
   # Resources/cli/dist/public/ (distinct consumer from the React bundle
   # copy above that the BrowserWindow loads from Contents/Resources/app/).
   # Two copies, deliberately — see SPEC §5 AC1.11 and OQ-22.
+  # Ships the whole bundled CLI, INCLUDING `cli/dist/native/` — the prebuilt
+  # native-config loader + `.node` the CLI build copies there (Option 3: bundle
+  # the addon into the CLI; reports/native-addon-npm-distribution/REPORT.md). The
+  # spawned `ok` subprocess resolves the addon dist-relative from there, so this
+  # one rule covers the bundled-CLI consumer; the per-package `cli/node_modules`
+  # copy + asarUnpack below stay for the desktop MAIN process's in-process load.
+  # The filter must not exclude `.node`/`.js`/`package.json` — guarded by
+  # tests/unit/electron-builder-cli-native-deps.test.ts.
   - from: "../cli/dist"
     to: "cli/dist"
     filter:
@@ -90,6 +98,26 @@ extraResources:
   - from: "../../node_modules/@napi-rs/keyring-darwin-arm64"
     to: "cli/node_modules/@napi-rs/keyring-darwin-arm64"
     filter: ["**/*"]
+  # The bundled CLI AND the desktop main process both load
+  # `@inkeep/open-knowledge-native-config` at runtime — the Codex TOML
+  # harness-config write routes through its toml_edit addon. Like
+  # `@napi-rs/keyring` above, the bundled CLI's ESM resolver walks
+  # `cli/dist → cli → Resources → …` and never reaches
+  # `app.asar.unpacked/node_modules/`, so the addon must sit on the CLI's own
+  # path. Unlike keyring (a published package with a separate per-arch binary
+  # package), this is a workspace package whose napi-built loader + `.node`
+  # live in the package dir, so source it directly and filter to the runtime
+  # files — never the Rust `target/` tree. arm64-only matches the arm64-only
+  # DMG. When the binary is absent the load fails and the TOML write degrades
+  # to a non-destructive decline, never a lossy write.
+  # Coverage: tests/unit/electron-builder-cli-native-deps.test.ts.
+  - from: "../native-config"
+    to: "cli/node_modules/@inkeep/open-knowledge-native-config"
+    filter:
+      - "index.js"
+      - "index.d.ts"
+      - "package.json"
+      - "*.node"
 
 asarUnpack:
   - "**/*.node"
@@ -111,6 +139,12 @@ asarUnpack:
   - "**/detect-libc/**"
   - "**/@napi-rs/keyring/**"
   - "**/@napi-rs/keyring-*/**"
+  # The desktop main process loads the addon in-process (the MCP repair sweep's
+  # Codex TOML write). Keep its napi loader and the `.node` it requires
+  # relatively co-located on the real filesystem — a loader left inside
+  # app.asar resolving `require('./native-config.<platform>.node')` against an
+  # unpacked sibling is the fragile path; unpack the whole package dir instead.
+  - "**/@inkeep/open-knowledge-native-config/**"
   - "**/simple-git/**"
   # node-pty ships its native pty.node addon AND an extensionless `spawn-helper`
   # binary under prebuilds/<platform>-<arch>/. The `**/*.node` rule above unpacks

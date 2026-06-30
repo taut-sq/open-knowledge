@@ -1,0 +1,14 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": ["Cargo.toml", "Cargo.lock", "build.rs", "src/**/*.rs", "package.json"],
+      "outputs": ["index.js", "index.d.ts", "*.node"]
+    },
+    "test": {
+      "dependsOn": [],
+      "inputs": ["Cargo.toml", "Cargo.lock", "build.rs", "src/**/*.rs"],
+      "outputs": []
+    }
+  }
+}

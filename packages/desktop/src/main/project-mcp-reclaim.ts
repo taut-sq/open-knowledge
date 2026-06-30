@@ -1,9 +1,10 @@
-import { renameSync as fsRenameSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  buildMcpConfigDeclineEvent,
   buildMcpConfigMigrateEvent,
   type EditorMcpTarget,
   isEntryUpToDate,
+  type McpDeclineReason,
   type McpEntryClassification,
   truncatePriorEntry,
 } from '@inkeep/open-knowledge';
@@ -24,9 +25,9 @@ type ProjectMcpReclaimPerEditor =
   | { editor: McpWiringEditorId; status: 'reclaimed'; configPath: string }
   | {
       editor: McpWiringEditorId;
-      status: 'reclaimed-from-corrupt';
+      status: 'declined';
       configPath: string;
-      backupPath: string;
+      reason: McpDeclineReason;
     }
   | { editor: McpWiringEditorId; status: 'failed'; configPath: string; error: string }
   | { editor: McpWiringEditorId; status: 'unsupported'; reason: string };
@@ -43,28 +44,16 @@ export interface ProjectMcpReclaimCliSurface {
     projectDir: string,
     projectPath: string,
   ): McpEntryClassification;
+  /** Project-scope variant: rewrites the entry at `projectPath` with the canonical
+   *  shape. `declined` is the guest-ownership outcome when a read-then-write race
+   *  surfaces a present config the write path won't edit (the classify pre-pass
+   *  saw it as reclaimable, but the lock-time read no longer parses / is oversized
+   *  / has a duplicate container). */
   writeProjectMcpConfig(opts: {
     editorId: McpWiringEditorId;
     projectDir: string;
     projectPath: string;
-  }): { action: 'overwritten' | 'failed'; error?: string };
-}
-
-interface CorruptBackupFs {
-  renameSync(oldPath: string, newPath: string): void;
-}
-
-const defaultBackupFs: CorruptBackupFs = {
-  renameSync: (oldPath, newPath) => {
-    fsRenameSync(oldPath, newPath);
-  },
-};
-
-function moveCorruptAside(configPath: string, now: Date, fs: CorruptBackupFs): string {
-  const stamp = now.toISOString().replace(/[:.]/g, '-');
-  const backupPath = `${configPath}.broken-${stamp}`;
-  fs.renameSync(configPath, backupPath);
-  return backupPath;
+  }): { action: 'overwritten' | 'declined' | 'failed'; reason?: McpDeclineReason; error?: string };
 }
 
 interface CheckAndRepairProjectMcpOpts {
@@ -76,8 +65,6 @@ interface CheckAndRepairProjectMcpOpts {
   forceEnv?: string | null | undefined;
   reclaimDisableEnv?: string | null | undefined;
   logger?: ProjectMcpReclaimLogger;
-  backupFs?: CorruptBackupFs;
-  now?: () => Date;
 }
 
 export async function checkAndRepairProjectMcpOnProjectOpen(
@@ -92,10 +79,7 @@ export async function checkAndRepairProjectMcpOnProjectOpen(
     forceEnv,
     reclaimDisableEnv,
     logger = DEFAULT_LOGGER,
-    backupFs = defaultBackupFs,
-    now,
   } = opts;
-  const nowDate = (): Date => (now ? now() : new Date());
   if (reclaimDisableEnv === '1') return { status: 'skipped', reason: 'reclaim-disabled' };
   if (platform !== 'darwin') return { status: 'skipped', reason: 'platform' };
   if (!isPackaged && forceEnv !== '1') return { status: 'skipped', reason: 'dev-mode' };
@@ -165,41 +149,38 @@ export async function checkAndRepairProjectMcpOnProjectOpen(
       continue;
     }
 
-    let backupPath: string | null = null;
-    if (classification.kind === 'corrupt') {
-      try {
-        backupPath = moveCorruptAside(projectPath, nowDate(), backupFs);
-        logger.event({
-          event: 'project-mcp-reclaim-corrupt-backup',
-          editor,
-          configPath: projectPath,
-          backupPath,
-          error: classification.error,
-        });
-      } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        perEditor.push({ editor, status: 'failed', configPath: projectPath, error });
-        logger.event({
-          event: 'project-mcp-reclaim-backup-failed',
-          editor,
-          configPath: projectPath,
-          error,
-        });
-        continue;
-      }
-    }
-
-    if (classification.kind === 'present') {
+    if (classification.kind === 'decline') {
+      perEditor.push({
+        editor,
+        status: 'declined',
+        configPath: projectPath,
+        reason: classification.reason,
+      });
       logger.event(
-        buildMcpConfigMigrateEvent({
+        buildMcpConfigDeclineEvent({
           scope: 'project',
           surface: 'desktop-project-open',
           editorId: editor,
-          configPath: projectPath,
-          priorEntry: classification.entry,
+          reason: classification.reason,
         }),
       );
+      continue;
     }
+
+    if (classification.kind !== 'present') {
+      const _exhaustive: never = classification;
+      return _exhaustive;
+    }
+
+    logger.event(
+      buildMcpConfigMigrateEvent({
+        scope: 'project',
+        surface: 'desktop-project-open',
+        editorId: editor,
+        configPath: projectPath,
+        priorEntry: classification.entry,
+      }),
+    );
 
     const writeResult = cli.writeProjectMcpConfig({
       editorId: editor,
@@ -222,22 +203,20 @@ export async function checkAndRepairProjectMcpOnProjectOpen(
       continue;
     }
 
-    if (backupPath !== null) {
-      perEditor.push({
-        editor,
-        status: 'reclaimed-from-corrupt',
-        configPath: projectPath,
-        backupPath,
-      });
-      logger.event({
-        event: 'project-mcp-reclaim-reclaimed-from-corrupt',
-        editor,
-        configPath: projectPath,
-        backupPath,
-      });
+    if (writeResult.action === 'declined') {
+      const reason: McpDeclineReason = writeResult.reason ?? 'unparseable';
+      perEditor.push({ editor, status: 'declined', configPath: projectPath, reason });
+      logger.event(
+        buildMcpConfigDeclineEvent({
+          scope: 'project',
+          surface: 'desktop-project-open',
+          editorId: editor,
+          reason,
+        }),
+      );
       continue;
     }
-    if (classification.kind !== 'present') continue;
+
     const { priorCommand, priorArgs } = truncatePriorEntry(classification.entry);
     perEditor.push({ editor, status: 'reclaimed', configPath: projectPath });
     logger.event({

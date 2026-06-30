@@ -78,6 +78,7 @@ export default {
     'packages/cli/src/commands/diagnose-health-checks/index.ts': ['exports', 'types'],
     'packages/cli/src/commands/diagnose-health-checks/types.ts': ['types'],
     'packages/desktop/src/main/git-preflight-handler.ts': ['types'],
+    'packages/native-config/index.js': ['unlisted', 'unresolved'],
   },
   workspaces: {
     'packages/app': {
@@ -133,6 +134,7 @@ export default {
         'tests/**/*.test.mjs',
       ],
       ignoreUnresolved: [/utility\/pty-host\.js$/],
+      ignoreDependencies: ['@inkeep/open-knowledge-native-config'],
       project: 'src/**',
     },
   },

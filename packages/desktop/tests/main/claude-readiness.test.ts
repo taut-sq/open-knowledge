@@ -66,10 +66,10 @@ describe('mcpStatusFromClassification', () => {
   test('present → wired', () => {
     expect(mcpStatusFromClassification('present')).toBe('wired');
   });
-  test('absent / no-entry / corrupt → needs-rewire', () => {
+  test('absent / no-entry / decline → needs-rewire', () => {
     expect(mcpStatusFromClassification('absent')).toBe('needs-rewire');
     expect(mcpStatusFromClassification('no-entry')).toBe('needs-rewire');
-    expect(mcpStatusFromClassification('corrupt')).toBe('needs-rewire');
+    expect(mcpStatusFromClassification('decline')).toBe('needs-rewire');
   });
 });
 

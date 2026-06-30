@@ -388,7 +388,7 @@ Library.
 
 ## Apache License, Version 2.0
 
-Each package in this section is licensed under the Apache License, Version 2.0. The full text of the license is reproduced once below and applies to every entry; per-package `NOTICE` file content is reproduced inline with each entry.
+The packages and vendored source in this section are licensed under the Apache License, Version 2.0. The full text of the license is reproduced once below and applies to every entry; per-package `NOTICE` file content is reproduced inline with each entry.
 
 ```
 Apache License
@@ -902,6 +902,66 @@ Homepage: https://github.com/mikeal/tunnel-agent
 
 _(LICENSE template present but no copyright line filled in; refer to the package source for canonical attribution.)_
 
+### OpenAI Codex (vendored into `packages/native-config`)
+Homepage: https://github.com/openai/codex
+
+Copyright 2025 OpenAI
+
+The native harness-config addon contains Rust code derived from OpenAI Codex's `toml_edit`-based config-edit implementation, adapted to an insert-only single-entry upsert. The Apache License, Version 2.0 reproduced above applies. Derived files and their upstream origins:
+
+- `src/document_helpers.rs` — from `codex-rs/core/src/config/edit/document_helpers.rs`
+- `src/mcp_edit.rs` — adapted from `codex-rs/core/src/config/edit.rs` (insert-only, not `replace_mcp_servers`)
+- `src/path_resolve.rs` — from `codex-rs/utils/path-utils/src/lib.rs`
+- `src/mcp_edit_conformance_tests.rs` — ported from `codex-rs/core/src/config/edit_tests.rs`
+
+NOTICE:
+
+```
+OpenAI Codex
+Copyright 2025 OpenAI
+```
+
+---
+
+## Bundled Rust crates (native-config addon)
+
+The native harness-config addon's `.node` binaries statically link the Rust crates below. Each is redistributed under the license shown; every license here is MIT, Apache-2.0, or ISC, whose full texts are reproduced elsewhere in this document (for dual- or multi-licensed crates OpenKnowledge elects a reproduced license). Compile-time-only crates (proc-macros, build scripts) and test-only dev-dependencies are not listed — their code is not present in the distributed binary. Versions track `packages/native-config/Cargo.lock`.
+
+- `bitflags@2.13.0` — MIT OR Apache-2.0 — https://github.com/bitflags/bitflags
+- `cfg-if@1.0.4` — MIT OR Apache-2.0 — https://github.com/rust-lang/cfg-if
+- `ctor@1.0.7` — Apache-2.0 OR MIT — https://github.com/mmastrac/linktime
+- `equivalent@1.0.2` — Apache-2.0 OR MIT — https://github.com/indexmap-rs/equivalent
+- `futures@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-channel@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-core@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-executor@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-io@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-sink@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-task@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `futures-util@0.3.32` — MIT OR Apache-2.0 — https://github.com/rust-lang/futures-rs
+- `hashbrown@0.17.1` — MIT OR Apache-2.0 — https://github.com/rust-lang/hashbrown
+- `indexmap@2.14.0` — Apache-2.0 OR MIT — https://github.com/indexmap-rs/indexmap
+- `itoa@1.0.18` — MIT OR Apache-2.0 — https://github.com/dtolnay/itoa
+- `libloading@0.9.0` — ISC — https://github.com/nagisa/rust_libloading
+- `memchr@2.8.2` — Unlicense OR MIT — https://github.com/BurntSushi/memchr
+- `napi@3.9.4` — MIT — https://github.com/napi-rs/napi-rs
+- `napi-sys@3.2.2` — MIT — https://github.com/napi-rs/napi-rs
+- `nohash-hasher@0.2.0` — Apache-2.0 OR MIT — https://github.com/paritytech/nohash-hasher
+- `pin-project-lite@0.2.17` — Apache-2.0 OR MIT — https://github.com/taiki-e/pin-project-lite
+- `rustc-hash@2.1.2` — Apache-2.0 OR MIT — https://github.com/rust-lang/rustc-hash
+- `serde@1.0.228` — MIT OR Apache-2.0 — https://github.com/serde-rs/serde
+- `serde_core@1.0.228` — MIT OR Apache-2.0 — https://github.com/serde-rs/serde
+- `serde_json@1.0.150` — MIT OR Apache-2.0 — https://github.com/serde-rs/json
+- `slab@0.4.12` — MIT — https://github.com/tokio-rs/slab
+- `toml_datetime@0.7.5+spec-1.1.0` — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
+- `toml_edit@0.24.1+spec-1.1.0` — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
+- `toml_parser@1.1.2+spec-1.1.0` — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
+- `toml_writer@1.1.1+spec-1.1.0` — MIT OR Apache-2.0 — https://github.com/toml-rs/toml
+- `windows-link@0.2.1` — MIT OR Apache-2.0 — https://github.com/microsoft/windows-rs
+- `winnow@0.7.15` — MIT — https://github.com/winnow-rs/winnow
+- `winnow@1.0.3` — MIT — https://github.com/winnow-rs/winnow
+- `zmij@1.0.21` — MIT — https://github.com/dtolnay/zmij
+
 ---
 
 ## MIT License
@@ -1260,12 +1320,7 @@ Homepage: https://iconify.design/docs/libraries/utils/
 
 Copyright (c) 2021-PRESENT Vjacheslav Trushkin
 
-### `@inquirer/ansi@2.0.5`
-Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/ansi/README.md
-
-Copyright (c) 2025 Simon Boudrias
-
-### `@inquirer/ansi@2.0.6`
+### `@inquirer/ansi@2.0.7`
 Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/ansi/README.md
 
 Copyright (c) 2025 Simon Boudrias
@@ -1275,7 +1330,7 @@ Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/ansi/READM
 
 Copyright (c) 2025 Simon Boudrias
 
-### `@inquirer/checkbox@5.1.4`
+### `@inquirer/checkbox@5.2.1`
 Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/checkbox/README.md
 
 Copyright (c) 2025 Simon Boudrias
@@ -1285,17 +1340,7 @@ Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/confirm/RE
 
 Copyright (c) 2025 Simon Boudrias
 
-### `@inquirer/core@11.1.9`
-Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/core/README.md
-
-Copyright (c) 2025 Simon Boudrias
-
-### `@inquirer/core@11.1.8`
-Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/core/README.md
-
-Copyright (c) 2025 Simon Boudrias
-
-### `@inquirer/core@11.2.0`
+### `@inquirer/core@11.2.1`
 Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/core/README.md
 
 Copyright (c) 2025 Simon Boudrias
@@ -1305,12 +1350,7 @@ Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/core/READM
 
 Copyright (c) 2025 Simon Boudrias
 
-### `@inquirer/figures@2.0.5`
-Homepage: https://github.com/SBoudrias/Inquirer.js
-
-Copyright (c) 2025 Simon Boudrias
-
-### `@inquirer/figures@2.0.6`
+### `@inquirer/figures@2.0.7`
 Homepage: https://github.com/SBoudrias/Inquirer.js
 
 Copyright (c) 2025 Simon Boudrias
@@ -1320,22 +1360,17 @@ Homepage: https://github.com/SBoudrias/Inquirer.js
 
 Copyright (c) 2025 Simon Boudrias
 
-### `@inquirer/password@5.0.11`
+### `@inquirer/password@5.1.1`
 Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/password/README.md
 
 Copyright (c) 2025 Simon Boudrias
 
-### `@inquirer/select@5.2.0`
+### `@inquirer/select@5.2.1`
 Homepage: https://github.com/SBoudrias/Inquirer.js/blob/main/packages/select/README.md
 
 Copyright (c) 2025 Simon Boudrias
 
-### `@inquirer/type@4.0.5`
-Homepage: https://github.com/SBoudrias/Inquirer.js
-
-Copyright (c) 2025 Simon Boudrias
-
-### `@inquirer/type@4.0.6`
+### `@inquirer/type@4.0.7`
 Homepage: https://github.com/SBoudrias/Inquirer.js
 
 Copyright (c) 2025 Simon Boudrias
@@ -3844,6 +3879,11 @@ Homepage: http://json5.org/
 
 Copyright (c) 2012-2018 Aseem Kishore, and [others].
 
+### `jsonc-parser@3.3.1`
+Homepage: https://github.com/microsoft/node-jsonc-parser
+
+Copyright (c) Microsoft
+
 ### `jsonfile@6.2.0`
 Homepage: https://github.com/jprichardson/node-jsonfile
 
@@ -5988,11 +6028,6 @@ Homepage: https://github.com/npm/mute-stream
 
 Copyright (c) Isaac Z. Schlueter and Contributors
 
-### `mute-stream@4.0.0`
-Homepage: https://github.com/npm/mute-stream
-
-Copyright (c) Isaac Z. Schlueter and Contributors
-
 ### `mute-stream@2.0.0`
 Homepage: https://github.com/npm/mute-stream
 
@@ -6007,6 +6042,11 @@ Copyright (c) Isaac Z. Schlueter and Contributors
 Homepage: https://github.com/alexeyraspopov/picocolors
 
 Copyright (c) 2021-2024 Oleksii Raspopov, Kostiantyn Denysov, Anton Verinov
+
+### `semver@7.8.5`
+Homepage: https://github.com/npm/node-semver
+
+Copyright (c) Isaac Z. Schlueter and Contributors
 
 ### `semver@7.7.4`
 Homepage: https://github.com/npm/node-semver

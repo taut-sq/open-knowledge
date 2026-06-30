@@ -41,4 +41,4 @@ Open the project in OpenCode and ask:
 
 <VerifyExec subject="OpenCode" />
 
-If OpenCode doesn't use the OpenKnowledge `exec` tool, restart it so it picks up the new MCP entry, and make sure the model you selected supports tool calling.
+If OpenCode doesn't use the OpenKnowledge `exec` tool, restart it so it picks up the new MCP entry, and make sure the model you selected supports tool calling. If it's still missing and `ok init` reported your config was `left unchanged`, OpenKnowledge couldn't parse your `opencode.json` safely and left it untouched — fix the config and re-run `ok init`.

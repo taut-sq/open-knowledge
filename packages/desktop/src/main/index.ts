@@ -771,6 +771,7 @@ function logAiIntegrationOutcomes(result: ProjectAiIntegrationsResult): number {
         integration: o.integration,
         action: o.action,
         ...(o.error !== undefined ? { error: o.error } : {}),
+        ...(o.reason !== undefined ? { reason: o.reason } : {}),
       })),
     }),
   );
@@ -843,6 +844,7 @@ async function openProject(
     cli: createProjectMcpReclaimCliSurface(),
     forceEnv: process.env.OK_M6B_FORCE ?? null,
     reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
+    logger: { event: (payload) => getLogger('mcp-wiring').info(payload, payload.event) },
   }).catch((err) => {
     console.warn('[main] project-mcp reclaim failed', {
       err: err instanceof Error ? err.message : String(err),
@@ -1345,6 +1347,9 @@ function createProjectMcpReclaimCliSurface(): ProjectMcpReclaimCliSurface {
       if (result.action === 'failed') {
         return { action: 'failed', error: result.error };
       }
+      if (result.action === 'declined') {
+        return { action: 'declined', reason: result.declineReason };
+      }
       return { action: 'overwritten' };
     },
   };
@@ -1367,6 +1372,16 @@ function createMcpWiringOpts(opts: ArmMcpWiringOpts = {}) {
     reclaimDisableEnv: process.env.OK_RECLAIM_DISABLE ?? null,
     forceShow: opts.forceShow ?? false,
     immediateDispatchTarget: opts.immediateDispatchTarget,
+    logger: {
+      info: (msg: string, ctx?: object) =>
+        getLogger('mcp-wiring').info((ctx ?? {}) as Record<string, unknown>, msg),
+      warn: (msg: string, ctx?: object) =>
+        getLogger('mcp-wiring').warn((ctx ?? {}) as Record<string, unknown>, msg),
+      error: (msg: string, ctx?: object) =>
+        getLogger('mcp-wiring').error((ctx ?? {}) as Record<string, unknown>, msg),
+      event: (payload: { event: string; [k: string]: unknown }) =>
+        getLogger('mcp-wiring').info(payload, payload.event),
+    },
   };
 }
 

@@ -4,6 +4,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -29,6 +30,10 @@ import {
 const PUBLISHED_CHAIN_ENTRY = { command: '/bin/sh', args: ['-l', '-c', CHAIN_V1] } as const;
 
 import {
+  createTomlConfigEngine,
+  setTomlConfigEngineForTesting,
+} from '../native/toml-config-engine.ts';
+import {
   applySharingMode,
   classifyExistingMcpEntry,
   detectInstalledEditors,
@@ -42,6 +47,7 @@ import {
   resolveMcpScope,
   resolveSharingMode,
   runInit,
+  writeEditorMcpConfig,
   writeUserMcpConfigs,
 } from './init.ts';
 import { LAUNCH_JSON_PORT } from './ui.ts';
@@ -361,12 +367,18 @@ describe('runInit', () => {
     expect(secondConfig).toBe(firstConfig);
   });
 
-  it('returns failed mcpAction when ~/.claude.json is invalid JSON', async () => {
-    writeFileSync(claudeConfigPath(), '{not valid json');
+  it('declines and leaves ~/.claude.json byte-unchanged when it is invalid JSON', async () => {
+    const original = '{not valid json';
+    writeFileSync(claudeConfigPath(), original);
 
     const result = await runInitForTest();
-    expect(result.mcpAction).toBe('failed');
-    expect(result.mcpError).toMatch(/invalid JSON/i);
+    expect(result.mcpAction).toBe('declined');
+    expect(result.editors[0].action).toBe('declined');
+    expect(result.editors[0].declineReason).toBe('unparseable');
+    expect(readFileSync(claudeConfigPath(), 'utf-8')).toBe(original);
+
+    const output = formatInitResult(result, testDir);
+    expect(output).toContain('left unchanged (config not readable)');
 
     expect(existsSync(join(testDir, OK_DIR, 'config.yml'))).toBe(true);
   });
@@ -684,7 +696,7 @@ describe('runInit', () => {
       expect(cursor.mcpServers[result.editors[1].serverName]).toEqual(PUBLISHED_CHAIN_ENTRY);
     });
 
-    it('partial failure — one editor fails, others succeed', async () => {
+    it('mixed outcome — one editor declines (unparseable), others succeed', async () => {
       mkdirSync(dirname(cursorConfigPath()), { recursive: true });
       writeFileSync(cursorConfigPath(), '{broken');
 
@@ -693,8 +705,9 @@ describe('runInit', () => {
       expect(result.editors[0].editorId).toBe('claude');
       expect(result.editors[0].action).toBe('written');
       expect(result.editors[1].editorId).toBe('cursor');
-      expect(result.editors[1].action).toBe('failed');
-      expect(result.editors[1].error).toMatch(/invalid JSON/i);
+      expect(result.editors[1].action).toBe('declined');
+      expect(result.editors[1].declineReason).toBe('unparseable');
+      expect(readFileSync(cursorConfigPath(), 'utf-8')).toBe('{broken');
     });
 
     it('idempotent per-editor across two runs', async () => {
@@ -1764,6 +1777,23 @@ describe('writeUserMcpConfigs', () => {
     expect(cursorConfig.mcpServers['open-knowledge']).toEqual(CANONICAL);
   });
 
+  it('creates OK entry into a blank config with no .broken sidecar', async () => {
+    const claudePath = resolveClaudeCodeConfigPath({ home: fakeHome });
+    mkdirSync(dirname(claudePath), { recursive: true });
+    writeFileSync(claudePath, '   \n');
+
+    const results: EditorMcpResult[] = await writeUserMcpConfigs({
+      editors: ['claude'],
+      home: fakeHome,
+    });
+    expect(results[0]?.action).toBe('written');
+
+    const config = JSON.parse(readFileSync(claudePath, 'utf-8'));
+    expect(config.mcpServers['open-knowledge']).toEqual(CANONICAL);
+
+    expect(readdirSync(dirname(claudePath)).some((name) => name.includes('.broken-'))).toBe(false);
+  });
+
   it('does NOT create project-scoped side effects under the fake HOME', async () => {
     await writeUserMcpConfigs({ editors: ['claude', 'cursor'], home: fakeHome });
 
@@ -1843,6 +1873,65 @@ describe('writeUserMcpConfigs', () => {
 
     expect(results[0].action).toBe('failed');
     expect(results[0].error).toMatch(/Claude Desktop is not available on linux/);
+  });
+});
+
+describe('writeEditorMcpConfig — TOML fallback declines a present config', () => {
+  let fakeHome: string;
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = resolve(
+      tmpdir(),
+      `toml-fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(testDir, { recursive: true });
+    fakeHome = join(testDir, 'fakehome');
+    mkdirSync(fakeHome, { recursive: true });
+    setTomlConfigEngineForTesting(createTomlConfigEngine(() => null));
+  });
+
+  afterEach(() => {
+    setTomlConfigEngineForTesting(null);
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('declines a present config rather than the lossy whole-file write, byte-unchanged', () => {
+    const path = EDITOR_TARGETS.codex.configPath('', fakeHome);
+    mkdirSync(dirname(path), { recursive: true });
+    const original =
+      '# do not clobber my comments\nmodel = "gpt-5"\n\n[mcp_servers.other]\ncommand = "node"\n';
+    writeFileSync(path, original, 'utf-8');
+
+    const result = writeEditorMcpConfig(
+      EDITOR_TARGETS.codex,
+      '',
+      { skipAvailabilityCheck: true },
+      fakeHome,
+    );
+
+    expect(result.action).toBe('declined');
+    expect(result.declineReason).toBe('no-native-writer');
+    expect(readFileSync(path, 'utf-8')).toBe(original);
+    expect(readdirSync(dirname(path)).some((n) => n.includes('.broken-'))).toBe(false);
+  });
+
+  it('still creates OK’s entry into a blank config on the fallback (nothing to preserve)', () => {
+    const path = EDITOR_TARGETS.codex.configPath('', fakeHome);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '   \n', 'utf-8');
+
+    const result = writeEditorMcpConfig(
+      EDITOR_TARGETS.codex,
+      '',
+      { skipAvailabilityCheck: true },
+      fakeHome,
+    );
+
+    expect(result.action).toBe('written');
+    const written = readFileSync(path, 'utf-8');
+    expect(written).toContain('mcp_servers');
+    expect(written).toContain('open-knowledge');
   });
 });
 
@@ -2004,36 +2093,67 @@ describe('classifyExistingMcpEntry', () => {
     });
   });
 
-  it('corrupt when the file is blank (zero bytes)', () => {
+  it('absent (creatable) when the file is blank (zero bytes)', () => {
     const path = resolveCursorConfigPath({ home: fakeHome });
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, '', 'utf-8');
-    const result = classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome);
-    expect(result.kind).toBe('corrupt');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'absent',
+    });
   });
 
-  it('corrupt when the file is whitespace-only', () => {
+  it('absent (creatable) when the file is whitespace-only', () => {
     const path = resolveCursorConfigPath({ home: fakeHome });
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, '   \n\n  \t  ', 'utf-8');
-    const result = classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome);
-    expect(result.kind).toBe('corrupt');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'absent',
+    });
   });
 
-  it('corrupt on invalid JSON', () => {
+  it('decline with a bounded reason on invalid JSON — never a creatable kind, no raw contents', () => {
     const path = resolveCursorConfigPath({ home: fakeHome });
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, '{ not valid JSON', 'utf-8');
-    const result = classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome);
-    expect(result.kind).toBe('corrupt');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'decline',
+      reason: 'unparseable',
+    });
   });
 
-  it('corrupt on invalid TOML (Codex)', () => {
+  it('decline with a bounded reason on invalid TOML (Codex)', () => {
     const path = resolveCodexConfigPath({ home: fakeHome, env: {} });
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, 'not = valid = toml = at = all', 'utf-8');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.codex, '', fakeHome)).toEqual({
+      kind: 'decline',
+      reason: 'unparseable',
+    });
+  });
+
+  it('no-entry (not decline) on a valid Codex config with a 2^53+ integer', () => {
+    const path = resolveCodexConfigPath({ home: fakeHome, env: {} });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      '# keep my comments\nmodel = "gpt-5"\n[mcp_servers.other]\ncommand = "node"\nstartup_timeout_ms = 9223372036854775807\n',
+      'utf-8',
+    );
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.codex, '', fakeHome)).toEqual({
+      kind: 'no-entry',
+    });
+  });
+
+  it('present on a valid Codex config with a microsecond datetime and OK entry', () => {
+    const path = resolveCodexConfigPath({ home: fakeHome, env: {} });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      'last_seen = 2026-06-26T12:34:56.123456Z\n[mcp_servers."open-knowledge"]\ncommand = "npx"\nargs = ["-y", "@inkeep/open-knowledge@latest", "mcp"]\n',
+      'utf-8',
+    );
     const result = classifyExistingMcpEntry(EDITOR_TARGETS.codex, '', fakeHome);
-    expect(result.kind).toBe('corrupt');
+    expect(result.kind).toBe('present');
   });
 
   it('no-entry when JSON parses but has no mcpServers key', () => {
@@ -2065,6 +2185,126 @@ describe('classifyExistingMcpEntry', () => {
     writeFileSync(path, JSON.stringify({ mcpServers: { 'open-knowledge': entry } }), 'utf-8');
     const result = classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome);
     expect(result).toEqual({ kind: 'present', entry });
+  });
+
+  it('decline (not creatable-blank) on a half-written / truncated JSON config', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      '{\n  "mcpServers": {\n    "open-knowledge": {\n      "command": "np',
+      'utf-8',
+    );
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome).kind).toBe('decline');
+  });
+
+  it('decline (not creatable-blank) on a half-written / truncated TOML config', () => {
+    const path = resolveCodexConfigPath({ home: fakeHome, env: {} });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '[mcp_servers."open-knowledge"]\ncommand = "np', 'utf-8');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.codex, '', fakeHome).kind).toBe('decline');
+  });
+
+  it('leaves a declined config byte-unchanged — classify never modifies or renames it', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    const original = '{ "mcpServers": [ deliberately malformed\n';
+    writeFileSync(path, original, 'utf-8');
+
+    const result = classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome);
+
+    expect(result.kind).toBe('decline');
+    expect(existsSync(path)).toBe(true);
+    expect(readFileSync(path, 'utf-8')).toBe(original);
+    expect(readExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toBeNull();
+  });
+
+  it('no-entry on a JSONC config with // and block comments (not unparseable)', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '{\n  // my servers\n  "other": { "command": "x" } /* keep */\n}', 'utf-8');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'no-entry',
+    });
+  });
+
+  it('present on a JSONC config whose comments and trailing commas surround our entry', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    const entry = { command: 'npx', args: ['-y', '@inkeep/open-knowledge@latest', 'mcp'] };
+    writeFileSync(
+      path,
+      `{\n  // managed by ok\n  "mcpServers": {\n    "open-knowledge": ${JSON.stringify(entry)}, // ours\n  },\n}`,
+      'utf-8',
+    );
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'present',
+      entry,
+    });
+  });
+
+  it('present on a config with a leading UTF-8 BOM (InvalidSymbol@0 is not corruption)', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    const entry = { command: 'npx', args: ['-y', '@inkeep/open-knowledge@latest', 'mcp'] };
+    writeFileSync(
+      path,
+      `\uFEFF${JSON.stringify({ mcpServers: { 'open-knowledge': entry } })}`,
+      'utf-8',
+    );
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'present',
+      entry,
+    });
+  });
+
+  it('decline (duplicate-container) when the mcpServers container appears twice', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      '{ "mcpServers": { "a": { "command": "x" } }, "mcpServers": { "b": { "command": "y" } } }',
+      'utf-8',
+    );
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'decline',
+      reason: 'duplicate-container',
+    });
+  });
+
+  it('duplicate-container is keyed to each harness container, not a hardcoded mcpServers', () => {
+    const path = resolveOpenCodeConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, '{ "mcp": { "a": {} }, "mcp": { "b": {} } }', 'utf-8');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.opencode, '', fakeHome)).toEqual({
+      kind: 'decline',
+      reason: 'duplicate-container',
+    });
+  });
+
+  it('no-entry (not duplicate-container) when only an unrelated sibling key repeats', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      '{ "theme": "dark", "theme": "light", "mcpServers": { "other": {} } }',
+      'utf-8',
+    );
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'no-entry',
+    });
+  });
+
+  it('decline (oversize) on a config past the size bound — gated before the parse, left byte-unchanged', () => {
+    const path = resolveCursorConfigPath({ home: fakeHome });
+    mkdirSync(dirname(path), { recursive: true });
+    const oversized = `{ "mcpServers": {}, "_history": "${'x'.repeat(11 * 1024 * 1024)}" }`;
+    writeFileSync(path, oversized, 'utf-8');
+    expect(classifyExistingMcpEntry(EDITOR_TARGETS.cursor, '', fakeHome)).toEqual({
+      kind: 'decline',
+      reason: 'oversize',
+    });
+    expect(readFileSync(path, 'utf-8')).toBe(oversized);
   });
 });
 

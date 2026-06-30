@@ -8,9 +8,11 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
+  buildMcpConfigDeclineEvent,
   buildMcpConfigMigrateEvent,
   type EditorMcpTarget,
   isEntryUpToDate,
+  type McpDeclineReason,
   type McpEntryClassification,
 } from '@inkeep/open-knowledge';
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
@@ -159,20 +161,27 @@ export interface McpWiringCliSurface {
     Array<{
       editorId: McpWiringEditorId;
       label: string;
-      action: 'written' | 'overwritten' | 'skipped-missing' | 'skipped-flag' | 'failed';
+      action:
+        | 'written'
+        | 'overwritten'
+        | 'skipped-missing'
+        | 'skipped-flag'
+        | 'failed'
+        | 'declined';
       configPath: string;
       serverName: string;
       error?: string;
+      declineReason?: McpDeclineReason;
     }>
   >;
   /** Look up an editor's existing MCP entry (format-aware). `null` when the
    *  config file is absent or has no entry for this editor. The editorId
    *  surface avoids a cross-package `EditorMcpTarget` type in this module. */
   readExistingMcpEntry(editorId: McpWiringEditorId, home: string): Record<string, unknown> | null;
-  /** Discriminated classification — distinguishes 'corrupt' (file exists but
-   *  unparseable or blank/whitespace) from 'no-entry' (file parses, no entry
-   *  under our server name) and 'absent'. Used by startup reclaim to
-   *  move-aside + rewrite corrupt files instead of no-op'ing. */
+  /** Discriminated classification — distinguishes 'decline' (file present but
+   *  unparseable) from 'no-entry' (file parses, no entry under our server
+   *  name), 'absent' (missing or blank), and 'present'. Drives the startup
+   *  reclaim disposition per editor. */
   classifyExistingMcpEntry(editorId: McpWiringEditorId, home: string): McpEntryClassification;
   allEditorIds: readonly McpWiringEditorId[];
   /** `EDITOR_TARGETS[id]` keyed by editor. Imported directly from
@@ -233,11 +242,8 @@ export function checkAndRepairMcpWiringOnStartup(
     cli,
     forceEnv,
     reclaimDisableEnv,
-    fs = defaultFsOps,
-    now,
     logger = DEFAULT_LOGGER,
   } = opts;
-  const nowDate = (): Date => (now ? now() : new Date());
   if (reclaimDisableEnv === '1')
     return Promise.resolve({ status: 'skipped', reason: 'reclaim-disabled' });
   if (platform !== 'darwin') return Promise.resolve({ status: 'skipped', reason: 'platform' });
@@ -251,7 +257,6 @@ export function checkAndRepairMcpWiringOnStartup(
   if (selectedEditors.length === 0) return Promise.resolve({ status: 'ok', checkedEditors: [] });
 
   const editorsToRepair: McpWiringEditorId[] = [];
-  const corruptBackupFailures: Array<{ editor: McpWiringEditorId; error: string }> = [];
   for (const editor of selectedEditors) {
     let classification: McpEntryClassification;
     try {
@@ -273,78 +278,41 @@ export function checkAndRepairMcpWiringOnStartup(
       continue;
     }
 
-    if (classification.kind === 'corrupt') {
-      let configPath: string;
+    if (classification.kind === 'decline') {
+      logger.event(
+        buildMcpConfigDeclineEvent({
+          scope: 'user',
+          surface: 'desktop-startup',
+          editorId: editor,
+          reason: classification.reason,
+        }),
+      );
+      continue;
+    }
+
+    if (classification.kind === 'present') {
+      let migrateConfigPath = '';
       try {
-        configPath = cli.editorTargets[editor]?.configPath('', home) ?? '';
-      } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        corruptBackupFailures.push({ editor, error });
-        logger.event({
-          event: 'mcp-wiring-repair-backup-failed',
-          editor,
-          error,
-        });
-        continue;
-      }
-      if (configPath === '') {
-        corruptBackupFailures.push({ editor, error: 'config path unresolvable' });
-        logger.event({
-          event: 'mcp-wiring-repair-backup-failed',
-          editor,
-          error: 'config path unresolvable',
-        });
-        continue;
-      }
-      const stamp = nowDate().toISOString().replace(/[:.]/g, '-');
-      const backupPath = `${configPath}.broken-${stamp}`;
-      try {
-        fs.renameSync(configPath, backupPath);
-      } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
-        corruptBackupFailures.push({ editor, error });
-        logger.event({
-          event: 'mcp-wiring-repair-backup-failed',
-          editor,
-          configPath,
-          error,
-        });
-        continue;
-      }
-      logger.event({
-        event: 'mcp-wiring-repair-corrupt-backup',
-        editor,
-        configPath,
-        backupPath,
-        error: classification.error,
-      });
+        migrateConfigPath = cli.editorTargets[editor]?.configPath('', home) ?? '';
+      } catch {}
+      logger.event(
+        buildMcpConfigMigrateEvent({
+          scope: 'user',
+          surface: 'desktop-startup',
+          editorId: editor,
+          configPath: migrateConfigPath,
+          priorEntry: classification.entry,
+        }),
+      );
       editorsToRepair.push(editor);
       continue;
     }
 
-    let migrateConfigPath = '';
-    try {
-      migrateConfigPath = cli.editorTargets[editor]?.configPath('', home) ?? '';
-    } catch {}
-    logger.event(
-      buildMcpConfigMigrateEvent({
-        scope: 'user',
-        surface: 'desktop-startup',
-        editorId: editor,
-        configPath: migrateConfigPath,
-        priorEntry: classification.entry,
-      }),
-    );
-    editorsToRepair.push(editor);
+    const _exhaustive: never = classification;
+    return _exhaustive;
   }
 
   if (editorsToRepair.length === 0) {
-    if (corruptBackupFailures.length > 0) {
-      return Promise.resolve({
-        status: 'failed',
-        failedEditors: corruptBackupFailures,
-      } satisfies McpStartupRepairResult);
-    }
     return Promise.resolve({ status: 'ok', checkedEditors: selectedEditors });
   }
 
@@ -355,6 +323,17 @@ export function checkAndRepairMcpWiringOnStartup(
         .filter((r) => r.action === 'failed')
         .map((r) => ({ editor: r.editorId, error: r.error }));
       for (const r of results) {
+        if (r.action === 'declined') {
+          logger.event(
+            buildMcpConfigDeclineEvent({
+              scope: 'user',
+              surface: 'desktop-startup',
+              editorId: r.editorId,
+              reason: r.declineReason ?? 'unparseable',
+            }),
+          );
+          continue;
+        }
         logger.event({
           event:
             r.action === 'failed' ? 'mcp-wiring-repair-write-failed' : 'mcp-wiring-repair-repaired',
@@ -363,12 +342,16 @@ export function checkAndRepairMcpWiringOnStartup(
           error: r.error ?? null,
         });
       }
-      const allFailed = [...failed, ...corruptBackupFailures];
-      if (allFailed.length > 0)
-        return { status: 'failed', failedEditors: allFailed } satisfies McpStartupRepairResult;
+      const repairedEditors = results
+        .filter((r) => r.action === 'written' || r.action === 'overwritten')
+        .map((r) => r.editorId);
+      if (failed.length > 0)
+        return { status: 'failed', failedEditors: failed } satisfies McpStartupRepairResult;
+      if (repairedEditors.length === 0)
+        return { status: 'ok', checkedEditors: selectedEditors } satisfies McpStartupRepairResult;
       return {
         status: 'repaired',
-        repairedEditors: editorsToRepair,
+        repairedEditors,
       } satisfies McpStartupRepairResult;
     })
     .catch((err) => {
@@ -380,10 +363,7 @@ export function checkAndRepairMcpWiringOnStartup(
       });
       return {
         status: 'failed',
-        failedEditors: [
-          ...editorsToRepair.map((editor) => ({ editor, error: message })),
-          ...corruptBackupFailures,
-        ],
+        failedEditors: editorsToRepair.map((editor) => ({ editor, error: message })),
       } satisfies McpStartupRepairResult;
     });
 }
@@ -531,6 +511,17 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
         error: r.error ?? null,
       });
     }
+    for (const r of results) {
+      if (r.action !== 'declined') continue;
+      logger.event(
+        buildMcpConfigDeclineEvent({
+          scope: 'user',
+          surface: 'desktop-firstlaunch',
+          editorId: r.editorId,
+          reason: r.declineReason ?? 'unparseable',
+        }),
+      );
+    }
     if (failedResults.length > 0) {
       logger.info('partial failure — marker not written; dialog will re-fire next boot');
       logIpcError({
@@ -555,13 +546,16 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
       };
     }
 
+    const configuredEditors = results
+      .filter((r) => r.action === 'written' || r.action === 'overwritten')
+      .map((r) => r.editorId);
     try {
       writeMcpStatusMarker(
         home,
         {
           configured: true,
           configuredAt: nowDate().toISOString(),
-          editors: [...selectedEditors],
+          editors: configuredEditors,
         },
         fs,
       );
@@ -579,7 +573,7 @@ export function runMcpWiringOnFirstLaunch(opts: RunMcpWiringOpts): RunMcpWiringH
       return { ok: false, error: message };
     }
 
-    logger.info('configured', { editors: selectedEditors });
+    logger.info('configured', { editors: configuredEditors });
     return { ok: true };
   };
 

@@ -1,4 +1,7 @@
+import { createRequire } from 'node:module';
 import { defineConfig } from 'tsdown';
+
+const jsoncParserEsmEntry = createRequire(import.meta.url).resolve('jsonc-parser/lib/esm/main.js');
 
 const dtsEmitFallbackNotice = '[rolldown-plugin-dts] Warning: Failed to emit declaration file';
 const originalWarn = console.warn;
@@ -16,6 +19,14 @@ export default defineConfig({
   dts: true,
   clean: true,
   minify: true,
+  plugins: [
+    {
+      name: 'jsonc-parser-esm-entry',
+      resolveId(id) {
+        return id === 'jsonc-parser' ? jsoncParserEsmEntry : null;
+      },
+    },
+  ],
   inputOptions: (options) => {
     options.onLog = (level, log, defaultHandler) => {
       if (
@@ -44,7 +55,7 @@ export default defineConfig({
     return options;
   },
   deps: {
-    neverBundle: ['@parcel/watcher', '@napi-rs/keyring'],
+    neverBundle: ['@parcel/watcher', '@napi-rs/keyring', '@inkeep/open-knowledge-native-config'],
     alwaysBundle: [
       /^@inquirer\/checkbox(\/|$)/,
       /^@inquirer\/password(\/|$)/,
@@ -55,6 +66,7 @@ export default defineConfig({
       /^@octokit\/rest(\/|$)/,
       /^cli-boxes(\/|$)/,
       /^commander(\/|$)/,
+      /^jsonc-parser(\/|$)/,
       /^just-bash(\/|$)/,
       /^picocolors(\/|$)/,
       /^picomatch(\/|$)/,

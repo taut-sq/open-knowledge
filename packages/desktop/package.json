@@ -27,6 +27,7 @@
   "dependencies": {
     "@inkeep/open-knowledge": "workspace:*",
     "@inkeep/open-knowledge-core": "workspace:*",
+    "@inkeep/open-knowledge-native-config": "workspace:*",
     "@inkeep/open-knowledge-server": "workspace:*",
     "@napi-rs/keyring": "^1.3.0",
     "electron-updater": "6.8.4",

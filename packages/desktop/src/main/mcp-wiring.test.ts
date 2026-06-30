@@ -1,9 +1,28 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import {
+  existsSync as fsExistsSync,
+  mkdirSync as fsMkdirSync,
+  readFileSync as fsReadFileSync,
+  renameSync as fsRenameSync,
+  unlinkSync as fsUnlinkSync,
+  writeFileSync as fsWriteFileSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   buildManagedServerEntry,
+  classifyExistingMcpEntry,
   type EditorMcpTarget,
   type McpEntryClassification,
 } from '@inkeep/open-knowledge';
+import { classifyExistingMcpEntry as classifyWithOverridableEngine } from '../../../cli/src/commands/init.ts';
+import {
+  createTomlConfigEngine,
+  setTomlConfigEngineForTesting,
+} from '../../../cli/src/native/toml-config-engine.ts';
 import type { McpWiringEditorId } from '../shared/ipc-channels.ts';
 import {
   checkAndRepairMcpWiringOnStartup,
@@ -55,7 +74,7 @@ function fakeTarget(id: McpWiringEditorId): EditorMcpTarget {
 
 interface BuildStartupCliOptions {
   classify: McpEntryClassification;
-  writeOutcome?: 'written' | 'overwritten' | 'failed';
+  writeOutcome?: 'written' | 'overwritten' | 'failed' | 'declined';
   writeError?: string;
 }
 
@@ -155,6 +174,326 @@ describe('checkAndRepairMcpWiringOnStartup — migrate event ordering', () => {
     expect(result.status).toBe('ok');
     expect(order).toEqual([]);
     expect(events.some((e) => e.event === 'mcp-config-migrate')).toBe(false);
+  });
+});
+
+describe('checkAndRepairMcpWiringOnStartup — non-destructive decline', () => {
+  const inertIpcMain = { handle() {}, removeHandler() {} } as unknown as Parameters<
+    typeof checkAndRepairMcpWiringOnStartup
+  >[0]['ipcMain'];
+
+  test('declined config → no write, no rename, ok status, bounded decline signal', async () => {
+    const { cli, order } = buildStartupCli({
+      classify: { kind: 'decline', reason: 'unparseable' },
+    });
+    const fs = memoryFs({ '/home/.config-for-claude.json': 'not-valid-json{' });
+    const events: Array<Record<string, unknown>> = [];
+    const result = await checkAndRepairMcpWiringOnStartup({
+      isPackaged: true,
+      executablePath: PACKAGED_EXE,
+      home: '/home',
+      platform: 'darwin',
+      ipcMain: inertIpcMain,
+      cli,
+      fs,
+      logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+    });
+    expect(result.status).toBe('ok');
+    expect(order).toEqual([]);
+    expect(fs.files['/home/.config-for-claude.json']).toBe('not-valid-json{');
+    expect(Object.keys(fs.files).some((p) => p.includes('.broken-'))).toBe(false);
+    const decline = events.find((e) => e.event === 'mcp-config-decline');
+    expect(decline).toMatchObject({
+      event: 'mcp-config-decline',
+      scope: 'user',
+      surface: 'desktop-startup',
+      editorId: 'claude',
+      reason: 'unparseable',
+    });
+    expect(decline).not.toHaveProperty('configPath');
+  });
+
+  test('a write that declines (read-then-write race) is not counted as repaired', async () => {
+    const { cli } = buildStartupCli({
+      classify: {
+        kind: 'present',
+        entry: { command: 'npx', args: ['-y', '@inkeep/open-knowledge', 'mcp'] },
+      },
+      writeOutcome: 'declined',
+    });
+    const result = await checkAndRepairMcpWiringOnStartup({
+      isPackaged: true,
+      executablePath: PACKAGED_EXE,
+      home: '/home',
+      platform: 'darwin',
+      ipcMain: inertIpcMain,
+      cli,
+      logger: { info() {}, warn() {}, error() {}, event() {} },
+    });
+    expect(result.status).toBe('ok');
+    expect(result).not.toHaveProperty('repairedEditors');
+  });
+
+  describe('reset-repro — a valid i64 Codex config is never reset', () => {
+    let dir: string | undefined;
+    afterEach(() => {
+      if (dir) rmSync(dir, { recursive: true, force: true });
+      dir = undefined;
+    });
+
+    test('real classify on a 2^53+ integer TOML → byte-unchanged, no .broken, no-op', async () => {
+      dir = mkdtempSync(join(tmpdir(), 'ok-reset-repro-'));
+      const tomlPath = join(dir, 'config.toml');
+      const original = [
+        '# my codex config — keep my comments!',
+        'model = "gpt-5"',
+        '',
+        '[mcp_servers.other]',
+        'command = "node"',
+        'startup_timeout_ms = 9223372036854775807',
+        '',
+      ].join('\n');
+      fsWriteFileSync(tomlPath, original);
+
+      const target: EditorMcpTarget = {
+        id: 'codex' as McpWiringEditorId,
+        label: 'Codex',
+        format: 'toml',
+        topLevelKey: 'mcp_servers',
+        serverName: () => 'open-knowledge',
+        configPath: () => tomlPath,
+        buildEntry: () => buildManagedServerEntry({ mode: 'published' }),
+        scope: 'global',
+      };
+
+      expect(classifyExistingMcpEntry(target, '', undefined, tomlPath)).toEqual({
+        kind: 'no-entry',
+      });
+
+      const realFs: McpWiringFsOps = {
+        existsSync: (p) => fsExistsSync(p),
+        readFileSync: (p) => fsReadFileSync(p, 'utf8'),
+        writeFileSync: (p, c) => fsWriteFileSync(p, c),
+        mkdirSync: (p, o) => {
+          fsMkdirSync(p, o);
+        },
+        renameSync: (from, to) => fsRenameSync(from, to),
+        unlinkSync: (p) => fsUnlinkSync(p),
+      };
+      const writes: McpWiringEditorId[][] = [];
+      const cli: McpWiringCliSurface = {
+        detectInstalledEditors: () => ['codex' as McpWiringEditorId],
+        classifyExistingMcpEntry: () => classifyExistingMcpEntry(target, '', undefined, tomlPath),
+        readExistingMcpEntry: () => null,
+        allEditorIds: ['codex' as McpWiringEditorId],
+        editorTargets: { codex: target } as Record<McpWiringEditorId, EditorMcpTarget>,
+        writeUserMcpConfigs: async ({ editors }) => {
+          writes.push([...editors]);
+          fsWriteFileSync(tomlPath, '{"mcp_servers":{"open-knowledge":{}}}');
+          return editors.map((editorId) => ({
+            editorId,
+            label: editorId,
+            action: 'written' as const,
+            configPath: tomlPath,
+            serverName: 'open-knowledge',
+          }));
+        },
+      };
+
+      const events: Array<Record<string, unknown>> = [];
+      const result = await checkAndRepairMcpWiringOnStartup({
+        isPackaged: true,
+        executablePath: PACKAGED_EXE,
+        home: dir,
+        platform: 'darwin',
+        ipcMain: inertIpcMain,
+        cli,
+        fs: realFs,
+        logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+      });
+
+      expect(result.status).toBe('ok');
+      expect(fsReadFileSync(tomlPath, 'utf8')).toBe(original);
+      expect(readdirSync(dir).some((name) => name.includes('.broken-'))).toBe(false);
+      expect(writes).toEqual([]);
+      expect(events.find((e) => e.event === 'mcp-config-decline')).toBeUndefined();
+    });
+
+    test('real classify on a genuinely-malformed TOML → decline, byte-unchanged, no write, bounded signal', async () => {
+      dir = mkdtempSync(join(tmpdir(), 'ok-decline-sweep-'));
+      const tomlPath = join(dir, 'config.toml');
+      const original = ['# keep my comments', 'model = "gpt-5"', 'broken = "unterminated', ''].join(
+        '\n',
+      );
+      fsWriteFileSync(tomlPath, original);
+
+      const target: EditorMcpTarget = {
+        id: 'codex' as McpWiringEditorId,
+        label: 'Codex',
+        format: 'toml',
+        topLevelKey: 'mcp_servers',
+        serverName: () => 'open-knowledge',
+        configPath: () => tomlPath,
+        buildEntry: () => buildManagedServerEntry({ mode: 'published' }),
+        scope: 'global',
+      };
+
+      expect(classifyExistingMcpEntry(target, '', undefined, tomlPath)).toEqual({
+        kind: 'decline',
+        reason: 'unparseable',
+      });
+
+      const realFs: McpWiringFsOps = {
+        existsSync: (p) => fsExistsSync(p),
+        readFileSync: (p) => fsReadFileSync(p, 'utf8'),
+        writeFileSync: (p, c) => fsWriteFileSync(p, c),
+        mkdirSync: (p, o) => {
+          fsMkdirSync(p, o);
+        },
+        renameSync: (from, to) => fsRenameSync(from, to),
+        unlinkSync: (p) => fsUnlinkSync(p),
+      };
+      const writes: McpWiringEditorId[][] = [];
+      const cli: McpWiringCliSurface = {
+        detectInstalledEditors: () => ['codex' as McpWiringEditorId],
+        classifyExistingMcpEntry: () => classifyExistingMcpEntry(target, '', undefined, tomlPath),
+        readExistingMcpEntry: () => null,
+        allEditorIds: ['codex' as McpWiringEditorId],
+        editorTargets: { codex: target } as Record<McpWiringEditorId, EditorMcpTarget>,
+        writeUserMcpConfigs: async ({ editors }) => {
+          writes.push([...editors]);
+          fsWriteFileSync(tomlPath, '{"mcp_servers":{"open-knowledge":{}}}');
+          return editors.map((editorId) => ({
+            editorId,
+            label: editorId,
+            action: 'written' as const,
+            configPath: tomlPath,
+            serverName: 'open-knowledge',
+          }));
+        },
+      };
+
+      const events: Array<Record<string, unknown>> = [];
+      const result = await checkAndRepairMcpWiringOnStartup({
+        isPackaged: true,
+        executablePath: PACKAGED_EXE,
+        home: dir,
+        platform: 'darwin',
+        ipcMain: inertIpcMain,
+        cli,
+        fs: realFs,
+        logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+      });
+
+      expect(result.status).toBe('ok');
+      expect(fsReadFileSync(tomlPath, 'utf8')).toBe(original);
+      expect(readdirSync(dir).some((name) => name.includes('.broken-'))).toBe(false);
+      expect(writes).toEqual([]);
+      const decline = events.find((e) => e.event === 'mcp-config-decline');
+      expect(decline).toMatchObject({
+        event: 'mcp-config-decline',
+        scope: 'user',
+        surface: 'desktop-startup',
+        editorId: 'codex',
+        reason: 'unparseable',
+      });
+      expect(decline).not.toHaveProperty('configPath');
+    });
+
+    test('fallback engine: the same valid i64 config is declined, never reset (off-macOS / no-prebuilt-binary host)', async () => {
+      dir = mkdtempSync(join(tmpdir(), 'ok-fallback-i64-'));
+      const tomlPath = join(dir, 'config.toml');
+      const original = [
+        '# my codex config — keep my comments!',
+        'model = "gpt-5"',
+        '',
+        '[mcp_servers.other]',
+        'command = "node"',
+        'startup_timeout_ms = 9223372036854775807',
+        '',
+      ].join('\n');
+      fsWriteFileSync(tomlPath, original);
+
+      const target: EditorMcpTarget = {
+        id: 'codex' as McpWiringEditorId,
+        label: 'Codex',
+        format: 'toml',
+        topLevelKey: 'mcp_servers',
+        serverName: () => 'open-knowledge',
+        configPath: () => tomlPath,
+        buildEntry: () => buildManagedServerEntry({ mode: 'published' }),
+        scope: 'global',
+      };
+
+      const realFs: McpWiringFsOps = {
+        existsSync: (p) => fsExistsSync(p),
+        readFileSync: (p) => fsReadFileSync(p, 'utf8'),
+        writeFileSync: (p, c) => fsWriteFileSync(p, c),
+        mkdirSync: (p, o) => {
+          fsMkdirSync(p, o);
+        },
+        renameSync: (from, to) => fsRenameSync(from, to),
+        unlinkSync: (p) => fsUnlinkSync(p),
+      };
+      const writes: McpWiringEditorId[][] = [];
+      const cli: McpWiringCliSurface = {
+        detectInstalledEditors: () => ['codex' as McpWiringEditorId],
+        classifyExistingMcpEntry: () =>
+          classifyWithOverridableEngine(target, '', undefined, tomlPath),
+        readExistingMcpEntry: () => null,
+        allEditorIds: ['codex' as McpWiringEditorId],
+        editorTargets: { codex: target } as Record<McpWiringEditorId, EditorMcpTarget>,
+        writeUserMcpConfigs: async ({ editors }) => {
+          writes.push([...editors]);
+          fsWriteFileSync(tomlPath, '{"mcp_servers":{"open-knowledge":{}}}');
+          return editors.map((editorId) => ({
+            editorId,
+            label: editorId,
+            action: 'written' as const,
+            configPath: tomlPath,
+            serverName: 'open-knowledge',
+          }));
+        },
+      };
+
+      const events: Array<Record<string, unknown>> = [];
+      try {
+        setTomlConfigEngineForTesting(createTomlConfigEngine(() => null));
+
+        expect(classifyWithOverridableEngine(target, '', undefined, tomlPath)).toEqual({
+          kind: 'decline',
+          reason: 'unparseable',
+        });
+
+        const result = await checkAndRepairMcpWiringOnStartup({
+          isPackaged: true,
+          executablePath: PACKAGED_EXE,
+          home: dir,
+          platform: 'darwin',
+          ipcMain: inertIpcMain,
+          cli,
+          fs: realFs,
+          logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+        });
+
+        expect(result.status).toBe('ok');
+      } finally {
+        setTomlConfigEngineForTesting(null);
+      }
+
+      expect(fsReadFileSync(tomlPath, 'utf8')).toBe(original);
+      expect(readdirSync(dir).some((name) => name.includes('.broken-'))).toBe(false);
+      expect(writes).toEqual([]);
+      const decline = events.find((e) => e.event === 'mcp-config-decline');
+      expect(decline).toMatchObject({
+        event: 'mcp-config-decline',
+        scope: 'user',
+        surface: 'desktop-startup',
+        editorId: 'codex',
+        reason: 'unparseable',
+      });
+      expect(decline).not.toHaveProperty('configPath');
+    });
   });
 });
 
@@ -292,6 +631,69 @@ describe('runMcpWiringOnFirstLaunch — mid-session immediate dispatch', () => {
       configured: true,
       editors: ['claude'],
     });
+  });
+
+  test('a declined editor is not recorded as configured and emits the decline signal', async () => {
+    const ipcMain = stubIpcMain();
+    const wc = fakeWebContents(11);
+    const fs = memoryFs();
+    const events: Array<Record<string, unknown>> = [];
+    const claude = fakeTarget('claude' as McpWiringEditorId);
+    const cursor = fakeTarget('cursor' as McpWiringEditorId);
+    const cli: McpWiringCliSurface = {
+      detectInstalledEditors: () => ['claude' as McpWiringEditorId, 'cursor' as McpWiringEditorId],
+      classifyExistingMcpEntry: () => ({ kind: 'absent' }) as McpEntryClassification,
+      readExistingMcpEntry: () => null,
+      allEditorIds: ['claude' as McpWiringEditorId, 'cursor' as McpWiringEditorId],
+      editorTargets: { claude, cursor } as Record<McpWiringEditorId, EditorMcpTarget>,
+      writeUserMcpConfigs: async ({ editors }) =>
+        editors.map((editorId) =>
+          editorId === 'cursor'
+            ? {
+                editorId,
+                label: editorId,
+                action: 'declined' as const,
+                configPath: '/home/u/.cursor/mcp.json',
+                serverName: 'open-knowledge',
+                declineReason: 'unparseable' as const,
+              }
+            : {
+                editorId,
+                label: editorId,
+                action: 'written' as const,
+                configPath: '/home/u/.claude.json',
+                serverName: 'open-knowledge',
+              },
+        ),
+    };
+    runMcpWiringOnFirstLaunch(
+      buildWiringOpts({
+        ipcMain,
+        cli,
+        fs,
+        immediateDispatchTarget: wc,
+        logger: { info() {}, warn() {}, error() {}, event: (e) => events.push(e) },
+      }),
+    );
+
+    const confirm = ipcMain.handlers.get('ok:mcp-wiring:confirm');
+    const result = await confirm?.({ sender: { id: 11 } }, { editorIds: ['claude', 'cursor'] });
+    expect(result).toEqual({ ok: true });
+
+    expect(readMcpStatusMarker('/home/u', fs)).toMatchObject({
+      configured: true,
+      editors: ['claude'],
+    });
+
+    const decline = events.find((e) => e.event === 'mcp-config-decline');
+    expect(decline).toMatchObject({
+      event: 'mcp-config-decline',
+      scope: 'user',
+      surface: 'desktop-firstlaunch',
+      editorId: 'cursor',
+      reason: 'unparseable',
+    });
+    expect(decline).not.toHaveProperty('configPath');
   });
 
   test('confirm from a window other than the dispatch target is rejected', async () => {

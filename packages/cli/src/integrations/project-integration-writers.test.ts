@@ -89,6 +89,21 @@ describe('mcpConfigWriter', () => {
     expect(outcome.path).toBe(join(projectDir, '.cursor', 'mcp.json'));
   });
 
+  test('reports "declined" with the reason when the present config is unparseable', () => {
+    const cursorMcp = join(projectDir, '.cursor', 'mcp.json');
+    mkdirSync(join(projectDir, '.cursor'), { recursive: true });
+    const malformed = '{ "mcpServers": { "open-knowledge": ';
+    writeFileSync(cursorMcp, malformed);
+
+    const outcome = mcpConfigWriter.write(EDITOR_TARGETS.cursor, projectDir, {});
+
+    expect(outcome.action).toBe('declined');
+    expect(outcome.reason).toBe('unparseable');
+    expect(outcome.path).toBe(cursorMcp);
+    expect(outcome.error).toBeUndefined();
+    expect(readFileSync(cursorMcp, 'utf-8')).toBe(malformed);
+  });
+
   test('never throws even when the target path environment is hostile', () => {
     writeFileSync(join(projectDir, '.mcp.json'), 'not-json');
     writeFileSync(join(projectDir, '.cursor'), 'block');

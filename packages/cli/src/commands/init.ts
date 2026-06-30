@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { atomicWriteFileSync, withFileLockSync } from '@inkeep/open-knowledge-core/server';
 import type {
@@ -18,7 +18,15 @@ import {
 import checkbox from '@inquirer/checkbox';
 import select from '@inquirer/select';
 import { Command, Option } from 'commander';
-import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+import {
+  applyEdits as applyJsoncEdits,
+  getNodeValue,
+  type Node as JsoncNode,
+  type ParseError as JsoncParseError,
+  modify as modifyJsonc,
+  parseTree as parseJsoncTree,
+} from 'jsonc-parser';
+import { stringify as stringifyToml } from 'smol-toml';
 import { OK_DIR } from '../constants.ts';
 import { formatPreviewBlock, type PreviewResult } from '../content/preview.ts';
 import { resolveProjectRoot } from '../integrations/resolve-project-root.ts';
@@ -27,6 +35,13 @@ import {
   type ProjectSkillResult,
   writeProjectSkill,
 } from '../integrations/write-project-skill.ts';
+import { debugNativeLoadFailure } from '../native/load-native-config.ts';
+import { resolveHarnessWritePaths } from '../native/symlink-resolve.ts';
+import {
+  getTomlConfigEngine,
+  type TomlConfigEngine,
+  type TomlUpsertResult,
+} from '../native/toml-config-engine.ts';
 import {
   addOkPathsToGitExclude,
   type ExcludeWriteResult,
@@ -49,41 +64,31 @@ import {
 } from './editors.ts';
 import { LAUNCH_JSON_PORT } from './ui.ts';
 
-function readJsonConfig(path: string): Record<string, unknown> {
-  if (!existsSync(path)) return {};
-  const raw = readFileSync(path, 'utf-8');
-  const trimmed = raw.trim();
-  if (trimmed === '') return {};
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (isObject(parsed)) {
-      return parsed;
-    }
-    throw new Error(`${path} root must be a JSON object`);
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      throw new Error(`${path} contains invalid JSON: ${err.message}`);
-    }
-    throw err;
-  }
+const JSONC_PARSE_OPTIONS = { allowTrailingComma: true, disallowComments: false };
+
+const JSONC_INVALID_SYMBOL_CODE: number = 1;
+
+function isBenignBomError(error: JsoncParseError, raw: string): boolean {
+  return (
+    error.error === JSONC_INVALID_SYMBOL_CODE && error.offset === 0 && raw.charCodeAt(0) === 0xfeff
+  );
 }
 
-function readTomlConfig(path: string): Record<string, unknown> {
-  if (!existsSync(path)) return {};
-  const raw = readFileSync(path, 'utf-8');
-  const trimmed = raw.trim();
-  if (trimmed === '') return {};
-  try {
-    const parsed = parseToml(trimmed);
-    if (isObject(parsed)) {
-      return parsed;
-    }
-    throw new Error(`${path} root must be a TOML table`);
-  } catch (err) {
-    throw new Error(
-      `${path} contains invalid TOML: ${err instanceof Error ? err.message : String(err)}`,
-    );
+function parseJsoncObjectTree(raw: string): JsoncNode | null {
+  const errors: JsoncParseError[] = [];
+  const tree = parseJsoncTree(raw, errors, JSONC_PARSE_OPTIONS);
+  if (errors.some((error) => !isBenignBomError(error, raw))) return null;
+  if (!tree || tree.type !== 'object') return null;
+  return tree;
+}
+
+function countTopLevelKey(objectNode: JsoncNode, key: string): number {
+  let count = 0;
+  for (const property of objectNode.children ?? []) {
+    const keyNode = property.children?.[0];
+    if (keyNode !== undefined && getNodeValue(keyNode) === key) count += 1;
   }
+  return count;
 }
 
 function writeJsonConfig(path: string, config: Record<string, unknown>): void {
@@ -93,6 +98,160 @@ function writeJsonConfig(path: string, config: Record<string, unknown>): void {
 function writeTomlConfig(path: string, config: Record<string, unknown>): void {
   const serialized = stringifyToml(config);
   atomicWriteFileSync(path, serialized.endsWith('\n') ? serialized : `${serialized}\n`);
+}
+
+function isCrlfDominant(text: string): boolean {
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  if (crlf === 0) return false;
+  const bareLf = (text.match(/\n/g) ?? []).length - crlf;
+  return crlf >= bareLf;
+}
+
+const JSON_CONFIG_MAX_BYTES = 10 * 1024 * 1024;
+
+function jsonValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((value, index) => jsonValueEqual(value, b[index]));
+  }
+  if (isObject(a) && isObject(b)) {
+    const keys = Object.keys(a);
+    if (keys.length !== Object.keys(b).length) return false;
+    return keys.every((key) => Object.hasOwn(b, key) && jsonValueEqual(a[key], b[key]));
+  }
+  return false;
+}
+
+function detectJsonIndent(body: string): { insertSpaces: boolean; tabSize: number } {
+  for (const line of body.split('\n')) {
+    const trimmed = line.trimStart();
+    if (trimmed.length === 0 || trimmed.length === line.length) continue;
+    if (line.charCodeAt(0) === 0x09) return { insertSpaces: false, tabSize: 1 };
+    return { insertSpaces: true, tabSize: line.length - trimmed.length };
+  }
+  return { insertSpaces: true, tabSize: 2 };
+}
+
+function existingFileMode(path: string): number | undefined {
+  try {
+    return statSync(path).mode & 0o777;
+  } catch {
+    return undefined;
+  }
+}
+
+type JsonUpsertOutcome =
+  | { kind: 'written' | 'overwritten' }
+  | { kind: 'declined'; reason: McpDeclineReason };
+
+function upsertJsonMcpConfig(
+  configPath: string,
+  topLevelKey: string,
+  serverName: string,
+  entry: Record<string, unknown>,
+): JsonUpsertOutcome {
+  if (!existsSync(configPath)) {
+    writeJsonConfig(configPath, { [topLevelKey]: { [serverName]: entry } });
+    return { kind: 'written' };
+  }
+  let raw: string;
+  try {
+    raw = readFileSync(configPath, 'utf-8');
+  } catch (err) {
+    debugNativeLoadFailure('json config read failed', err);
+    return { kind: 'declined', reason: 'unparseable' };
+  }
+  if (raw.trim() === '') {
+    writeJsonConfig(configPath, { [topLevelKey]: { [serverName]: entry } });
+    return { kind: 'written' };
+  }
+  if (Buffer.byteLength(raw, 'utf-8') > JSON_CONFIG_MAX_BYTES) {
+    return { kind: 'declined', reason: 'oversize' };
+  }
+  const tree = parseJsoncObjectTree(raw);
+  if (!tree) return { kind: 'declined', reason: 'unparseable' };
+  if (countTopLevelKey(tree, topLevelKey) > 1) {
+    return { kind: 'declined', reason: 'duplicate-container' };
+  }
+
+  const root = getNodeValue(tree) as Record<string, unknown>;
+  const container = root[topLevelKey];
+  const existing = isObject(container) ? container[serverName] : undefined;
+  const entryExists = existing !== undefined;
+  if (entryExists && jsonValueEqual(existing, entry)) {
+    return { kind: 'overwritten' };
+  }
+
+  const hasBom = raw.charCodeAt(0) === 0xfeff;
+  const body = hasBom ? raw.slice(1) : raw;
+  const eol = body.includes('\r\n') ? '\r\n' : '\n';
+  const edits = modifyJsonc(body, [topLevelKey, serverName], entry, {
+    formattingOptions: { ...detectJsonIndent(body), eol },
+  });
+  const newText = `${hasBom ? '\uFEFF' : ''}${applyJsoncEdits(body, edits)}`;
+  if (newText !== raw) {
+    atomicWriteFileSync(configPath, newText, { mode: existingFileMode(configPath) });
+  }
+  return { kind: entryExists ? 'overwritten' : 'written' };
+}
+
+type TomlUpsertOutcome =
+  | { kind: 'written' | 'overwritten' }
+  | { kind: 'declined'; reason: McpDeclineReason };
+
+function upsertTomlMcpConfig(
+  engine: TomlConfigEngine,
+  configPath: string,
+  topLevelKey: string,
+  serverName: string,
+  entry: Record<string, unknown>,
+): TomlUpsertOutcome {
+  let raw = '';
+  if (existsSync(configPath)) {
+    try {
+      raw = readFileSync(configPath, 'utf-8');
+    } catch (err) {
+      debugNativeLoadFailure('toml config read failed', err);
+      return { kind: 'declined', reason: 'unparseable' };
+    }
+  }
+  const blank = raw.trim() === '';
+
+  if (engine.backend === 'fallback') {
+    if (!blank) return { kind: 'declined', reason: 'no-native-writer' };
+    writeTomlConfig(configPath, { [topLevelKey]: { [serverName]: entry } });
+    return { kind: 'written' };
+  }
+
+  const hasBom = raw.charCodeAt(0) === 0xfeff;
+  const body = hasBom ? raw.slice(1) : raw;
+  const crlfDominant = isCrlfDominant(body);
+  const wantTrailingNewline = blank || body.endsWith('\n');
+
+  let result: TomlUpsertResult;
+  try {
+    result = engine.upsertEntry(body, serverName, entry);
+  } catch (err) {
+    debugNativeLoadFailure('upsertEntry failed', err);
+    return { kind: 'declined', reason: 'unparseable' };
+  }
+
+  let text = result.text;
+  if (wantTrailingNewline) {
+    if (!text.endsWith('\n')) text = `${text}\n`;
+  } else {
+    text = text.replace(/\n+$/, '');
+  }
+  if (crlfDominant) {
+    text = text.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+  }
+  const newText = `${hasBom ? '\uFEFF' : ''}${text}`;
+
+  if (newText !== raw) {
+    atomicWriteFileSync(configPath, newText, { mode: existingFileMode(configPath) });
+  }
+  return { kind: result.existed ? 'overwritten' : 'written' };
 }
 
 type McpScope = 'user' | 'project' | 'both';
@@ -185,10 +344,11 @@ export async function resolveSharingMode(opts: {
 export interface EditorMcpResult {
   editorId: EditorId;
   label: string;
-  action: 'written' | 'overwritten' | 'skipped-missing' | 'skipped-flag' | 'failed';
+  action: 'written' | 'overwritten' | 'skipped-missing' | 'skipped-flag' | 'failed' | 'declined';
   configPath: string;
   serverName: string;
   error?: string;
+  declineReason?: McpDeclineReason;
   configScope?: 'project';
 }
 
@@ -228,7 +388,7 @@ interface InitCommandResult {
    * Only set when `didGitInit` is also `true` AND no `.gitignore` was already
    * present at `projectRoot` — pre-existing files are never touched. */
   rootGitignoreCreated: boolean;
-  mcpAction: 'written' | 'overwritten' | 'skipped-missing' | 'skipped-flag' | 'failed';
+  mcpAction: 'written' | 'overwritten' | 'skipped-missing' | 'skipped-flag' | 'failed' | 'declined';
   mcpPath: string;
   mcpError?: string;
   previewWarning?: string;
@@ -451,28 +611,32 @@ export function writeEditorMcpConfig(
     };
   }
 
-  let existing: unknown;
+  const captured: {
+    action: 'written' | 'overwritten' | 'declined';
+    declineReason?: McpDeclineReason;
+  } = { action: 'written' };
   let lockErr: Error | undefined;
   try {
     withFileLockSync(
       `${configPath}.lock`,
       () => {
-        const config: Record<string, unknown> =
-          target.format === 'toml' ? readTomlConfig(configPath) : readJsonConfig(configPath);
-        const servers = (config[target.topLevelKey] as Record<string, unknown> | undefined) ?? {};
-        existing = servers[serverName];
-        const nextConfig: Record<string, unknown> = {
-          ...config,
-          [target.topLevelKey]: {
-            ...servers,
-            [serverName]: targetEntry,
-          },
-        };
+        const writePath = resolveHarnessWritePaths(configPath).writePath;
+        mkdirSync(dirname(writePath), { recursive: true });
         if (target.format === 'toml') {
-          writeTomlConfig(configPath, nextConfig);
-        } else {
-          writeJsonConfig(configPath, nextConfig);
+          const tomlOutcome = upsertTomlMcpConfig(
+            getTomlConfigEngine(),
+            writePath,
+            target.topLevelKey,
+            serverName,
+            targetEntry,
+          );
+          captured.action = tomlOutcome.kind;
+          if (tomlOutcome.kind === 'declined') captured.declineReason = tomlOutcome.reason;
+          return;
         }
+        const outcome = upsertJsonMcpConfig(writePath, target.topLevelKey, serverName, targetEntry);
+        captured.action = outcome.kind;
+        if (outcome.kind === 'declined') captured.declineReason = outcome.reason;
       },
       {
         onWarn: (message, context) =>
@@ -494,10 +658,22 @@ export function writeEditorMcpConfig(
     };
   }
 
+  if (captured.action === 'declined') {
+    return {
+      editorId: target.id,
+      label: target.label,
+      action: 'declined',
+      configPath,
+      serverName,
+      declineReason: captured.declineReason,
+      ...(configPathOverride !== undefined ? { configScope: 'project' as const } : {}),
+    };
+  }
+
   return {
     editorId: target.id,
     label: target.label,
-    action: existing !== undefined ? 'overwritten' : 'written',
+    action: captured.action,
     configPath,
     serverName,
     ...(configPathOverride !== undefined ? { configScope: 'project' as const } : {}),
@@ -541,11 +717,29 @@ export function readExistingMcpEntry(
   return classified.kind === 'present' ? classified.entry : null;
 }
 
+export type McpDeclineReason =
+  | 'unparseable'
+  | 'duplicate-container'
+  | 'oversize'
+  | 'no-native-writer';
+
 export type McpEntryClassification =
   | { kind: 'absent' }
   | { kind: 'no-entry' }
   | { kind: 'present'; entry: Record<string, unknown> }
-  | { kind: 'corrupt'; error: string };
+  | { kind: 'decline'; reason: McpDeclineReason };
+
+function classifyContainer(
+  config: Record<string, unknown>,
+  topLevelKey: string,
+  serverName: string,
+): McpEntryClassification {
+  const servers = config[topLevelKey];
+  if (!isObject(servers)) return { kind: 'no-entry' };
+  const existing = servers[serverName];
+  if (!isObject(existing)) return { kind: 'no-entry' };
+  return { kind: 'present', entry: existing };
+}
 
 export function classifyExistingMcpEntry(
   target: EditorMcpTarget,
@@ -561,27 +755,46 @@ export function classifyExistingMcpEntry(
   }
   if (!existsSync(configPath)) return { kind: 'absent' };
 
+  try {
+    if (statSync(configPath).size > JSON_CONFIG_MAX_BYTES) {
+      return { kind: 'decline', reason: 'oversize' };
+    }
+  } catch {
+    return { kind: 'decline', reason: 'unparseable' };
+  }
+
   let raw: string;
   try {
     raw = readFileSync(configPath, 'utf-8');
-  } catch (err) {
-    return { kind: 'corrupt', error: err instanceof Error ? err.message : String(err) };
+  } catch {
+    return { kind: 'decline', reason: 'unparseable' };
   }
   if (raw.trim() === '') {
-    return { kind: 'corrupt', error: 'file is empty' };
+    return { kind: 'absent' };
   }
 
-  let config: Record<string, unknown>;
-  try {
-    config = target.format === 'toml' ? readTomlConfig(configPath) : readJsonConfig(configPath);
-  } catch (err) {
-    return { kind: 'corrupt', error: err instanceof Error ? err.message : String(err) };
+  const serverName = target.serverName(cwd);
+
+  if (target.format === 'toml') {
+    let config: Record<string, unknown>;
+    try {
+      config = getTomlConfigEngine().parseToObject(raw);
+    } catch {
+      return { kind: 'decline', reason: 'unparseable' };
+    }
+    return classifyContainer(config, target.topLevelKey, serverName);
   }
-  const servers = config[target.topLevelKey];
-  if (!isObject(servers)) return { kind: 'no-entry' };
-  const existing = servers[target.serverName(cwd)];
-  if (!isObject(existing)) return { kind: 'no-entry' };
-  return { kind: 'present', entry: existing };
+
+  const tree = parseJsoncObjectTree(raw);
+  if (!tree) return { kind: 'decline', reason: 'unparseable' };
+  if (countTopLevelKey(tree, target.topLevelKey) > 1) {
+    return { kind: 'decline', reason: 'duplicate-container' };
+  }
+  return classifyContainer(
+    getNodeValue(tree) as Record<string, unknown>,
+    target.topLevelKey,
+    serverName,
+  );
 }
 
 export async function runInit(options: InitCommandOptions = {}): Promise<InitCommandResult> {
@@ -848,6 +1061,19 @@ function summarizeApplied(
   };
 }
 
+function declineReasonLabel(reason: McpDeclineReason | undefined): string {
+  switch (reason) {
+    case 'oversize':
+      return 'config too large to edit safely';
+    case 'duplicate-container':
+      return 'duplicate server block';
+    case 'no-native-writer':
+      return 'no format-preserving writer available';
+    default:
+      return 'config not readable';
+  }
+}
+
 export function formatInitResult(result: InitCommandResult, cwd: string): string {
   const lines: string[] = [];
   const anyWritten = result.editors.some(
@@ -954,8 +1180,17 @@ export function formatInitResult(result: InitCommandResult, cwd: string): string
             `  ${labelWithScope}${pad}${displayPath}  ${error('FAILED')}: ${editor.error}`,
           );
           break;
+        case 'declined':
+          lines.push(
+            `  ${labelWithScope}${pad}${displayPath}  left unchanged (${declineReasonLabel(editor.declineReason)})`,
+          );
+          break;
         case 'skipped-flag':
           break;
+        default: {
+          const _exhaustive: never = editor.action;
+          void _exhaustive;
+        }
       }
       if (editor.editorId === 'claude' && result.launchJson) {
         lines.push(formatLaunchJsonSummary(result.launchJson));
