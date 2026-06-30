@@ -2665,6 +2665,7 @@ function bootPrimaryInstance(): void {
 
       app.on('browser-window-created', (_event, win) => {
         win.webContents.once('did-finish-load', () => {
+          if (!(app.isPackaged || process.env.OK_UPDATER_FORCE_DEV === '1')) return;
           const pending = appState.versionPendingInstall;
           if (pending) {
             sendToRenderer(win.webContents, 'ok:update:downloaded', { version: pending });

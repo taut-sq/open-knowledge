@@ -1976,6 +1976,50 @@ describe('dev-mode guard (isPackaged=false)', () => {
     const toastA = rig.captured.filter((c) => c.channel === 'ok:update:downloaded');
     expect(toastA).toHaveLength(1);
   });
+
+  test('boot-time failed-install notice suppressed when isPackaged=false', () => {
+    const { rig } = makeRig({
+      isPackaged: false,
+      attemptedInstall: '0.5.0',
+      appVersion: '0.4.0',
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('boot-time whats-new toast suppressed when isPackaged=false (lastSeenVersion still advances)', () => {
+    const { rig } = makeRig({
+      isPackaged: false,
+      lastSeenVersion: '0.3.0',
+      appVersion: '0.3.1',
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:whats-new')).toHaveLength(0);
+    expect(rig.dispatches).not.toContain('whats-new-toast-b' as DispatchKind);
+    expect(rig.state.lastSeenVersion).toBe('0.3.1');
+  });
+
+  test('forceDevBypass=true re-enables the boot-time failed-install notice', () => {
+    const { rig } = makeRig({
+      isPackaged: false,
+      forceDevBypass: true,
+      attemptedInstall: '0.5.0',
+      appVersion: '0.4.0',
+    });
+    const failed = rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed');
+    expect(failed).toHaveLength(1);
+    expect(rig.dispatches).toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('forceDevBypass=true re-enables the boot-time whats-new toast', () => {
+    const { rig } = makeRig({
+      isPackaged: false,
+      forceDevBypass: true,
+      lastSeenVersion: '0.3.0',
+      appVersion: '0.3.1',
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:whats-new')).toHaveLength(1);
+    expect(rig.dispatches).toContain('whats-new-toast-b' as DispatchKind);
+  });
 });
 
 describe('download-progress (log-only, no UI surface)', () => {

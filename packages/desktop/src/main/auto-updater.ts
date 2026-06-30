@@ -270,6 +270,8 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
     });
   }
 
+  const updatesEnabled = isPackaged || forceDevBypass;
+
   const revertToGithubFeed = (cause: string): void => {
     if (!usingProxyFeed || proxyFallbackTried) return;
     proxyFallbackTried = true;
@@ -667,7 +669,7 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
           running: currentVersion,
         });
       }
-    } else {
+    } else if (updatesEnabled) {
       const next = { ...state, versionPendingInstall: attempted };
       if (persistSafely(next, 'install-failed-on-boot')) {
         state = next;
@@ -697,7 +699,7 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
       { ...state, lastSeenVersion: currentVersion },
       'lastSeenVersion-advance',
     );
-    if (advanced && shouldShowVersionNotice) {
+    if (advanced && shouldShowVersionNotice && updatesEnabled) {
       const fireToastB = (): void => {
         const releaseUrl = releaseUrlFor(currentVersion);
         activeWhatsNew = { version: currentVersion, releaseUrl, firedAt: now().getTime() };
@@ -740,7 +742,7 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
     scheduleNextCheck();
   };
 
-  if (isPackaged || forceDevBypass) {
+  if (updatesEnabled) {
     void updater
       .checkForUpdates()
       .then(() => {
