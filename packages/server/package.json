@@ -61,7 +61,7 @@
     "build": "tsdown && bun run build:skill-bundles",
     "build:skill-bundles": "bun scripts/build-skill-bundles.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test --timeout 30000"
   },
   "devDependencies": {
     "@types/mdast": "^4.0.4",

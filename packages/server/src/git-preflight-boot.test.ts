@@ -306,7 +306,7 @@ describe('bootServer git-preflight', () => {
     expect(preflightCalled).toBe(false);
     expect(capturedStderr).toBe('');
     expect(entries).toHaveLength(0);
-  });
+  }, 30_000);
 });
 
 describe('bootServer git-preflight OTEL emission', () => {

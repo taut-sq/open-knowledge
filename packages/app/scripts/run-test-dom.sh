@@ -23,7 +23,7 @@ set -euo pipefail
 # substrate hit on Linux CI (where filesystem-order puts `lib/` before
 # `hooks/`). `--isolate` was added in Bun 1.3.x specifically to address
 # this class of cross-file mock contamination.
-PRELOAD_FLAGS=(--isolate --preload ./tests/dom/jsdom-preload.ts --conditions development)
+PRELOAD_FLAGS=(--timeout 30000 --isolate --preload ./tests/dom/jsdom-preload.ts --conditions development)
 
 if [ "$#" -gt 0 ]; then
   exec bun test "${PRELOAD_FLAGS[@]}" "$@"

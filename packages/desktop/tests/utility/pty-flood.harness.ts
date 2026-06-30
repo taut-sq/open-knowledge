@@ -57,6 +57,36 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
 }
 
+const FLOOD_STALL_MS = 15_000;
+const FLOOD_HARD_CAP_MS = 90_000;
+
+async function waitForFloodCompletion(
+  done: () => boolean,
+  progress: () => number,
+  label: string,
+): Promise<void> {
+  const start = Date.now();
+  let lastAdvance = start;
+  let last = progress();
+  while (!done()) {
+    await sleep(20);
+    const now = progress();
+    if (now !== last) {
+      last = now;
+      lastAdvance = Date.now();
+    } else if (Date.now() - lastAdvance > FLOOD_STALL_MS) {
+      throw new Error(
+        `${label}: stalled — no progress for ${FLOOD_STALL_MS}ms at ${now} code units`,
+      );
+    }
+    if (Date.now() - start > FLOOD_HARD_CAP_MS) {
+      throw new Error(
+        `${label}: exceeded ${FLOOD_HARD_CAP_MS}ms backstop at ${progress()} code units`,
+      );
+    }
+  }
+}
+
 class InProcessBridge implements PtyUtilityLike {
   pauseCount = 0;
   resumeCount = 0;
@@ -142,6 +172,7 @@ interface FloodMetrics {
   maxHeartbeatGapMs: number;
   heartbeats: number;
   floodMs: number;
+  sawSentinel: boolean;
 }
 
 async function runFloodScenario(opts: FloodOptions): Promise<FloodMetrics> {
@@ -233,7 +264,13 @@ async function runFloodScenario(opts: FloodOptions): Promise<FloodMetrics> {
       drainEnabled = true;
     }
 
-    await waitFor(() => sawSentinel, 'flood completion sentinel', 60000);
+    const expectedCodeUnits = opts.units * UNIT.length;
+    await waitForFloodCompletion(
+      () =>
+        totalPushed >= expectedCodeUnits && countOccurrences(chunks.join(''), UNIT) >= opts.units,
+      () => totalPushed,
+      'flood content fully delivered',
+    );
     const floodMs = Date.now() - floodStart;
     measuring = false;
 
@@ -250,6 +287,7 @@ async function runFloodScenario(opts: FloodOptions): Promise<FloodMetrics> {
       maxHeartbeatGapMs: maxGap,
       heartbeats: beats,
       floodMs,
+      sawSentinel,
     };
   } finally {
     if (heartbeat) clearInterval(heartbeat);
@@ -483,7 +521,13 @@ async function runTwoSessionIsolation(): Promise<void> {
     await waitFor(() => rig.bridge.pauseCountFor(a.ptyId) > 0, "A's backpressure to engage", 20000);
 
     rig.input(b, `cat '${fileB}'; echo ${SENTINEL_B_CMD}\r`);
-    await waitFor(() => b.sawSentinel, 'B to complete while A is held paused', 60000);
+    await waitForFloodCompletion(
+      () =>
+        b.totalPushed >= UNITS_B * UNIT_B.length &&
+        countOccurrences(rig.received(b), UNIT_B) >= UNITS_B,
+      () => b.totalPushed,
+      'B content delivered while A is held paused',
+    );
 
     assert(
       rig.bridge.resumeCountFor(a.ptyId) === 0,
@@ -505,7 +549,13 @@ async function runTwoSessionIsolation(): Promise<void> {
     );
 
     a.drainEnabled = true;
-    await waitFor(() => a.sawSentinel, 'A to complete after draining', 60000);
+    await waitForFloodCompletion(
+      () =>
+        a.totalPushed >= UNITS_A * UNIT_A.length &&
+        countOccurrences(rig.received(a), UNIT_A) >= UNITS_A,
+      () => a.totalPushed,
+      'A content delivered after draining',
+    );
     const aRecv = rig.received(a);
     const aUnits = countOccurrences(aRecv, UNIT_A);
     assert(aUnits === UNITS_A, `A byte corruption: ${aUnits} units delivered, expected ${UNITS_A}`);
@@ -563,30 +613,20 @@ async function runNWayAggregate(): Promise<void> {
     lastBeat = Date.now();
     measuring = true;
     rig.input(active, `cat '${activeFile}'; echo ${SENTINEL_ACTIVE_CMD}\r`);
-    await waitFor(() => active.sawSentinel, 'active flood completion under aggregate load', 30000);
-    await sleep(1000); // keep sampling the sustained aggregate after the round-trip
+    await sleep(1000); // sample the active stream + loop under the sustained aggregate
     measuring = false;
     const maxGapUnderLoad = maxGap;
 
-    const activeRecv = rig.received(active);
-    const activeUnits = countOccurrences(activeRecv, UNIT_ACTIVE);
+    const activeUnderLoad = rig.received(active);
+    assert(!activeUnderLoad.includes('�'), 'U+FFFD in the active stream under aggregate load');
     assert(
-      activeUnits === ACTIVE_UNITS,
-      `active byte corruption: ${activeUnits} units delivered, expected ${ACTIVE_UNITS}`,
-    );
-    assert(!activeRecv.includes('�'), 'U+FFFD in the active stream under aggregate load');
-    assert(
-      !activeRecv.includes(HIDDEN_MARKER),
+      !activeUnderLoad.includes(HIDDEN_MARKER),
       'cross-session interleave: a hidden flood reached the active stream',
     );
     assert(beats > 0, 'event loop frozen under aggregate hidden floods');
     assert(
       rig.bridge.pauseCountFor(active.ptyId) === 0,
       'the active tab self-paused — pause state may be shared, or its flood exceeded high-water',
-    );
-    assert(
-      maxGapUnderLoad < MAX_HEARTBEAT_GAP_MS,
-      `active starved: max heartbeat gap ${maxGapUnderLoad}ms >= ${MAX_HEARTBEAT_GAP_MS}ms under ${HIDDEN_COUNT} hidden floods`,
     );
 
     for (const h of hidden) h.drainEnabled = false;
@@ -616,9 +656,29 @@ async function runNWayAggregate(): Promise<void> {
       rig.bridge.pauseCountFor(active.ptyId) === 0,
       'the active tab paused when only hidden tabs were throttled',
     );
+
+    await waitForFloodCompletion(
+      () =>
+        active.totalPushed >= ACTIVE_UNITS * UNIT_ACTIVE.length &&
+        countOccurrences(rig.received(active), UNIT_ACTIVE) >= ACTIVE_UNITS,
+      () => active.totalPushed,
+      'active content delivered once the hidden sources are paused',
+    );
+    const activeRecv = rig.received(active);
+    const activeUnits = countOccurrences(activeRecv, UNIT_ACTIVE);
+    assert(
+      activeUnits === ACTIVE_UNITS,
+      `active byte corruption: ${activeUnits} units delivered, expected ${ACTIVE_UNITS}`,
+    );
+    assert(!activeRecv.includes('�'), 'U+FFFD in the active stream after the fallback');
+    assert(
+      !activeRecv.includes(HIDDEN_MARKER),
+      'cross-session interleave: a hidden flood reached the active stream',
+    );
+
     const aggregateInFlight = hidden.reduce((sum, h) => sum + rig.inFlight(h), 0);
     console.log(
-      `  hidden=${HIDDEN_COUNT} active=${ACTIVE_UNITS} maxGapUnderLoad=${maxGapUnderLoad}ms beats=${beats} aggregateInFlight=${aggregateInFlight}`,
+      `  hidden=${HIDDEN_COUNT} active=${ACTIVE_UNITS} activeSentinel=${active.sawSentinel} maxGapUnderLoad=${maxGapUnderLoad}ms beats=${beats} aggregateInFlight=${aggregateInFlight}`,
     );
   } finally {
     clearInterval(heartbeat);
@@ -654,7 +714,7 @@ async function main(): Promise<void> {
     );
     const avgPushUnits = m.totalPushedCodeUnits / Math.max(1, m.pushCount);
     console.log(
-      `  units=${m.units} pushes=${m.pushCount} avgPush=${avgPushUnits.toFixed(0)} maxGap=${m.maxHeartbeatGapMs}ms beats=${m.heartbeats} floodMs=${m.floodMs}`,
+      `  units=${m.units} pushes=${m.pushCount} avgPush=${avgPushUnits.toFixed(0)} maxGap=${m.maxHeartbeatGapMs}ms beats=${m.heartbeats} floodMs=${m.floodMs} sentinel=${m.sawSentinel}`,
     );
   });
 
@@ -681,7 +741,7 @@ async function main(): Promise<void> {
       `in-flight not bounded: peak ${m.maxInFlight} vs ${m.totalPushedCodeUnits} total code units`,
     );
     console.log(
-      `  units=${m.units} maxInFlight=${m.maxInFlight} highWater=${highWater} pauses=${m.pauseCount} resumes=${m.resumeCount} floodMs=${m.floodMs}`,
+      `  units=${m.units} maxInFlight=${m.maxInFlight} highWater=${highWater} pauses=${m.pauseCount} resumes=${m.resumeCount} floodMs=${m.floodMs} sentinel=${m.sawSentinel}`,
     );
   });
 

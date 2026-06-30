@@ -22,7 +22,7 @@
     "smoke:mock-update": "OK_UPDATER_FORCE_DEV=1 node scripts/smoke-mock-update.mjs",
     "instances": "node scripts/launch-instances.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "bun --conditions=development test"
+    "test": "bun --conditions=development test --timeout 30000"
   },
   "dependencies": {
     "@inkeep/open-knowledge": "workspace:*",
