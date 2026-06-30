@@ -1,21 +1,16 @@
 #!/usr/bin/env node
 import { chmodSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 
 const SHIPPED_ARCH = 'darwin-arm64';
 
-const prebuildsDirFor = (resourcesDir) =>
-  join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'node-pty', 'prebuilds');
-
-export function ensureNodePtySpawnHelperExecutable(resourcesDir) {
-  const prebuildsDir = prebuildsDirFor(resourcesDir);
+function chmodSpawnHelpersUnderPrebuilds(prebuildsDir, remediation) {
   const requiredHelper = join(prebuildsDir, SHIPPED_ARCH, 'spawn-helper');
   if (!existsSync(requiredHelper)) {
     throw new Error(
       `[ensure-node-pty-exec] node-pty ${SHIPPED_ARCH} spawn-helper missing at ${requiredHelper}. ` +
-        `Confirm node-pty is a desktop dependency and the '**/node-pty/prebuilds/**' asarUnpack ` +
-        `rule in electron-builder.yml unpacked it — without an executable spawn-helper on the real ` +
-        `filesystem, pty.fork() fails at runtime with "posix_spawnp failed".`,
+        remediation,
     );
   }
 
@@ -28,4 +23,42 @@ export function ensureNodePtySpawnHelperExecutable(resourcesDir) {
     }
   }
   return chmodded;
+}
+
+function resolveNodePtyDir() {
+  const require = createRequire(import.meta.url);
+  return dirname(require.resolve('node-pty/package.json'));
+}
+
+export function ensureNodePtySpawnHelperExecutable(resourcesDir) {
+  const prebuildsDir = join(
+    resourcesDir,
+    'app.asar.unpacked',
+    'node_modules',
+    'node-pty',
+    'prebuilds',
+  );
+  return chmodSpawnHelpersUnderPrebuilds(
+    prebuildsDir,
+    `Confirm node-pty is a desktop dependency and the '**/node-pty/prebuilds/**' asarUnpack ` +
+      `rule in electron-builder.yml unpacked it — without an executable spawn-helper on the real ` +
+      `filesystem, pty.fork() fails at runtime with "posix_spawnp failed".`,
+  );
+}
+
+export function ensureNodePtySpawnHelperExecutableInNodeModules(nodePtyDir = resolveNodePtyDir()) {
+  return chmodSpawnHelpersUnderPrebuilds(
+    join(nodePtyDir, 'prebuilds'),
+    `Confirm node-pty is installed (it is a desktop dependency) and 'bun install' did not run ` +
+      `with --ignore-scripts — without an executable spawn-helper, pty.fork() fails at runtime ` +
+      `with "posix_spawnp failed" and the in-app terminal cannot spawn a shell.`,
+  );
+}
+
+export function ensureNodePtySpawnHelperExecutableInNodeModulesSafe(nodePtyDir) {
+  try {
+    return { ok: true, chmodded: ensureNodePtySpawnHelperExecutableInNodeModules(nodePtyDir) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err : new Error(String(err)) };
+  }
 }

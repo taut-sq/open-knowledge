@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import { ensureNodePtySpawnHelperExecutableInNodeModulesSafe } from './ensure-node-pty-exec.mjs';
+
+const spawnHelper = ensureNodePtySpawnHelperExecutableInNodeModulesSafe();
+if (spawnHelper.ok) {
+  console.log(
+    `[desktop postinstall] node-pty spawn-helper marked executable (${spawnHelper.chmodded.length} file(s))`,
+  );
+} else {
+  console.warn(
+    `[desktop postinstall] could not make node-pty spawn-helper executable: ${spawnHelper.error.message}`,
+  );
+}
 
 if (process.env.ELECTRON_SKIP_REBUILD === '1') {
   console.log(
