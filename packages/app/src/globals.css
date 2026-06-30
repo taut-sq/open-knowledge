@@ -4918,7 +4918,16 @@ html.electron-mode [data-slot="sidebar-inner"] {
   background-color: color-mix(in oklab, var(--primary) 10%, transparent);
   text-decoration: none;
   cursor: pointer;
-  white-space: nowrap;
+  /* Long-tag containment: no max-width or wrap rules would let a single
+   * unbroken tag string (`#xxxxxxx...`) blow past the editor's content
+   * column, the TagDialog body, or the Properties panel value cell —
+   * PRD-7112's reported "background overflows in weird ways". Cap the
+   * pill's width at the parent's content box and allow the text to break
+   * mid-string when (and only when) it would otherwise overflow. Normal-
+   * length tags don't trigger `overflow-wrap: anywhere` so the single-
+   * line pill shape is preserved. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
   vertical-align: baseline;
   transition:
     background-color 90ms ease,

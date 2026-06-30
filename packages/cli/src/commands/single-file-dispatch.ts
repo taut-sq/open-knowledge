@@ -1,4 +1,3 @@
-
 import { statSync } from 'node:fs';
 
 const VALUE_TAKING_GLOBAL_FLAGS = new Set(['--cwd', '--log-level']);

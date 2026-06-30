@@ -106,7 +106,6 @@ describe('PrincipalSuccessSchema', () => {
   });
 });
 
-
 describe('ProblemTypeSchema', () => {
   test('accepts the seeded upload-side URN tokens', () => {
     const tokens = [
@@ -509,4 +508,3 @@ describe('StreamingProblemEventSchema (US-005, D36 c)', () => {
     expect(result.success).toBe(false);
   });
 });
-

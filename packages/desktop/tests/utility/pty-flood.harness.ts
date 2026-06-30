@@ -1,4 +1,3 @@
-
 import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -295,13 +294,11 @@ async function runFloodScenario(opts: FloodOptions): Promise<FloodMetrics> {
     if (pump) clearInterval(pump);
     try {
       manager.kill({ windowId: 1, ptyId: PTY_ID });
-    } catch {
-    }
+    } catch {}
     bridge.reap();
     try {
       rmSync(tmp, { recursive: true, force: true });
-    } catch {
-    }
+    } catch {}
   }
 }
 
@@ -323,7 +320,6 @@ const MAX_HEARTBEAT_GAP_MS = (() => {
   const override = Number(process.env.OK_FLOOD_MAX_GAP_MS);
   return Number.isFinite(override) && override > 0 ? override : 500;
 })();
-
 
 const UNIT_A = '日本語🎉αβγ';
 const UNIT_B = '한국어🚀ΔΣΩ';
@@ -377,8 +373,7 @@ function reapActiveRigs(): void {
   for (const cleanup of activeRigCleanups) {
     try {
       cleanup();
-    } catch {
-    }
+    } catch {}
   }
 }
 
@@ -456,15 +451,13 @@ function createMultiSessionRig(opts: {
     for (const session of sessions.values()) {
       try {
         manager.kill({ windowId: 1, ptyId: session.ptyId });
-      } catch {
-      }
+      } catch {}
     }
     bridge.reap();
     activeRigCleanups.delete(cleanup);
     try {
       rmSync(tmp, { recursive: true, force: true });
-    } catch {
-    }
+    } catch {}
   };
   activeRigCleanups.add(cleanup);
 

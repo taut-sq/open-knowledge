@@ -10,7 +10,6 @@ import {
 import { CHAIN_V1, EDITOR_TARGETS, type EditorId, type EditorMcpTarget } from './editors.ts';
 import { writeEditorMcpConfig } from './init.ts';
 
-
 const PUBLISHED_CHAIN_ENTRY = { command: '/bin/sh', args: ['-l', '-c', CHAIN_V1] };
 const OPENCODE_ENTRY = {
   type: 'local',

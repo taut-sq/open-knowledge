@@ -428,7 +428,7 @@ export function ListWidget({ keyName, value, onCommit }: CommonWidgetProps<strin
             data-index={i}
             data-tag-invalid={renderAsInvalidTag ? 'true' : undefined}
             className={cn(
-              'inline-flex items-center text-1sm gap-0.5 rounded-full py-0.5 pl-2 pr-1.5 transition-colors',
+              'inline-flex max-w-full min-w-0 items-center break-all text-1sm gap-0.5 rounded-full py-0.5 pl-2 pr-1.5 transition-colors',
               renderAsTag &&
                 'bg-primary/10 font-medium text-primary has-[button[data-tag]:hover]:bg-primary/20 has-[button[data-tag]:active]:bg-primary/25',
               renderAsInvalidTag &&

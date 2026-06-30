@@ -1,4 +1,3 @@
-
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { useEffect, useRef, useState } from 'react';
@@ -87,7 +86,9 @@ export function TagDialog() {
         <DialogHeader>
           <DialogTitle>
             <Trans>
-              Documents tagged <span className="font-mono">#{tagName}</span>
+              {/* `break-all` so a long single-word tag breaks mid-string
+                  instead of overflowing the dialog (PRD-7112). */}
+              Documents tagged <span className="font-mono break-all">#{tagName}</span>
             </Trans>
           </DialogTitle>
         </DialogHeader>

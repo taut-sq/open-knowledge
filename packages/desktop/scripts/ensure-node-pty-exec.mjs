@@ -3,7 +3,6 @@ import { chmodSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
-
 const SHIPPED_ARCH = 'darwin-arm64';
 
 function chmodSpawnHelpersUnderPrebuilds(prebuildsDir, remediation) {
@@ -55,7 +54,6 @@ export function ensureNodePtySpawnHelperExecutableInNodeModules(nodePtyDir = res
       `with "posix_spawnp failed" and the in-app terminal cannot spawn a shell.`,
   );
 }
-
 
 export function ensureNodePtySpawnHelperExecutableInNodeModulesSafe(nodePtyDir) {
   try {

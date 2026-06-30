@@ -1,3 +1,73 @@
+export { VFileMessage } from 'vfile-message';
+export {
+  applyFastDiff,
+  applyIncrementalDiff,
+  applyPatchToFm,
+  applyPathDeleteToFm,
+  applyPathRenameToFm,
+  applyPathReorderSeqToFm,
+  applyPathReorderToFm,
+  applyPathSetToFm,
+  applyRenameToFm,
+  applyReorderToFm,
+  assertContentPreservation,
+  BRIDGE_TOLERANCE_CLASSES,
+  type BridgeInvariantLogPayload,
+  type BridgeInvariantSite,
+  type BridgeInvariantViolation,
+  BridgeInvariantViolationError,
+  BridgeMergeContentLossError,
+  type BridgeMergeContentLossInfo,
+  type BridgeMergeContentLossLogPayload,
+  type BridgeMergeContentLossSide,
+  type BridgeMergeContentLossWhich,
+  type BridgeToleranceClass,
+  bindFrontmatterDoc,
+  classifySeverity,
+  type DiffChange,
+  type DocBoundarySplit,
+  defaultScheduler,
+  detectAppliedToleranceClasses,
+  detectFmRegion,
+  diffLinesFast,
+  emitToleranceFire,
+  type FmEditError,
+  type FmEditResult,
+  FORM_WRITE_ORIGIN,
+  type FrontmatterBinding,
+  type FrontmatterBindingPatchResult,
+  type FrontmatterBindingPatchSuccess,
+  type FrontmatterBindingPathResult,
+  type FrontmatterBindingPathSuccess,
+  type FrontmatterBindingRenameResult,
+  type FrontmatterBindingRenameSuccess,
+  type FrontmatterBindingReorderResult,
+  type FrontmatterBindingReorderSuccess,
+  type FrontmatterBindingUnsubscribe,
+  type FrontmatterDocProvider,
+  type FrontmatterSnapshot,
+  findFirstDivergenceIndex,
+  fnv1aDigest,
+  type InvariantViolation,
+  MAX_FM_REGION_BYTES,
+  mergeThreeWay,
+  normalizeBridge,
+  type ParsedFmRegion,
+  parseFencedFmRegion,
+  parseFmRegion,
+  projectMergeBoundarySpace,
+  readFmKeys,
+  readFmMap,
+  readFmRegionWithError,
+  reattachLeadingDocBoundary,
+  type Scheduler,
+  setToleranceTelemetryHook,
+  splitLeadingDocBoundary,
+  type ToleranceClassSeverity,
+  type ToleranceFireRecord,
+  type ToleranceTelemetryHook,
+  toBridgeInvariantLog,
+} from './bridge/index.ts';
 export {
   type Burst,
   bucketIntoBursts,
@@ -13,30 +83,6 @@ export {
   clientVersionHeaders,
   clientVersionTokenFields,
 } from './client-version.ts';
-export type {
-  BundleManifest,
-  BundleRedaction,
-  ClassifiedPath,
-  Loggable,
-  LogLevel,
-  LogPayload,
-  SerializedError,
-  SerializedErrorTruncation,
-} from './logger-types.ts';
-export { LOG_LEVELS } from './logger-types.ts';
-export {
-  mapConsoleLevel,
-  parseStructuredConsoleMessage,
-  RENDERER_LOG_MAX_BATCH_BYTES,
-  RENDERER_LOG_MAX_ENTRIES,
-  RENDERER_LOG_MAX_MESSAGE_BYTES,
-  type RendererLogLevel,
-  truncateLogMessage,
-} from './logging/renderer-log.ts';
-export { PROTOCOL_VERSION } from './protocol-version.ts';
-
-
-export { VFileMessage } from 'vfile-message';
 export {
   bindConfigDoc,
   type ConfigBinding,
@@ -185,6 +231,11 @@ export { SHOW_INSTALL_SKILL } from './constants/feature-flags.ts';
 export type { OkFolderState } from './constants/folder-state.ts';
 export { DEFAULT_GITHUB_OAUTH_CLIENT_ID } from './constants/github.ts';
 export { isOrphanMode, ORPHAN_MODES, type OrphanMode } from './constants/graph.ts';
+export {
+  DEFAULT_SIGTERM_GRACE_MS,
+  DEFAULT_SIGTERM_POLL_MS,
+  SPAWN_ERROR_LOG,
+} from './constants/lifecycle.ts';
 export { GREP_MAX_RESULTS, MCP_SERVER_NAME, READ_DOCUMENT_HISTORY_DEPTH } from './constants/mcp.ts';
 export { MENU_LABELS, type MenuLabelKey } from './constants/menu-labels.ts';
 export { LOCAL_DIR, OK_DIR, OK_PROJECT_MARKER } from './constants/ok-dir.ts';
@@ -278,6 +329,44 @@ export {
   type WikiLinkEmbedAttrs,
 } from './extensions/wiki-link-embed.ts';
 export {
+  type FrontmatterIssue,
+  FrontmatterIssueSchema,
+  type FrontmatterValidationError,
+  FrontmatterValidationErrorSchema,
+  fieldErrorsFromError,
+  toFrontmatterIssue,
+} from './frontmatter/errors.ts';
+export {
+  FRONTMATTER_TYPES,
+  type FrontmatterMap,
+  FrontmatterMapSchema,
+  type FrontmatterPatch,
+  FrontmatterPatchSchema,
+  type FrontmatterType,
+  FrontmatterTypeSchema,
+  type FrontmatterValue,
+  FrontmatterValueSchema,
+  frontmatterValuesEqual,
+  inferType,
+  isFrontmatterValueEmpty,
+  isIsoDateString,
+  RESERVED_FRONTMATTER_KEY,
+} from './frontmatter/schema.ts';
+export {
+  extractFrontmatterTags,
+  FRONTMATTER_TAG_GRAMMAR_HINT,
+  FRONTMATTER_TAG_VALUE_RE,
+  isValidFrontmatterTagValue,
+} from './frontmatter/tags.ts';
+export {
+  applyPatchToDocument,
+  getDocumentKeys,
+  type ParsedFrontmatter,
+  parseFrontmatterYaml,
+  serializeFrontmatterMap,
+  withFences,
+} from './frontmatter/yaml-codec.ts';
+export {
   type BridgeWorktreeEntry,
   parseWorktreeListPorcelain,
 } from './git/worktree-list-parser.ts';
@@ -326,6 +415,39 @@ export {
   withSkillPointer,
 } from './handoff/index.ts';
 export {
+  emptyInstalledSkills,
+  INSTALLED_SKILLS_FILENAME,
+  INSTALLED_SKILLS_REL,
+  INSTALLED_SKILLS_SCHEMA_VERSION,
+  type InstalledSkillEntry,
+  InstalledSkillEntrySchema,
+  type InstalledSkillScope,
+  InstalledSkillScopeSchema,
+  type InstalledSkills,
+  InstalledSkillsSchema,
+  parseInstalledSkills,
+} from './installed-skills/schema.ts';
+export type {
+  BundleManifest,
+  BundleRedaction,
+  ClassifiedPath,
+  Loggable,
+  LogLevel,
+  LogPayload,
+  SerializedError,
+  SerializedErrorTruncation,
+} from './logger-types.ts';
+export { LOG_LEVELS } from './logger-types.ts';
+export {
+  mapConsoleLevel,
+  parseStructuredConsoleMessage,
+  RENDERER_LOG_MAX_BATCH_BYTES,
+  RENDERER_LOG_MAX_ENTRIES,
+  RENDERER_LOG_MAX_MESSAGE_BYTES,
+  type RendererLogLevel,
+  truncateLogMessage,
+} from './logging/renderer-log.ts';
+export {
   HTML_MAX_BYTES,
   HtmlPayloadTooLargeError,
   htmlToMdast,
@@ -365,6 +487,7 @@ export {
   type ParseHealthMetrics,
   resetParseHealth,
 } from './metrics/parse-health.ts';
+export { PROTOCOL_VERSION } from './protocol-version.ts';
 export {
   builtInComponents,
   type ComponentRegistry,
@@ -848,157 +971,6 @@ export {
   DerivedViewChannelSchema,
 } from './schemas/cc1.ts';
 export {
-  HIDDEN_CONFIG_BASENAMES,
-  isHiddenDocName,
-  isValidDocName,
-  validateDocName,
-} from './util/doc-name.ts';
-export { toDesktopAssetHref } from './utils/asset-href.ts';
-export { isEmbedUrlRewritable, rewriteEmbedUrl } from './utils/embed-url-rewrite.ts';
-export { extensionOf } from './utils/extension.ts';
-export { formatFileSize } from './utils/file-size.ts';
-export { getGitHubStars } from './utils/github-stars.ts';
-export {
-  isLoomUrl,
-  type ParsedLoomUrl,
-  parseLoomUrl,
-} from './utils/loom-embed.ts';
-export { type PdfAnchorParts, parsePdfAnchor } from './utils/pdf-anchor.ts';
-export { isVimeoUrl } from './utils/vimeo-embed.ts';
-export {
-  type ParsedYouTubeUrl,
-  parseYouTubeUrl,
-  youtubeEmbedUrl,
-} from './utils/youtube-embed.ts';
-
-
-
-export {
-  applyFastDiff,
-  applyIncrementalDiff,
-  applyPatchToFm,
-  applyPathDeleteToFm,
-  applyPathRenameToFm,
-  applyPathReorderSeqToFm,
-  applyPathReorderToFm,
-  applyPathSetToFm,
-  applyRenameToFm,
-  applyReorderToFm,
-  assertContentPreservation,
-  BRIDGE_TOLERANCE_CLASSES,
-  type BridgeInvariantLogPayload,
-  type BridgeInvariantSite,
-  type BridgeInvariantViolation,
-  BridgeInvariantViolationError,
-  BridgeMergeContentLossError,
-  type BridgeMergeContentLossInfo,
-  type BridgeMergeContentLossLogPayload,
-  type BridgeMergeContentLossSide,
-  type BridgeMergeContentLossWhich,
-  type BridgeToleranceClass,
-  bindFrontmatterDoc,
-  classifySeverity,
-  type DiffChange,
-  type DocBoundarySplit,
-  defaultScheduler,
-  detectAppliedToleranceClasses,
-  detectFmRegion,
-  diffLinesFast,
-  emitToleranceFire,
-  type FmEditError,
-  type FmEditResult,
-  FORM_WRITE_ORIGIN,
-  type FrontmatterBinding,
-  type FrontmatterBindingPatchResult,
-  type FrontmatterBindingPatchSuccess,
-  type FrontmatterBindingPathResult,
-  type FrontmatterBindingPathSuccess,
-  type FrontmatterBindingRenameResult,
-  type FrontmatterBindingRenameSuccess,
-  type FrontmatterBindingReorderResult,
-  type FrontmatterBindingReorderSuccess,
-  type FrontmatterBindingUnsubscribe,
-  type FrontmatterDocProvider,
-  type FrontmatterSnapshot,
-  findFirstDivergenceIndex,
-  fnv1aDigest,
-  type InvariantViolation,
-  MAX_FM_REGION_BYTES,
-  mergeThreeWay,
-  normalizeBridge,
-  type ParsedFmRegion,
-  parseFencedFmRegion,
-  parseFmRegion,
-  projectMergeBoundarySpace,
-  readFmKeys,
-  readFmMap,
-  readFmRegionWithError,
-  reattachLeadingDocBoundary,
-  type Scheduler,
-  setToleranceTelemetryHook,
-  splitLeadingDocBoundary,
-  type ToleranceClassSeverity,
-  type ToleranceFireRecord,
-  type ToleranceTelemetryHook,
-  toBridgeInvariantLog,
-} from './bridge/index.ts';
-export {
-  DEFAULT_SIGTERM_GRACE_MS,
-  DEFAULT_SIGTERM_POLL_MS,
-  SPAWN_ERROR_LOG,
-} from './constants/lifecycle.ts';
-export {
-  type FrontmatterIssue,
-  FrontmatterIssueSchema,
-  type FrontmatterValidationError,
-  FrontmatterValidationErrorSchema,
-  fieldErrorsFromError,
-  toFrontmatterIssue,
-} from './frontmatter/errors.ts';
-export {
-  FRONTMATTER_TYPES,
-  type FrontmatterMap,
-  FrontmatterMapSchema,
-  type FrontmatterPatch,
-  FrontmatterPatchSchema,
-  type FrontmatterType,
-  FrontmatterTypeSchema,
-  type FrontmatterValue,
-  FrontmatterValueSchema,
-  frontmatterValuesEqual,
-  inferType,
-  isFrontmatterValueEmpty,
-  isIsoDateString,
-  RESERVED_FRONTMATTER_KEY,
-} from './frontmatter/schema.ts';
-export {
-  extractFrontmatterTags,
-  FRONTMATTER_TAG_GRAMMAR_HINT,
-  FRONTMATTER_TAG_VALUE_RE,
-  isValidFrontmatterTagValue,
-} from './frontmatter/tags.ts';
-export {
-  applyPatchToDocument,
-  getDocumentKeys,
-  type ParsedFrontmatter,
-  parseFrontmatterYaml,
-  serializeFrontmatterMap,
-  withFences,
-} from './frontmatter/yaml-codec.ts';
-export {
-  emptyInstalledSkills,
-  INSTALLED_SKILLS_FILENAME,
-  INSTALLED_SKILLS_REL,
-  INSTALLED_SKILLS_SCHEMA_VERSION,
-  type InstalledSkillEntry,
-  InstalledSkillEntrySchema,
-  type InstalledSkillScope,
-  InstalledSkillScopeSchema,
-  type InstalledSkills,
-  InstalledSkillsSchema,
-  parseInstalledSkills,
-} from './installed-skills/schema.ts';
-export {
   createWorkspaceSearchCorpus,
   createWorkspaceSearchDocument,
   DEFAULT_RRF_K,
@@ -1087,9 +1059,20 @@ export type {
   ShadowContributor,
   TimelineEntry,
 } from './types/timeline.ts';
+export {
+  HIDDEN_CONFIG_BASENAMES,
+  isHiddenDocName,
+  isValidDocName,
+  validateDocName,
+} from './util/doc-name.ts';
 export { applyByPrefixSuffix } from './utils/apply-by-prefix-suffix.ts';
+export { toDesktopAssetHref } from './utils/asset-href.ts';
 export { ChunkedInsertError, chunkedYTextInsert } from './utils/chunked-insert.ts';
 export { createCodeFenceTracker } from './utils/code-fence-tracker.ts';
+export { isEmbedUrlRewritable, rewriteEmbedUrl } from './utils/embed-url-rewrite.ts';
+export { extensionOf } from './utils/extension.ts';
+export { formatFileSize } from './utils/file-size.ts';
+export { getGitHubStars } from './utils/github-stars.ts';
 export {
   AGENT_COLORS,
   AGENT_ICON_COLORS,
@@ -1120,7 +1103,13 @@ export {
   isExternalHref,
   resolveAssetProjectPath,
 } from './utils/link-targets.ts';
+export {
+  isLoomUrl,
+  type ParsedLoomUrl,
+  parseLoomUrl,
+} from './utils/loom-embed.ts';
 export { type BasenameIndex, createBasenameIndex } from './utils/path-resolve.ts';
+export { type PdfAnchorParts, parsePdfAnchor } from './utils/pdf-anchor.ts';
 export { type ResolvedInternalHref, resolveInternalHref } from './utils/resolve-internal-href.ts';
 export { sanitizeFolderName } from './utils/sanitize-folder-name.ts';
 export {
@@ -1131,3 +1120,9 @@ export {
   wikiLinkHref,
 } from './utils/slug.ts';
 export { expandTagToHierarchy, tagsMatchingPrefix } from './utils/tag-rollup.ts';
+export { isVimeoUrl } from './utils/vimeo-embed.ts';
+export {
+  type ParsedYouTubeUrl,
+  parseYouTubeUrl,
+  youtubeEmbedUrl,
+} from './utils/youtube-embed.ts';

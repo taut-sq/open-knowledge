@@ -657,7 +657,6 @@ describe('BacklinkIndex', () => {
   });
 });
 
-
 describe('BacklinkIndex structural skill-bundle edges', () => {
   const SKILL = '.ok/skills/demo/SKILL';
   const REF = '.ok/skills/demo/references/notes';
@@ -791,7 +790,6 @@ describe('BacklinkIndex structural skill-bundle edges', () => {
     }
   });
 });
-
 
 describe('BacklinkIndex GLOBAL structural skill-bundle edges', () => {
   const G_SKILL = '__skill__/global/demo';
@@ -943,7 +941,6 @@ describe('BacklinkIndex GLOBAL structural skill-bundle edges', () => {
   });
 });
 
-
 describe('resolveMarkdownHref', () => {
   test('resolves same-directory relative link', () => {
     expect(resolveMarkdownHref('./other', 'notes')).toBe('other');
@@ -995,7 +992,6 @@ describe('resolveMarkdownHref', () => {
     expect(resolveMarkdownHref('../../../way-out.md', 'deep/a/b')).toBeNull();
   });
 });
-
 
 describe('extractMarkdownLinksFromMarkdown', () => {
   test('extracts relative inline markdown links', () => {
@@ -1080,7 +1076,6 @@ describe('extractMarkdownLinksFromMarkdown', () => {
     expect(extractMarkdownLinksFromMarkdown('[ext](https://example.com)', 'notes')).toEqual([]);
   });
 });
-
 
 describe('BacklinkIndex with markdown links', () => {
   test('updateDocumentFromMarkdown indexes markdown links alongside wiki links', () => {
@@ -1288,7 +1283,6 @@ describe('reconcileWithDisk', () => {
   });
 });
 
-
 describe('computeBrokenOutboundLinks', () => {
   test('returns [] when every outbound link resolves (AC2.1)', () => {
     const md = 'See [sibling](./real.md) and [root](/docs/guide.md) and [[Existing]].';
@@ -1388,7 +1382,6 @@ describe('computeBrokenOutboundLinks', () => {
     const md = 'See [self](./a.md).';
     expect(computeBrokenOutboundLinks(md, 'notes/a', new Set(['notes/a']))).toEqual([]);
   });
-
 
   const fileOracle = (existing: string[]) => {
     const set = new Set(existing);

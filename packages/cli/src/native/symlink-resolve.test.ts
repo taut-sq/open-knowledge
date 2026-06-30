@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveHarnessWritePaths, type SymlinkWritePaths } from './symlink-resolve.ts';
 
-
 interface NativeSymlinkBinding {
   resolveSymlinkWritePath(path: string): { readPath?: string | null; writePath: string };
 }

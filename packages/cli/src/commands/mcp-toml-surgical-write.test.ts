@@ -17,7 +17,6 @@ import {
 import { CHAIN_V1, EDITOR_TARGETS, type EditorMcpTarget } from './editors.ts';
 import { writeEditorMcpConfig } from './init.ts';
 
-
 function codexTargetForFile(configPath: string): EditorMcpTarget {
   return { ...EDITOR_TARGETS.codex, configPath: () => configPath };
 }

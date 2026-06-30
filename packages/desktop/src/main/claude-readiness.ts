@@ -1,4 +1,3 @@
-
 import type { McpEntryClassification } from '@inkeep/open-knowledge';
 import type { ClaudeReadiness, CliReadiness } from '../shared/bridge-contract.ts';
 import { getLogger } from './desktop-logger.ts';
