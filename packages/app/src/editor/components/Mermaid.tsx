@@ -47,16 +47,9 @@ export function MermaidView(props: MermaidProps) {
     setState((prev) => ({ ...prev, status: 'rendering' }));
     loadMermaid()
       .then(async (m) => {
-        try {
-          const result = await m.render(renderId, chart);
-          if (!cancelled) {
-            setState({ status: 'ready', svg: result.svg, error: '' });
-          }
-        } catch (err) {
-          if (!cancelled) {
-            const msg = err instanceof Error ? err.message : String(err);
-            setState({ status: 'error', svg: '', error: msg });
-          }
+        const result = await m.render(renderId, chart);
+        if (!cancelled) {
+          setState({ status: 'ready', svg: result.svg, error: '' });
         }
       })
       .catch((err) => {
