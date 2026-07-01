@@ -1,3 +1,4 @@
+
 import type { McpEntryClassification } from '@inkeep/open-knowledge';
 import { TERMINAL_CLI_IDS, type TerminalCli } from '@inkeep/open-knowledge-core';
 import type { ClaudeReadiness, CliReadiness } from '../shared/bridge-contract.ts';

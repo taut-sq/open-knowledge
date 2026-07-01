@@ -28,6 +28,7 @@ function moduleNotFound(id: string): never {
   throw Object.assign(new Error(`Cannot find module '${id}'`), { code: 'MODULE_NOT_FOUND' });
 }
 
+
 const BUNDLED_MODULE_URL = 'file:///app/dist/cli.mjs';
 const SENTINEL_BUNDLED = { source: 'bundled' };
 const SENTINEL_WORKSPACE = { source: 'workspace' };

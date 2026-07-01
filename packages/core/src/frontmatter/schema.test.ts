@@ -125,6 +125,7 @@ describe('frontmatterValuesEqual', () => {
 });
 
 describe('FrontmatterMapSchema — Obsidian null coercion', () => {
+
   test('drops null sequence elements ([null] → [])', () => {
     const result = FrontmatterMapSchema.safeParse({ tags: [null] });
     expect(result.success).toBe(true);

@@ -1,3 +1,4 @@
+
 import { TERMINAL_CLI_IDS, type TerminalCli } from '@inkeep/open-knowledge-core';
 import { parseStickyCliId } from './unified-agent-store';
 

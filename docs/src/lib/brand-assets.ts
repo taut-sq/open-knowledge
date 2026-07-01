@@ -1,3 +1,4 @@
+
 export const BRAND_ROUTE = '/brand';
 export const BRAND_ZIP = '/brand/openknowledge-brand.zip';
 

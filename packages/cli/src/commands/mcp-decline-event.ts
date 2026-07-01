@@ -1,3 +1,4 @@
+
 import type { McpDeclineReason } from './init.ts';
 
 export type McpConfigDeclineScope = 'user' | 'project';

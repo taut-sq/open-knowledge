@@ -1,3 +1,4 @@
+
 import { useEffect, useSyncExternalStore } from 'react';
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import { type OnboardingCardStore, onboardingCardStore } from '@/lib/onboarding-card-store';

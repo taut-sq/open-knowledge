@@ -1,3 +1,4 @@
+
 import { composeSelectionPrompt } from '@inkeep/open-knowledge-core';
 import { Trans } from '@lingui/react/macro';
 import { isMacOS } from '@tiptap/core';

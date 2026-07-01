@@ -9,6 +9,7 @@ import {
 import { EDITOR_TARGETS, type EditorMcpTarget } from './editors.ts';
 import { writeEditorMcpConfig } from './init.ts';
 
+
 const unix = process.platform !== 'win32';
 const dirs: string[] = [];
 

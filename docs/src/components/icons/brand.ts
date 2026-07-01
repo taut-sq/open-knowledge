@@ -5,6 +5,7 @@ import { CursorIcon } from './cursor';
 import { GitHubIcon } from './github';
 import { McpIcon } from './mcp';
 import { ObsidianIcon } from './obsidian';
+import { OpenClawIcon } from './openclaw';
 import { OpenCodeIcon } from './opencode';
 
 export const brandIcons = {
@@ -12,6 +13,7 @@ export const brandIcons = {
   Cursor: CursorIcon,
   Codex: CodexIcon,
   OpenCode: OpenCodeIcon,
+  OpenClaw: OpenClawIcon,
   GitHub: GitHubIcon,
   Obsidian: ObsidianIcon,
   MCP: McpIcon,

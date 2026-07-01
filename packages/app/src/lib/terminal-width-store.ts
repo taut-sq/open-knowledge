@@ -33,7 +33,8 @@ export function writeTerminalWidth(px: number, storage?: TerminalWidthStorage): 
   try {
     const s = storage ?? localStorage;
     s.setItem(TERMINAL_WIDTH_KEY, String(clamp(px)));
-  } catch {}
+  } catch {
+  }
 }
 
 export function getInitialTerminalWidth(): number {

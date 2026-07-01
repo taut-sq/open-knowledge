@@ -1,3 +1,4 @@
+
 import {
   chmodSync,
   existsSync,
@@ -213,7 +214,8 @@ test.describe('Docked terminal — live Electron', () => {
     for (const target of cleanup.splice(0)) {
       try {
         rmSync(target, { recursive: true, force: true });
-      } catch {}
+      } catch {
+      }
     }
   });
 

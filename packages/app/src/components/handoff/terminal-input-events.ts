@@ -1,3 +1,4 @@
+
 const ACTIVE_TERMINAL_INPUT_EVENT = 'open-knowledge:active-terminal-input';
 
 export function requestActiveTerminalInput(

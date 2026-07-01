@@ -8,6 +8,7 @@ import {
   ensureNodePtySpawnHelperExecutableInNodeModulesSafe,
 } from '../../scripts/ensure-node-pty-exec.mjs';
 
+
 const tmpRoots: string[] = [];
 
 function helperPath(resourcesDir: string, arch: string): string {
@@ -71,6 +72,7 @@ describe('ensureNodePtySpawnHelperExecutable', () => {
     );
   });
 });
+
 
 function nodeModulesHelperPath(nodePtyDir: string, arch: string): string {
   return join(nodePtyDir, 'prebuilds', arch, 'spawn-helper');

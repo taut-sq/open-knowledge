@@ -32,6 +32,7 @@ afterEach(() => {
   rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+
 describe('mcpConfigWriter', () => {
   test('id is "mcp-config"', () => {
     expect(mcpConfigWriter.id).toBe('mcp-config');
@@ -116,6 +117,7 @@ describe('mcpConfigWriter', () => {
   });
 });
 
+
 describe('projectSkillWriter', () => {
   test('id is "project-skill"', () => {
     expect(projectSkillWriter.id).toBe('project-skill');
@@ -190,6 +192,7 @@ describe('projectSkillWriter', () => {
     }
   });
 });
+
 
 const outcomesFor = (
   outcomes: readonly IntegrationWriteOutcome[],

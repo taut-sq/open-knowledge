@@ -27,6 +27,7 @@ export interface ProjectIntegrationWriter {
   ): IntegrationWriteOutcome;
 }
 
+
 export const mcpConfigWriter: ProjectIntegrationWriter = {
   id: 'mcp-config',
   write(target, projectDir, options) {
@@ -85,6 +86,7 @@ export const mcpConfigWriter: ProjectIntegrationWriter = {
   },
 };
 
+
 export const projectSkillWriter: ProjectIntegrationWriter = {
   id: 'project-skill',
   write(target, projectDir, _options) {
@@ -107,6 +109,7 @@ export const projectSkillWriter: ProjectIntegrationWriter = {
     }
   },
 };
+
 
 export const DEFAULT_PROJECT_INTEGRATIONS = [mcpConfigWriter, projectSkillWriter] as const;
 
