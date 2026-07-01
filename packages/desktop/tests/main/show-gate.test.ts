@@ -102,6 +102,40 @@ describe('createShowGateRegistry — dual-signal show contract', () => {
     expect(win.show).toHaveBeenCalledTimes(1);
   });
 
+  test('onShown fires once with the window kind after a successful show', () => {
+    const onShown = mock((_kind: 'editor' | 'navigator') => {});
+    const registry = createShowGateRegistry({
+      log: { warn: () => {} },
+      setTimeout: (cb, ms) => ({ cb, ms }),
+      clearTimeout: () => {},
+      onShown,
+    });
+    const win = makeWindow();
+    registry.register(win, { kind: 'editor' });
+    win.fireReadyToShow();
+    expect(onShown).not.toHaveBeenCalled();
+    registry.fireThemeApplied(win);
+    expect(win.show).toHaveBeenCalledTimes(1);
+    expect(onShown).toHaveBeenCalledTimes(1);
+    expect(onShown).toHaveBeenCalledWith('editor');
+  });
+
+  test('a throwing onShown is isolated and does not break show', () => {
+    const registry = createShowGateRegistry({
+      log: { warn: () => {} },
+      setTimeout: (cb, ms) => ({ cb, ms }),
+      clearTimeout: () => {},
+      onShown: () => {
+        throw new Error('boom');
+      },
+    });
+    const win = makeWindow();
+    registry.register(win, { kind: 'editor' });
+    win.fireReadyToShow();
+    expect(() => registry.fireThemeApplied(win)).not.toThrow();
+    expect(win.show).toHaveBeenCalledTimes(1);
+  });
+
   test('both signals (theme-applied first) → show called exactly once', () => {
     const win = makeWindow();
     env.registry.register(win);

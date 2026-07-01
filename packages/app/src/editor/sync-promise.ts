@@ -2,6 +2,7 @@ import type { HocuspocusProvider, onCloseParameters } from '@hocuspocus/provider
 import { mark } from '@/lib/perf';
 import { readNumericOverride } from '@/lib/perf/env-override';
 import { emitColdMountChild, finalizeColdMountSpan } from '@/lib/perf/otel-spans';
+import { firstContent } from '@/lib/perf/startup-marks';
 import { getMountId } from './mount-id-registry';
 
 export function getSyncTimeoutMs(): number {
@@ -248,6 +249,7 @@ export function syncPromise(docName: string, provider: HocuspocusProvider): Prom
     detach(entry);
     if (!hasPendingEntries()) uninstallVisibilityHandler();
     entry.resolve();
+    firstContent();
     if (coldMountId !== undefined) {
       const nowMs = Date.now();
       emitColdMountChild(

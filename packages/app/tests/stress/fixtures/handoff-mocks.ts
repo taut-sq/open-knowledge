@@ -348,6 +348,9 @@ export async function installHandoffMocks(page: Page, cfg: HandoffMockConfig): P
           notifyActiveTargetChanged: (): void => {},
           notifyViewMenuStateChanged: (): void => {},
         },
+        startup: {
+          reportMarks: (): void => {},
+        },
         sidebar: {
           expandAll: (_cb: () => void) => () => {},
           collapseAll: (_cb: () => void) => () => {},

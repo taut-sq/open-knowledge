@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { ProblemDetailsSchema, ServerInfoSuccessSchema } from '@inkeep/open-knowledge-core';
+import {
+  ProblemDetailsSchema,
+  ServerInfoBootSchema,
+  ServerInfoSuccessSchema,
+} from '@inkeep/open-knowledge-core';
 import { HARNESS_BOOT_TIMEOUT_MS } from '../harness-boot-timeout';
 import { createTestServer, type TestServer } from '../test-harness';
 
@@ -26,6 +30,44 @@ describe('server-info envelope (RFC 9457)', () => {
       expect(parsed.data.serverInstanceId.length).toBeGreaterThan(0);
     }
     expect((body as Record<string, unknown>).ok).toBeUndefined();
+  });
+
+  test('optional boot timings block round-trips through the success schema', () => {
+    const boot = {
+      startedAt: '2026-06-30T00:00:00.000Z',
+      httpListenMs: 12,
+      seedWalkMs: 34,
+      indexesMs: 56,
+      readyMs: 78,
+      fileCount: 9,
+    };
+    expect(ServerInfoBootSchema.safeParse(boot).success).toBe(true);
+
+    const withBoot = ServerInfoSuccessSchema.safeParse({
+      serverInstanceId: 'test-instance',
+      currentBranch: 'main',
+      boot,
+    });
+    expect(withBoot.success).toBe(true);
+    if (withBoot.success) {
+      expect(withBoot.data.boot).toEqual(boot);
+    }
+
+    const withoutBoot = ServerInfoSuccessSchema.safeParse({
+      serverInstanceId: 'test-instance',
+    });
+    expect(withoutBoot.success).toBe(true);
+    if (withoutBoot.success) {
+      expect(withoutBoot.data.boot).toBeUndefined();
+    }
+
+    expect(ServerInfoBootSchema.safeParse({ startedAt: '2026-06-30T00:00:00.000Z' }).success).toBe(
+      true,
+    );
+    expect(
+      ServerInfoBootSchema.safeParse({ startedAt: '2026-06-30T00:00:00.000Z', readyMs: -1 })
+        .success,
+    ).toBe(false);
   });
 
   test('method-not-allowed on POST emits problem+json with Allow: GET', async () => {

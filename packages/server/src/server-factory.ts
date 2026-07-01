@@ -36,6 +36,7 @@ import { seedBasenameIndex, seedSingleDirBasenameIndex } from './asset-walk.ts';
 import { HocuspocusAuthRejection, parseHocuspocusAuthToken } from './auth-token-schema.ts';
 import { BacklinkIndex } from './backlink-index.ts';
 import { shellEscape } from './bash/shell-escape.ts';
+import { bootElapsedMs, recordBootPhase, setBootField } from './boot-timings.ts';
 import {
   CC1Broadcaster,
   isConfigDoc,
@@ -157,7 +158,7 @@ import { assertCompatibleStateManifest } from './state-manifest.ts';
 import { SyncEngine } from './sync-engine.ts';
 import { createSyncHandshakeSpanExtension } from './sync-handshake-span-extension.ts';
 import { TagIndex } from './tag-index.ts';
-import { initTelemetry, shutdownTelemetry } from './telemetry.ts';
+import { initTelemetry, shutdownTelemetry, withSpan } from './telemetry.ts';
 import { cleanupOrphanUploadTempfiles } from './upload-streaming.ts';
 
 export interface ServerOptions {
@@ -1981,8 +1982,9 @@ export function createServer(options: ServerOptions): ServerInstance {
     switchReconciledBaseScope(startupBranch);
     backlinkIndex.switchBranch(startupBranch);
 
+    const indexesStartMono = performance.now();
     try {
-      {
+      await withSpan('ok.boot.indexes', undefined, async () => {
         const branch = getActiveBranch();
         try {
           const cacheLoaded = await backlinkIndex.loadFromDisk(branch);
@@ -2011,59 +2013,66 @@ export function createServer(options: ServerOptions): ServerInstance {
             '[backlinks] startup init failed; index will populate incrementally via watcher',
           );
         }
-      }
-      watcher = await startWatcher(contentDir, onDiskEvent, contentFilter);
-      try {
-        await tagIndex.init();
-      } catch (err) {
-        log.error(
-          { err },
-          '[tag-index] startup re-init failed; tag index updates incrementally via watcher events',
+        const seedWalkStartMono = performance.now();
+        watcher = await withSpan('ok.boot.seed-walk', undefined, async () =>
+          startWatcher(contentDir, onDiskEvent, contentFilter),
         );
-        degraded.push('tag-index');
-      }
-      let seedSkipCount = 0;
-      try {
-        if (singleDocRelPath !== undefined) {
-          seedSingleDirBasenameIndex({
-            contentDir,
-            basenameIndex,
-            onSkip: (reason, code, path) => {
-              seedSkipCount++;
-              log.warn(
-                { reason, code, path },
-                `[basename-index] skipped entry during single-file seed (${reason}${code ? ` ${code}` : ''})`,
-              );
-            },
-          });
-        } else {
-          await seedBasenameIndex({
-            contentDir,
-            contentFilter,
-            basenameIndex,
-            onSkip: (reason, code, path) => {
-              seedSkipCount++;
-              log.warn(
-                { reason, code, path },
-                `[basename-index] skipped entry during seed (${reason}${code ? ` ${code}` : ''})`,
-              );
-            },
-          });
-        }
-        if (seedSkipCount > 0) {
-          log.warn(
-            { count: seedSkipCount },
-            `[basename-index] startup seed completed with ${seedSkipCount} skipped entries — embeds under inaccessible subtrees will not resolve`,
+        recordBootPhase('seedWalkMs', Math.round(performance.now() - seedWalkStartMono));
+        try {
+          await tagIndex.init();
+        } catch (err) {
+          log.error(
+            { err },
+            '[tag-index] startup re-init failed; tag index updates incrementally via watcher events',
           );
-          degraded.push('basename-index-partial');
+          degraded.push('tag-index');
         }
-      } catch (err) {
-        log.error({ err }, '[basename-index] startup seed failed');
-        degraded.push('basename-index');
-      }
+        let seedSkipCount = 0;
+        try {
+          if (singleDocRelPath !== undefined) {
+            seedSingleDirBasenameIndex({
+              contentDir,
+              basenameIndex,
+              onSkip: (reason, code, path) => {
+                seedSkipCount++;
+                log.warn(
+                  { reason, code, path },
+                  `[basename-index] skipped entry during single-file seed (${reason}${code ? ` ${code}` : ''})`,
+                );
+              },
+            });
+          } else {
+            await seedBasenameIndex({
+              contentDir,
+              contentFilter,
+              basenameIndex,
+              onSkip: (reason, code, path) => {
+                seedSkipCount++;
+                log.warn(
+                  { reason, code, path },
+                  `[basename-index] skipped entry during seed (${reason}${code ? ` ${code}` : ''})`,
+                );
+              },
+            });
+          }
+          if (seedSkipCount > 0) {
+            log.warn(
+              { count: seedSkipCount },
+              `[basename-index] startup seed completed with ${seedSkipCount} skipped entries — embeds under inaccessible subtrees will not resolve`,
+            );
+            degraded.push('basename-index-partial');
+          }
+        } catch (err) {
+          log.error({ err }, '[basename-index] startup seed failed');
+          degraded.push('basename-index');
+        }
+      });
     } catch (err) {
       log.error({ err }, '[server] disk bridge watcher failed to start');
       degraded.push('file-watcher');
+    } finally {
+      recordBootPhase('indexesMs', Math.round(performance.now() - indexesStartMono));
+      if (watcher) setBootField('fileCount', watcher.getFileIndex().size);
     }
 
     try {
@@ -2479,6 +2488,9 @@ export function createServer(options: ServerOptions): ServerInstance {
     signalChannel('backlinks');
     signalChannel('graph');
     signalChannel('tags');
+
+    const readyElapsed = bootElapsedMs();
+    if (readyElapsed !== undefined) recordBootPhase('readyMs', readyElapsed);
   }
 
   initAsync().then(resolveReady, rejectReady);

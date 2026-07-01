@@ -160,6 +160,12 @@ export interface WindowManagerDeps {
   };
   onUtilityMessage?(msg: unknown): void;
   onUtilityExit?(utility: UtilityProcessLike): void;
+  startup?: {
+    traceparent?: string;
+    markServerLockReady?(info?: { startedAt?: string; apiOrigin?: string }): void;
+    markWindowCreated?(): void;
+    markLoadUrlResolved?(): void;
+  };
 }
 
 export function signalDetachedServerStop(
@@ -596,6 +602,10 @@ export class WindowManager {
         { event: 'desktop-server-spawned-detached', pid: handle.pid, port: lock.port, lockDir },
         '[window-manager] detached server ready',
       );
+      this.deps.startup?.markServerLockReady?.({
+        startedAt: lock.startedAt,
+        apiOrigin: `http://localhost:${lock.port}`,
+      });
       return this.attachToExistingServer({
         projectPath,
         canonicalKey,
@@ -681,6 +691,7 @@ export class WindowManager {
     });
 
     const { port, apiOrigin } = await ready;
+    this.deps.startup?.markServerLockReady?.({ apiOrigin });
 
     if (this.deps.onUtilityMessage) {
       const onMessage = this.deps.onUtilityMessage;
@@ -713,11 +724,15 @@ export class WindowManager {
       `--ok-project-name=${projectName}`,
       `--ok-mode=editor`,
       `--ok-app-version=${this.deps.appVersion}`,
+      ...(this.deps.startup?.traceparent !== undefined
+        ? [`--ok-startup-traceparent=${this.deps.startup.traceparent}`]
+        : []),
     ];
     const window = this.deps.createWindow({
       additionalArguments,
       title: formatEditorTitle(projectName),
     });
+    this.deps.startup?.markWindowCreated?.();
 
     if (opts.pendingDeepLinkTarget) {
       const doc = opts.pendingDeepLinkTarget.path;
@@ -759,6 +774,7 @@ export class WindowManager {
     } else {
       await window.loadFile(this.deps.rendererEntryPath);
     }
+    this.deps.startup?.markLoadUrlResolved?.();
 
     window.on('closed', () => {
       disposeShowGate();
@@ -1109,6 +1125,8 @@ export class WindowManager {
       'attaching to existing OpenKnowledge server',
     );
 
+    this.deps.startup?.markServerLockReady?.({ startedAt: lock.startedAt, apiOrigin });
+
     const window = this.deps.createWindow({
       additionalArguments: [
         `--ok-collab-url=ws://localhost:${port}/collab`,
@@ -1117,9 +1135,13 @@ export class WindowManager {
         `--ok-project-name=${projectName}`,
         `--ok-mode=editor`,
         `--ok-app-version=${this.deps.appVersion}`,
+        ...(this.deps.startup?.traceparent !== undefined
+          ? [`--ok-startup-traceparent=${this.deps.startup.traceparent}`]
+          : []),
       ],
       title: formatEditorTitle(projectName),
     });
+    this.deps.startup?.markWindowCreated?.();
 
     if (pendingDeepLinkTarget) {
       const doc = pendingDeepLinkTarget.path;
@@ -1183,6 +1205,7 @@ export class WindowManager {
     } else {
       await window.loadFile(this.deps.rendererEntryPath);
     }
+    this.deps.startup?.markLoadUrlResolved?.();
 
     if (this.deps.createKeepalive) {
       const existingKeepalive = this.keepalives.get(canonicalKey);

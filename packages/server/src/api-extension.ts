@@ -405,6 +405,7 @@ import {
   type GraphNode as IndexedGraphNode,
   isOrphanMode,
 } from './backlink-index.ts';
+import { getBootTimings } from './boot-timings.ts';
 import { composeAndWriteRawBody, replaceRawBody } from './bridge-intake.ts';
 import { isConfigDoc, isSystemDoc } from './cc1-broadcast.ts';
 import type { ResolveStrategy } from './conflict-storage.ts';
@@ -6323,6 +6324,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         }
         const currentBranch = getActiveBranch();
         const currentDiskAckSVs = getDiskAckSVs?.();
+        const boot = getBootTimings();
         successResponse(
           res,
           200,
@@ -6331,6 +6333,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
             serverInstanceId,
             currentBranch,
             ...(currentDiskAckSVs !== undefined ? { currentDiskAckSVs } : {}),
+            ...(boot !== undefined ? { boot } : {}),
           },
           {
             handler: 'server-info',

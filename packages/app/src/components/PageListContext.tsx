@@ -9,6 +9,7 @@ import {
 import { subscribeToDocumentsChanged } from '@/lib/documents-events';
 import { fetchDocumentListShared } from '@/lib/documents-fetch';
 import { parseApiError } from '@/lib/parse-api-error';
+import { pageListReady } from '@/lib/perf/startup-marks';
 import { deriveKnownFolderPaths } from './navigation-targets';
 
 export interface PageMeta {
@@ -183,6 +184,7 @@ export function PageListProvider({ children }: { children: ReactNode }) {
         setServerFilePaths(new Set(documentList.filePaths));
         setOptimisticPages((prev) => pruneConfirmedOptimisticPages(prev, pageNames));
         setError(null);
+        pageListReady();
       })
       .catch((err) => {
         if (requestId !== latestRequestIdRef.current) return;

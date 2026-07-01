@@ -776,6 +776,8 @@ export {
   SeedPlanSuccessSchema,
   type SemanticIndexStatus,
   SemanticIndexStatusSchema,
+  type ServerInfoBoot,
+  ServerInfoBootSchema,
   type ServerInfoSuccess,
   ServerInfoSuccessSchema,
   type ShareConstructUrlErrorCode,

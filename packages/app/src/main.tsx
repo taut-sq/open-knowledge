@@ -1,6 +1,7 @@
 import { initFrontendTelemetry } from './telemetry';
 
 initFrontendTelemetry();
+void import('./telemetry-startup').then((m) => m.initStartupTrace());
 
 import '@/lib/perf/scheduler-polyfill-shim';
 

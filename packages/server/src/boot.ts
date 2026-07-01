@@ -12,9 +12,11 @@ import {
   resolveGitDir,
   resolveGitDirDetailed,
 } from '@inkeep/open-knowledge-core/shadow-repo-layout';
+import { context, propagation } from '@opentelemetry/api';
 import { simpleGit } from 'simple-git';
 import sirv from 'sirv';
 import { createAssetServeMiddleware } from './asset-serve-middleware.ts';
+import { bootElapsedMs, recordBootPhase, startBootTimings } from './boot-timings.ts';
 import type { Config } from './config/schema.ts';
 import { ConflictStore } from './conflict-storage.ts';
 import { stripDocExtension } from './doc-extensions.ts';
@@ -158,6 +160,8 @@ export interface BootedServer {
 const PINO_REDACT_MAX_DEPTH = 5;
 
 export async function bootServer(opts: BootServerOptions): Promise<BootedServer> {
+  startBootTimings();
+
   const sinkProjectDir = opts.projectDir ?? opts.contentDir;
   const localSinkConfig = resolveLocalSinkConfig({
     projectDir: sinkProjectDir,
@@ -187,7 +191,21 @@ export async function bootServer(opts: BootServerOptions): Promise<BootedServer>
     spanAttributes['ok.worktree.gitdir'] = normalizeFsPath(worktreeGitdir);
   }
 
-  return withSpan('ok.boot', { attributes: spanAttributes }, async () => bootServerInner(opts));
+  const startupTraceparent = process.env.OK_STARTUP_TRACEPARENT;
+  const bootSpan = () =>
+    withSpan('ok.boot', { attributes: spanAttributes }, async () => bootServerInner(opts));
+  if (startupTraceparent) {
+    try {
+      const parentCtx = propagation.extract(context.active(), { traceparent: startupTraceparent });
+      return context.with(parentCtx, bootSpan);
+    } catch (err) {
+      getLogger('boot').warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'ok.boot trace-join failed — starting unparented boot',
+      );
+    }
+  }
+  return bootSpan();
 }
 
 async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
@@ -429,6 +447,9 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     await destroyHocuspocus().catch(() => {});
     throw err;
   }
+
+  const listenMs = bootElapsedMs();
+  if (listenMs !== undefined) recordBootPhase('httpListenMs', listenMs);
 
   const addr = httpServer.address();
   const realPort = typeof addr === 'object' && addr !== null ? addr.port : (opts.port ?? 0);

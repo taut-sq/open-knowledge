@@ -81,6 +81,7 @@ export interface OkDesktopConfig {
   readonly e2eSmoke: boolean;
   readonly singleFile: boolean;
   readonly initialDoc: string | null;
+  readonly startupTraceparent?: string;
 }
 
 export type OkMenuAction =
@@ -722,6 +723,10 @@ export interface OkDesktopBridge {
   editor: {
     notifyActiveTargetChanged(target: OkEditorActiveTargetSnapshot): void;
     notifyViewMenuStateChanged(state: Partial<OkEditorViewMenuStateSnapshot>): void;
+  };
+
+  startup: {
+    reportMarks(marks: { pageListReadyMs: number; firstContentMs: number }): void;
   };
 
   sidebar: {

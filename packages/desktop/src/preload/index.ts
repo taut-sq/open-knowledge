@@ -157,6 +157,7 @@ function readConfigFromArgv(): OkDesktopConfig {
   const singleFile = parseArg('single-file') === '1';
   const initialDoc = parseArg('initial-doc') ?? null;
   const e2eSmoke = parseArg('e2e-smoke') === '1';
+  const startupTraceparent = parseArg('startup-traceparent');
   return Object.freeze({
     collabUrl,
     apiOrigin,
@@ -166,6 +167,7 @@ function readConfigFromArgv(): OkDesktopConfig {
     e2eSmoke,
     singleFile,
     initialDoc,
+    ...(startupTraceparent !== undefined ? { startupTraceparent } : {}),
   });
 }
 
@@ -479,6 +481,12 @@ const bridge: OkDesktopBridge = {
     },
     notifyViewMenuStateChanged: (state: Partial<OkEditorViewMenuStateSnapshot>) => {
       invoke('ok:editor:view-menu-state-changed', state).catch(() => {});
+    },
+  },
+
+  startup: {
+    reportMarks: (marks: { pageListReadyMs: number; firstContentMs: number }) => {
+      invoke('ok:startup:renderer-marks', marks).catch(() => {});
     },
   },
 

@@ -35,6 +35,7 @@ import {
 import {
   CLIENT_VERSION_HEADER,
   PROTOCOL_VERSION,
+  ServerInfoSuccessSchema,
   SPAWN_ERROR_LOG,
   TERMINAL_CLIS,
   type TerminalCli,
@@ -207,6 +208,8 @@ import { createShowGateRegistry, type ShowGateRegistry } from './show-gate.ts';
 import { reclaimProjectSkillsOnProjectOpen, reclaimUserSkillsOnLaunch } from './skill-reclaim.ts';
 import { attachSpellcheckContextMenu } from './spellcheck-context-menu.ts';
 import { popSpellcheckMenu } from './spellcheck-menu.ts';
+import { beginRoot, childSpan, endRoot, injectTraceparent } from './startup-trace.ts';
+import { type RendererMarks, StartupWaterfall } from './startup-waterfall.ts';
 import {
   type AppState,
   addRecentProject,
@@ -428,6 +431,66 @@ let navigatorWindow: BrowserWindowLike | null = null;
 let wm: WindowManager;
 let terminalReaper: TerminalReaper | null = null;
 const dockVisibleForWindow = new Map<number, boolean>();
+const startupWaterfall = new StartupWaterfall({ otelEnabled: false });
+let firstWindowShown = false;
+let waterfallDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
+
+function emitStartupWaterfall(): void {
+  if (waterfallDeadlineTimer !== undefined) {
+    clearTimeout(waterfallDeadlineTimer);
+    waterfallDeadlineTimer = undefined;
+  }
+  const payload = startupWaterfall.emit({
+    info: (obj, msg) => getLogger('startup').info(obj, msg),
+  });
+  if (payload !== undefined) {
+    if (startupWaterfall.otelEnabled) {
+      for (const phase of startupWaterfall.mainPhaseIntervals()) {
+        childSpan(phase.name, {}, phase.startMs, phase.endMs);
+      }
+    }
+    endRoot();
+  }
+}
+
+function onFirstWindowShown(): void {
+  if (firstWindowShown) return;
+  firstWindowShown = true;
+  startupWaterfall.mark('windowShown');
+  if (startupWaterfall.readyToEmit) {
+    emitStartupWaterfall();
+    return;
+  }
+  waterfallDeadlineTimer = setTimeout(() => {
+    waterfallDeadlineTimer = undefined;
+    emitStartupWaterfall();
+  }, startupWaterfall.flushDeadlineMs);
+  waterfallDeadlineTimer.unref?.();
+}
+
+let serverBootFetched = false;
+function maybeFetchServerBoot(apiOrigin: string): void {
+  if (serverBootFetched) return;
+  serverBootFetched = true;
+  void (async () => {
+    try {
+      const res = await fetch(`${apiOrigin}/api/server-info`, {
+        signal: AbortSignal.timeout(startupWaterfall.flushDeadlineMs),
+      });
+      if (!res.ok) return;
+      const parsed = ServerInfoSuccessSchema.safeParse(await res.json());
+      if (!parsed.success || parsed.data.boot === undefined) return;
+      startupWaterfall.ingestServerBoot(parsed.data.boot);
+      if (firstWindowShown && startupWaterfall.canEmit) emitStartupWaterfall();
+    } catch {}
+  })();
+}
+
+function ingestRendererStartupMarks(marks: RendererMarks): void {
+  startupWaterfall.ingestRendererMarks(marks);
+  if (firstWindowShown && startupWaterfall.canEmit) emitStartupWaterfall();
+}
+
 const showGate: ShowGateRegistry = createShowGateRegistry({
   log: {
     warn: (obj, msg) => {
@@ -436,6 +499,7 @@ const showGate: ShowGateRegistry = createShowGateRegistry({
   },
   setTimeout: (cb, ms) => setTimeout(cb, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  onShown: () => onFirstWindowShown(),
 });
 
 const reducedTransparencyDeps: ReducedTransparencyDeps = {
@@ -559,9 +623,13 @@ function ensureWindowManager() {
       if (process.platform === 'darwin') app.focus({ steal: true });
     },
     forkUtility: (entry, args, opts) => {
+      startupWaterfall.mark('serverSpawned');
       const child = utilityProcess.fork(entry, args, {
         ...opts,
-        env: buildUtilityForkEnv(process.env),
+        env: buildUtilityForkEnv(process.env, {
+          startupTraceparent: injectTraceparent(),
+          otlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        }),
       } as unknown as Parameters<typeof utilityProcess.fork>[2]);
       return child as unknown as UtilityProcessLike;
     },
@@ -620,10 +688,14 @@ function ensureWindowManager() {
               reactShellDistDir,
               contentDir,
               spawnErrorLogFd,
-              env: buildUtilityForkEnv(process.env),
+              env: buildUtilityForkEnv(process.env, {
+                startupTraceparent: injectTraceparent(),
+                otlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+              }),
               ...(singleFile !== undefined ? { singleFile, projectDir } : {}),
             });
             let childRef: ReturnType<typeof spawn>;
+            startupWaterfall.mark('serverSpawned');
             try {
               childRef = spawn(spawnArgs.file, spawnArgs.args, spawnArgs.opts);
             } catch (spawnErr) {
@@ -710,6 +782,17 @@ function ensureWindowManager() {
       readServerLock: (lockDir) => readServerLock(lockDir),
     }),
     showGate,
+    startup: {
+      get traceparent() {
+        return injectTraceparent();
+      },
+      markServerLockReady: (info) => {
+        startupWaterfall.mark('serverLockReady');
+        if (info?.apiOrigin !== undefined) maybeFetchServerBoot(info.apiOrigin);
+      },
+      markWindowCreated: () => startupWaterfall.mark('windowCreated'),
+      markLoadUrlResolved: () => startupWaterfall.mark('loadUrlResolved'),
+    },
   });
 }
 
@@ -1999,6 +2082,14 @@ function registerIpcHandlers() {
     return undefined;
   });
 
+  handle('ok:startup:renderer-marks', async (_event, marks) => {
+    if (!Number.isFinite(marks?.pageListReadyMs) || !Number.isFinite(marks?.firstContentMs)) {
+      return undefined;
+    }
+    ingestRendererStartupMarks(marks);
+    return undefined;
+  });
+
   handle('ok:project:get-info', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) throw new Error('webContents has no parent BrowserWindow');
@@ -2653,6 +2744,8 @@ function bootPrimaryInstance(): void {
   app
     .whenReady()
     .then(async () => {
+      startupWaterfall.mark('appReady');
+      startupWaterfall.otelEnabled = beginRoot();
       const userDataMigrationLog = getLogger('userdata-migration');
       const userDataMigration = await migrateLegacyUserDataDir({
         userDataDir: app.getPath('userData'),
@@ -2687,6 +2780,7 @@ function bootPrimaryInstance(): void {
       });
       appState = result.appState;
       pendingSchemaIncompatibility = result.pendingSchemaIncompatibility;
+      startupWaterfall.mark('bootstrapDone');
 
       app.on('browser-window-created', (_event, win) => {
         win.webContents.once('did-finish-load', () => {
@@ -2963,6 +3057,8 @@ function bootPrimaryInstance(): void {
 
   app.on('before-quit', () => {
     getLogger('lifecycle').info({}, 'before-quit');
+    emitStartupWaterfall();
+    endRoot();
     flushDesktopLogger();
   });
   electronAutoUpdater.on('before-quit-for-update', () => {

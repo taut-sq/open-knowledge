@@ -9,6 +9,7 @@ interface ShowGateRegistryDeps {
   setTimeout: (cb: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
   timeoutMs?: number;
+  onShown?: (kind: WindowKind) => void;
 }
 
 export interface ShowGateRegistry {
@@ -40,6 +41,18 @@ export function createShowGateRegistry(deps: ShowGateRegistryDeps): ShowGateRegi
     try {
       window.show?.();
       state.shown = true;
+      try {
+        deps.onShown?.(state.kind);
+      } catch (cbErr) {
+        deps.log?.warn(
+          {
+            event: 'show-gate-on-shown-failed',
+            windowKind: state.kind,
+            error: cbErr instanceof Error ? cbErr.message : String(cbErr),
+          },
+          'show-gate onShown callback threw',
+        );
+      }
     } catch (err) {
       deps.log?.warn(
         {

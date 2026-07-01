@@ -719,6 +719,10 @@ export interface OkDesktopBridge {
     notifyViewMenuStateChanged(state: Partial<OkEditorViewMenuStateSnapshot>): void;
   };
 
+  startup: {
+    reportMarks(marks: { pageListReadyMs: number; firstContentMs: number }): void;
+  };
+
   sidebar: {
     expandAll(cb: () => void): OkUnsubscribe;
     collapseAll(cb: () => void): OkUnsubscribe;

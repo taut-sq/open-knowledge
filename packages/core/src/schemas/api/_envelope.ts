@@ -4,11 +4,22 @@ import { z } from 'zod';
 import { URN_UUID_RE } from './_shared.ts';
 import { isValidBranchName } from './share.ts';
 
+export const ServerInfoBootSchema = z.object({
+  startedAt: z.string().min(1),
+  httpListenMs: z.number().nonnegative().optional(),
+  seedWalkMs: z.number().nonnegative().optional(),
+  indexesMs: z.number().nonnegative().optional(),
+  readyMs: z.number().nonnegative().optional(),
+  fileCount: z.number().nonnegative().optional(),
+});
+export type ServerInfoBoot = z.infer<typeof ServerInfoBootSchema>;
+
 export const ServerInfoSuccessSchema = z
   .object({
     serverInstanceId: z.string().min(1),
     currentBranch: z.string().min(1).optional(),
     currentDiskAckSVs: z.record(z.string().min(1), z.string().min(1)).optional(),
+    boot: ServerInfoBootSchema.optional(),
   })
   .loose() satisfies StandardSchemaV1;
 export type ServerInfoSuccess = z.infer<typeof ServerInfoSuccessSchema>;

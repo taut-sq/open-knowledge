@@ -9,13 +9,16 @@ import { hostname, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { emitToleranceFire, OK_DIR } from '@inkeep/open-knowledge-core';
-import { context, metrics, trace } from '@opentelemetry/api';
+import { context, metrics, propagation, trace } from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
 import { bootServer } from './boot.ts';
+import { getBootTimings } from './boot-timings.ts';
 import { ConfigSchema } from './config/schema.ts';
 import { parseKeepaliveConnectionId } from './mcp-mount.ts';
 import { shutdownTelemetry } from './telemetry.ts';
@@ -783,6 +786,103 @@ describe('bootServer — ok.boot OTel span attributes', () => {
     expect(bootSpans[0]?.attributes['ok.worktree.gitdir']).not.toBe(
       bootSpans[1]?.attributes['ok.worktree.gitdir'],
     );
+  });
+
+  test('OK_STARTUP_TRACEPARENT (valid): ok.boot joins the desktop-main launch trace', async () => {
+    const parentTraceId = '0af7651916cd43dd8448eb211c80319c';
+    const prev = process.env.OK_STARTUP_TRACEPARENT;
+    process.env.OK_STARTUP_TRACEPARENT = `00-${parentTraceId}-b7ad6b7169203331-01`;
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+    propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+    const contentDir = mkdtempSync(resolve(tmpDir, 'traceparent-valid-'));
+    await execFileAsync('git', ['init', '--initial-branch=main', contentDir]);
+    seedOkScaffold(contentDir);
+
+    let booted: Awaited<ReturnType<typeof bootServer>> | null = null;
+    try {
+      booted = await bootServer({
+        host: '127.0.0.1',
+        config: TEST_CONFIG,
+        contentDir,
+        port: 0,
+        quiet: true,
+        gitEnabled: false,
+        idleShutdownMs: null,
+        attachUiSibling: false,
+      });
+      const bootSpan = (exporter?.getFinishedSpans() ?? []).find((s) => s.name === 'ok.boot');
+      expect(bootSpan).toBeDefined();
+      expect(bootSpan?.spanContext().traceId).toBe(parentTraceId);
+    } finally {
+      if (booted) await booted.destroy();
+      if (prev === undefined) delete process.env.OK_STARTUP_TRACEPARENT;
+      else process.env.OK_STARTUP_TRACEPARENT = prev;
+    }
+  });
+
+  test('OK_STARTUP_TRACEPARENT (malformed): boot still completes; ok.boot is a fresh root', async () => {
+    const prev = process.env.OK_STARTUP_TRACEPARENT;
+    process.env.OK_STARTUP_TRACEPARENT = 'not-a-valid-traceparent';
+    const contentDir = mkdtempSync(resolve(tmpDir, 'traceparent-malformed-'));
+    await execFileAsync('git', ['init', '--initial-branch=main', contentDir]);
+    seedOkScaffold(contentDir);
+
+    let booted: Awaited<ReturnType<typeof bootServer>> | null = null;
+    try {
+      booted = await bootServer({
+        host: '127.0.0.1',
+        config: TEST_CONFIG,
+        contentDir,
+        port: 0,
+        quiet: true,
+        gitEnabled: false,
+        idleShutdownMs: null,
+        attachUiSibling: false,
+      });
+      expect(booted.port).toBeGreaterThan(0);
+      const bootSpan = (exporter?.getFinishedSpans() ?? []).find((s) => s.name === 'ok.boot');
+      expect(bootSpan).toBeDefined();
+      expect(bootSpan?.spanContext().traceId).toMatch(/^[0-9a-f]{32}$/);
+    } finally {
+      if (booted) await booted.destroy();
+      if (prev === undefined) delete process.env.OK_STARTUP_TRACEPARENT;
+      else process.env.OK_STARTUP_TRACEPARENT = prev;
+    }
+  });
+});
+
+describe('bootServer — boot timings recorded end-to-end', () => {
+  test('a full boot populates httpListen / seedWalk / indexes / ready / fileCount', async () => {
+    const projectDir = mkdtempSync(resolve(tmpDir, 'boot-timings-e2e-'));
+    await execFileAsync('git', ['init', '--initial-branch=main', projectDir]);
+    seedOkScaffold(projectDir);
+    writeFileSync(resolve(projectDir, 'note.md'), '# note\n', 'utf-8');
+
+    const booted = await bootServer({
+      host: '127.0.0.1',
+      config: TEST_CONFIG,
+      projectDir,
+      contentDir: projectDir,
+      port: 0,
+      quiet: true,
+      gitEnabled: false,
+      idleShutdownMs: null,
+      attachUiSibling: false,
+    });
+    try {
+      await booted.ready;
+      const timings = getBootTimings();
+      expect(timings).toBeDefined();
+      expect(typeof timings?.startedAt).toBe('string');
+      expect(typeof timings?.httpListenMs).toBe('number');
+      expect(typeof timings?.seedWalkMs).toBe('number');
+      expect(typeof timings?.indexesMs).toBe('number');
+      expect(typeof timings?.readyMs).toBe('number');
+      expect(typeof timings?.fileCount).toBe('number');
+      expect(timings?.fileCount).toBeGreaterThanOrEqual(1);
+    } finally {
+      await booted.destroy();
+    }
   });
 });
 

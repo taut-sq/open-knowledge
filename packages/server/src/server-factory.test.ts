@@ -467,6 +467,8 @@ describe('createServer() degraded signal', () => {
     expect(src).toContain("degraded.push('head-watcher')");
 
     expect(src).toMatch(/return\s*\{[^}]*degraded[^}]*\}/s);
+
+    expect(src).toMatch(/finally\s*\{[\s\S]*?recordBootPhase\('indexesMs'/);
   });
 
   test('degraded is readonly — push and reassignment are compile-time errors', async () => {

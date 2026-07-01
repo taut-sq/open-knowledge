@@ -23,4 +23,39 @@ describe('buildUtilityForkEnv', () => {
     const env = buildUtilityForkEnv();
     expect(env.OK_ELECTRON_PROTOCOL_HOST).toBe('1');
   });
+
+  test('sets OK_STARTUP_TRACEPARENT when provided', () => {
+    const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+    const env = buildUtilityForkEnv({}, { startupTraceparent: traceparent });
+    expect(env.OK_STARTUP_TRACEPARENT).toBe(traceparent);
+  });
+
+  test('omits OK_STARTUP_TRACEPARENT when not provided (no lingering value)', () => {
+    const env = buildUtilityForkEnv({});
+    expect(env.OK_STARTUP_TRACEPARENT).toBeUndefined();
+    const env2 = buildUtilityForkEnv({}, {});
+    expect(env2.OK_STARTUP_TRACEPARENT).toBeUndefined();
+  });
+
+  test('passes OTEL_EXPORTER_OTLP_ENDPOINT through when supplied', () => {
+    const env = buildUtilityForkEnv({}, { otlpEndpoint: 'http://localhost:14318' });
+    expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://localhost:14318');
+  });
+
+  test('leaves an inherited OTEL_EXPORTER_OTLP_ENDPOINT intact when not overridden', () => {
+    const env = buildUtilityForkEnv({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318' });
+    expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://collector:4318');
+  });
+
+  test('startupTraceparent + otlpEndpoint coexist with the protocol-host marker', () => {
+    const env = buildUtilityForkEnv(
+      { PATH: '/usr/bin' },
+      { startupTraceparent: 'tp', otlpEndpoint: 'http://x:4318' },
+    );
+    expect(env.OK_ELECTRON_PROTOCOL_HOST).toBe('1');
+    expect(env.OK_LOCK_KIND).toBe('interactive');
+    expect(env.OK_STARTUP_TRACEPARENT).toBe('tp');
+    expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://x:4318');
+    expect(env.PATH).toBe('/usr/bin');
+  });
 });

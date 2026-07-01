@@ -412,6 +412,10 @@ export interface RequestChannels {
     args: [opts?: { reducedTransparency?: boolean }];
     result: undefined;
   };
+  'ok:startup:renderer-marks': {
+    args: [marks: { pageListReadyMs: number; firstContentMs: number }];
+    result: undefined;
+  };
   'ok:debug:keyring-smoke': { args: []; result: KeyringSmokeResult };
   'ok:seed:plan': { args: [options?: SeedPlanOptions]; result: SeedPlanResult };
   'ok:seed:apply': {
