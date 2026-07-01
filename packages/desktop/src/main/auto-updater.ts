@@ -63,6 +63,8 @@ export type DispatchKind =
   | 'stale-pending-cleared'
   | 'attempted-install-reconciled'
   | 'install-failed-on-boot'
+  | 'install-failed-giveup'
+  | 'attempted-install-cross-channel'
   | 'cross-channel-blocked';
 
 interface StartAutoUpdaterOpts {
@@ -126,6 +128,8 @@ export const UPDATE_CHECK_JITTER_MS = 30 * 1000;
 export const RELAUNCH_WATCHDOG_MS = 15_000;
 
 export const STUCK_HINT_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
+export const INSTALL_FAILURE_MAX_SURFACES = 3;
 
 export const STUCK_HINT_DOWNLOAD_URL = 'https://github.com/inkeep/open-knowledge/releases';
 
@@ -526,7 +530,13 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
     }
     if (
       !persistSafely(
-        { ...state, versionPendingInstall: version, attemptedInstall: version },
+        {
+          ...state,
+          versionPendingInstall: version,
+          attemptedInstall: version,
+          attemptedInstallSurfacedCount:
+            state.attemptedInstall === version ? state.attemptedInstallSurfacedCount : 0,
+        },
         'update-downloaded',
       )
     )
@@ -659,7 +669,7 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
   if (state.attemptedInstall) {
     const attempted = state.attemptedInstall;
     if (installReached(currentVersion, attempted)) {
-      const next = { ...state, attemptedInstall: null };
+      const next = { ...state, attemptedInstall: null, attemptedInstallSurfacedCount: 0 };
       if (persistSafely(next, 'attempted-install-reconciled')) {
         state = next;
         onDispatch?.('attempted-install-reconciled');
@@ -669,23 +679,61 @@ export function startAutoUpdater(opts: StartAutoUpdaterOpts): StartAutoUpdaterHa
           running: currentVersion,
         });
       }
-    } else if (updatesEnabled) {
-      const next = { ...state, versionPendingInstall: attempted };
-      if (persistSafely(next, 'install-failed-on-boot')) {
+    } else if (channelFromVersion(attempted) !== channelFromVersion(currentVersion)) {
+      const next = {
+        ...state,
+        attemptedInstall: null,
+        attemptedInstallSurfacedCount: 0,
+        versionPendingInstall: null,
+      };
+      if (persistSafely(next, 'attempted-install-cross-channel')) {
         state = next;
-        logger.warn('attempted install did not take — surfacing failure notice', {
+        logger.info('cleared cross-channel attemptedInstall residue', {
           attempted,
           running: currentVersion,
         });
-        const fireInstallFailed = (): void => {
-          broadcastToAllWindows('ok:update:relaunch-failed', {
-            version: attempted,
-            downloadUrl: STUCK_HINT_DOWNLOAD_URL,
-          });
+        onDispatch?.('attempted-install-cross-channel');
+      }
+    } else if (updatesEnabled) {
+      if (state.attemptedInstallSurfacedCount >= INSTALL_FAILURE_MAX_SURFACES) {
+        const next = {
+          ...state,
+          attemptedInstall: null,
+          attemptedInstallSurfacedCount: 0,
+          versionPendingInstall: null,
         };
-        if (whenRendererReady) whenRendererReady(fireInstallFailed);
-        else fireInstallFailed();
-        onDispatch?.('install-failed-on-boot');
+        if (persistSafely(next, 'install-failed-giveup')) {
+          state = next;
+          logger.warn('attempted install exhausted its retry budget — clearing record', {
+            attempted,
+            running: currentVersion,
+            surfaced: INSTALL_FAILURE_MAX_SURFACES,
+          });
+          onDispatch?.('install-failed-giveup');
+        }
+      } else {
+        const next = {
+          ...state,
+          versionPendingInstall: attempted,
+          attemptedInstallSurfacedCount: state.attemptedInstallSurfacedCount + 1,
+        };
+        if (persistSafely(next, 'install-failed-on-boot')) {
+          state = next;
+          logger.warn('attempted install did not take — surfacing failure notice', {
+            attempted,
+            running: currentVersion,
+            surfaced: next.attemptedInstallSurfacedCount,
+          });
+          const fireInstallFailed = (): void => {
+            broadcastToAllWindows('ok:update:relaunch-failed', {
+              version: attempted,
+              downloadUrl: STUCK_HINT_DOWNLOAD_URL,
+            });
+          };
+          if (whenRendererReady) whenRendererReady(fireInstallFailed);
+          else fireInstallFailed();
+          onDispatch?.('install-failed-on-boot');
+        }
       }
     }
   }

@@ -39,6 +39,27 @@ describe('parseAppState M3 fields — coercion', () => {
     expect(parseAppState({ recentProjects: [] })?.attemptedInstall).toBeNull();
   });
 
+  test('attemptedInstallSurfacedCount: defaults to 0, round-trips a non-negative integer, coerces junk to 0', () => {
+    expect(emptyState().attemptedInstallSurfacedCount).toBe(0);
+    expect(
+      parseAppState({ recentProjects: [], attemptedInstallSurfacedCount: 2 })
+        ?.attemptedInstallSurfacedCount,
+    ).toBe(2);
+    expect(parseAppState({ recentProjects: [] })?.attemptedInstallSurfacedCount).toBe(0);
+    expect(
+      parseAppState({ recentProjects: [], attemptedInstallSurfacedCount: -3 })
+        ?.attemptedInstallSurfacedCount,
+    ).toBe(0);
+    expect(
+      parseAppState({ recentProjects: [], attemptedInstallSurfacedCount: 1.5 })
+        ?.attemptedInstallSurfacedCount,
+    ).toBe(0);
+    expect(
+      parseAppState({ recentProjects: [], attemptedInstallSurfacedCount: '2' })
+        ?.attemptedInstallSurfacedCount,
+    ).toBe(0);
+  });
+
   test('M1-forward-compat: pre-M3 blob without M3 keys returns valid state with defaults', () => {
     const raw = {
       recentProjects: [

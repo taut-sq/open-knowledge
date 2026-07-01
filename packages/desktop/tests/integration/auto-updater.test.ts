@@ -5,6 +5,7 @@ import {
   bootAutoUpdater,
   buildCheckNowResultFromError,
   type DispatchKind,
+  INSTALL_FAILURE_MAX_SURFACES,
   type IpcMainLike,
   installReached,
   isClassifiedUpdaterError,
@@ -1002,10 +1003,12 @@ describe('boot-time failed-install detection', () => {
     const { rig } = makeRig({
       attemptedInstall: '0.16.0-beta.3',
       appVersion: '0.16.0-beta.3',
+      attemptedInstallSurfacedCount: 2,
     });
     const failed = rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed');
     expect(failed).toHaveLength(0);
     expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(0);
     expect(rig.dispatches).toContain('attempted-install-reconciled' as DispatchKind);
     expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
   });
@@ -1014,9 +1017,11 @@ describe('boot-time failed-install detection', () => {
     const { rig } = makeRig({
       attemptedInstall: '0.16.0-beta.3',
       appVersion: '0.16.0',
+      attemptedInstallSurfacedCount: 2,
     });
     expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
     expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(0);
     expect(rig.dispatches).toContain('attempted-install-reconciled' as DispatchKind);
   });
 
@@ -1032,6 +1037,196 @@ describe('boot-time failed-install detection', () => {
     rig.updater.emit('update-downloaded', { version: '0.16.0-beta.3' });
     expect(rig.state.versionPendingInstall).toBe('0.16.0-beta.3');
     expect(rig.state.attemptedInstall).toBe('0.16.0-beta.3');
+  });
+
+  test('cross-channel residue (stable attempted, beta running) → silently cleared, no notice', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.24.0',
+      versionPendingInstall: '0.24.0',
+      appVersion: '0.23.0-beta.1',
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.state.versionPendingInstall).toBeNull();
+    expect(rig.dispatches).toContain('attempted-install-cross-channel' as DispatchKind);
+    expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+    expect(rig.dispatches).not.toContain('attempted-install-reconciled' as DispatchKind);
+  });
+
+  test('cross-channel residue (beta attempted, older stable running) → silently cleared', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.23.0-beta.5',
+      appVersion: '0.22.0',
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.dispatches).toContain('attempted-install-cross-channel' as DispatchKind);
+    expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('same-channel failure below budget → surfaces AND increments the counter', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.16.0-beta.3',
+      appVersion: '0.16.0-beta.1',
+      attemptedInstallSurfacedCount: 1,
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(1);
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(2);
+    expect(rig.dispatches).toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('retry budget exhausted → gives up, clears the record incl. pending marker', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.17.0-beta.1',
+      versionPendingInstall: '0.17.0-beta.1',
+      appVersion: '0.16.0-beta.1',
+      attemptedInstallSurfacedCount: INSTALL_FAILURE_MAX_SURFACES,
+    });
+    expect(rig.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(0);
+    expect(rig.state.attemptedInstall).toBeNull();
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(0);
+    expect(rig.state.versionPendingInstall).toBeNull();
+    expect(rig.dispatches).toContain('install-failed-giveup' as DispatchKind);
+    expect(rig.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+  });
+
+  test('surfaces exactly INSTALL_FAILURE_MAX_SURFACES times across reboots, then gives up', () => {
+    const state: AppState = {
+      ...emptyState(),
+      lastSeenVersion: '0.16.0-beta.1',
+      attemptedInstall: '0.16.0-beta.3',
+    };
+    const boot = () => {
+      const captured: CapturedSend[] = [];
+      const dispatches: DispatchKind[] = [];
+      startAutoUpdater({
+        updater: new FakeUpdater(),
+        ipcMain: makeFakeIpc(),
+        readState: () => state,
+        writeState: (next) => {
+          Object.assign(state, next);
+        },
+        getPrimaryWindow: () => makeFakeWindow(captured),
+        getAppVersion: () => '0.16.0-beta.1',
+        isPackaged: true,
+        clock: makeFakeClock(),
+        now: () => new Date(),
+        onDispatch: (k) => dispatches.push(k),
+        logger: {
+          info: mock(() => {}),
+          warn: mock(() => {}),
+          error: mock(() => {}),
+          debug: mock(() => {}),
+        },
+      });
+      return { captured, dispatches };
+    };
+    for (let i = 0; i < INSTALL_FAILURE_MAX_SURFACES; i++) {
+      const b = boot();
+      expect(b.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(1);
+      expect(b.dispatches).toContain('install-failed-on-boot' as DispatchKind);
+    }
+    expect(state.attemptedInstallSurfacedCount).toBe(INSTALL_FAILURE_MAX_SURFACES);
+    const giveup = boot();
+    expect(giveup.captured.filter((c) => c.channel === 'ok:update:relaunch-failed')).toHaveLength(
+      0,
+    );
+    expect(giveup.dispatches).toContain('install-failed-giveup' as DispatchKind);
+    expect(state.attemptedInstall).toBeNull();
+    const after = boot();
+    expect(after.dispatches).not.toContain('install-failed-on-boot' as DispatchKind);
+    expect(after.dispatches).not.toContain('install-failed-giveup' as DispatchKind);
+  });
+
+  test('update-downloaded of a NEW version resets the surface counter', () => {
+    const { rig } = makeRig({
+      attemptedInstall: '0.16.0-beta.3',
+      appVersion: '0.16.0-beta.1',
+      attemptedInstallSurfacedCount: 1,
+    });
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(2);
+    rig.updater.emit('update-downloaded', { version: '0.16.0-beta.5' });
+    expect(rig.state.attemptedInstall).toBe('0.16.0-beta.5');
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(0);
+  });
+
+  test('update-downloaded of the SAME version preserves the surface counter', () => {
+    const { rig } = makeRig({
+      isPackaged: false,
+      attemptedInstall: '0.16.0-beta.3',
+      appVersion: '0.16.0-beta.1',
+      attemptedInstallSurfacedCount: 2,
+    });
+    rig.updater.emit('update-downloaded', { version: '0.16.0-beta.3' });
+    expect(rig.state.versionPendingInstall).toBe('0.16.0-beta.3');
+    expect(rig.state.attemptedInstall).toBe('0.16.0-beta.3');
+    expect(rig.state.attemptedInstallSurfacedCount).toBe(2);
+  });
+
+  test('persist failure on the cross-channel branch → no clear, no dispatch', () => {
+    const captured: CapturedSend[] = [];
+    const state: AppState = {
+      ...emptyState(),
+      lastSeenVersion: '0.23.0-beta.1',
+      attemptedInstall: '0.24.0',
+    };
+    const dispatches: DispatchKind[] = [];
+    startAutoUpdater({
+      updater: new FakeUpdater(),
+      ipcMain: makeFakeIpc(),
+      readState: () => state,
+      writeState: () => {
+        throw new Error('EACCES');
+      },
+      getPrimaryWindow: () => makeFakeWindow(captured),
+      getAppVersion: () => '0.23.0-beta.1',
+      isPackaged: true,
+      clock: makeFakeClock(),
+      now: () => new Date(),
+      onDispatch: (k) => dispatches.push(k),
+      logger: {
+        info: mock(() => {}),
+        warn: mock(() => {}),
+        error: mock(() => {}),
+        debug: mock(() => {}),
+      },
+    });
+    expect(dispatches).not.toContain('attempted-install-cross-channel' as DispatchKind);
+    expect(state.attemptedInstall).toBe('0.24.0');
+  });
+
+  test('persist failure on the giveup branch → record stays armed, no dispatch', () => {
+    const captured: CapturedSend[] = [];
+    const state: AppState = {
+      ...emptyState(),
+      lastSeenVersion: '0.16.0-beta.1',
+      attemptedInstall: '0.16.0-beta.3',
+      attemptedInstallSurfacedCount: INSTALL_FAILURE_MAX_SURFACES,
+    };
+    const dispatches: DispatchKind[] = [];
+    startAutoUpdater({
+      updater: new FakeUpdater(),
+      ipcMain: makeFakeIpc(),
+      readState: () => state,
+      writeState: () => {
+        throw new Error('EACCES');
+      },
+      getPrimaryWindow: () => makeFakeWindow(captured),
+      getAppVersion: () => '0.16.0-beta.1',
+      isPackaged: true,
+      clock: makeFakeClock(),
+      now: () => new Date(),
+      onDispatch: (k) => dispatches.push(k),
+      logger: {
+        info: mock(() => {}),
+        warn: mock(() => {}),
+        error: mock(() => {}),
+        debug: mock(() => {}),
+      },
+    });
+    expect(dispatches).not.toContain('install-failed-giveup' as DispatchKind);
+    expect(state.attemptedInstall).toBe('0.16.0-beta.3');
+    expect(state.attemptedInstallSurfacedCount).toBe(INSTALL_FAILURE_MAX_SURFACES);
   });
 
   test('persist failure on the failure branch → no broadcast, no dispatch', () => {

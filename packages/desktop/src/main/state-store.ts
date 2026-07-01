@@ -28,6 +28,7 @@ export interface AppState {
   lastOpenedProject: string | null;
   versionPendingInstall: string | null;
   attemptedInstall: string | null;
+  attemptedInstallSurfacedCount: number;
   lastSeenVersion: string | null;
   lastSuccessfulCheckAt: string | null;
   stuckHintShown: boolean;
@@ -47,6 +48,7 @@ export function emptyState(): AppState {
     lastOpenedProject: null,
     versionPendingInstall: null,
     attemptedInstall: null,
+    attemptedInstallSurfacedCount: 0,
     lastSeenVersion: null,
     lastSuccessfulCheckAt: null,
     stuckHintShown: false,
@@ -294,6 +296,12 @@ export function parseAppState(raw: unknown): AppState | null {
   const versionPendingInstall =
     typeof obj.versionPendingInstall === 'string' ? obj.versionPendingInstall : null;
   const attemptedInstall = typeof obj.attemptedInstall === 'string' ? obj.attemptedInstall : null;
+  const attemptedInstallSurfacedCount =
+    typeof obj.attemptedInstallSurfacedCount === 'number' &&
+    Number.isInteger(obj.attemptedInstallSurfacedCount) &&
+    obj.attemptedInstallSurfacedCount >= 0
+      ? obj.attemptedInstallSurfacedCount
+      : 0;
   const lastSeenVersion = typeof obj.lastSeenVersion === 'string' ? obj.lastSeenVersion : null;
   const lastSuccessfulCheckAt =
     typeof obj.lastSuccessfulCheckAt === 'string' ? obj.lastSuccessfulCheckAt : null;
@@ -319,6 +327,7 @@ export function parseAppState(raw: unknown): AppState | null {
     lastOpenedProject,
     versionPendingInstall,
     attemptedInstall,
+    attemptedInstallSurfacedCount,
     lastSeenVersion,
     lastSuccessfulCheckAt,
     stuckHintShown,
