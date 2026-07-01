@@ -41,8 +41,57 @@ export function nextWheelReports(
   };
 }
 
-/** SGR-encoded wheel report at position 1;1 (always inside the window; mouse-
- *  mode apps scroll their active region regardless of the pointer cell). */
-export function sgrWheelReport(button: WheelButton): string {
-  return `\x1b[<${button};1;1M`;
+/** 1-based coordinates carried by an SGR wheel report — cells for SGR (1006),
+ *  CSS px for SGR_PIXELS (1016). */
+export interface WheelReportPosition {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Cell-width stand-in when the renderer hasn't measured yet; used to compute
+ *  the pixel-encoding viewport extent (clamp bound and center fallback). */
+const FALLBACK_CELL_WIDTH = 9;
+
+export function wheelReportPosition(
+  offsetX: number | undefined,
+  offsetY: number | undefined,
+  opts: {
+    readonly cellWidth: number | undefined;
+    readonly cellHeight: number;
+    readonly cols: number;
+    readonly rows: number;
+    readonly pixels: boolean;
+  },
+): WheelReportPosition {
+  const cellWidth = opts.cellWidth !== undefined && opts.cellWidth > 0 ? opts.cellWidth : undefined;
+  const clamp = (v: number, max: number) => Math.min(Math.max(v, 1), max);
+  if (opts.pixels) {
+    const maxX = Math.round((cellWidth ?? FALLBACK_CELL_WIDTH) * opts.cols);
+    const maxY = Math.round(opts.cellHeight * opts.rows);
+    return {
+      x: isFiniteNumber(offsetX) ? clamp(Math.floor(offsetX) + 1, maxX) : Math.ceil(maxX / 2),
+      y: isFiniteNumber(offsetY) ? clamp(Math.floor(offsetY) + 1, maxY) : Math.ceil(maxY / 2),
+    };
+  }
+  return {
+    x:
+      isFiniteNumber(offsetX) && cellWidth !== undefined
+        ? clamp(Math.floor(offsetX / cellWidth) + 1, opts.cols)
+        : Math.ceil(opts.cols / 2),
+    y: isFiniteNumber(offsetY)
+      ? clamp(Math.floor(offsetY / opts.cellHeight) + 1, opts.rows)
+      : Math.ceil(opts.rows / 2),
+  };
+}
+
+function isFiniteNumber(v: number | undefined): v is number {
+  return v !== undefined && Number.isFinite(v);
+}
+
+/** SGR-encoded wheel report at the given 1-based position. The position must
+ *  track the pointer (or fall back to viewport center): hit-testing TUIs
+ *  scroll the component under the reported cell, and a constant corner
+ *  position lands outside every scrollable region. */
+export function sgrWheelReport(button: WheelButton, position: WheelReportPosition): string {
+  return `\x1b[<${button};${position.x};${position.y}M`;
 }

@@ -26,9 +26,10 @@ class MockTerminal {
   get _core() {
     return {
       coreMouseService: { activeEncoding: this.mouseEncoding },
-      _renderService: { dimensions: { css: { cell: { height: 17 } } } },
+      _renderService: { dimensions: { css: { cell: { width: 10, height: 17 } } } },
     };
   }
+  element: HTMLElement | undefined = undefined;
   onDataCb: ((d: string) => void) | null = null;
   keyHandler: ((e: KeyboardEvent) => boolean) | null = null;
   wheelHandler: ((e: WheelEvent) => boolean) | null = null;
@@ -494,7 +495,7 @@ describe('TerminalPanel', () => {
     expect(terminal.input).toHaveBeenCalledTimes(1);
     const [ptyId, payload] = terminal.input.mock.calls[0] as [string, string];
     expect(ptyId).toBe('pty-1');
-    const downTick = '\x1b[<65;1;1M';
+    const downTick = '\x1b[<65;40;12M';
     expect(payload.length).toBeGreaterThan(0);
     expect(payload.length % downTick.length).toBe(0);
     expect(payload.replaceAll(downTick, '')).toBe('');
@@ -503,6 +504,72 @@ describe('TerminalPanel', () => {
     term.mouseEncoding = 'SGR_PIXELS';
     expect(wheel({ deltaY: 120, deltaMode: 0 } as unknown as WheelEvent)).toBe(false);
     expect(terminal.input).toHaveBeenCalledTimes(1);
+    const [, pxPayload] = terminal.input.mock.calls[0] as [string, string];
+    const pxTick = '\x1b[<65;400;204M';
+    expect(pxPayload.length).toBeGreaterThan(0);
+    expect(pxPayload.length % pxTick.length).toBe(0);
+    expect(pxPayload.replaceAll(pxTick, '')).toBe('');
+  });
+
+  test('wheel reports carry the pointer cell so hit-testing TUIs scroll the hovered component', async () => {
+    const { bridge, terminal } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(lastTerm?.wheelHandler).toBeTruthy());
+    const term = lastTerm;
+    if (term?.wheelHandler == null) throw new Error('wheel handler not attached');
+    term.modes.mouseTrackingMode = 'any';
+    term.mouseEncoding = 'SGR';
+
+    const screenEl = document.createElement('div');
+    screenEl.className = 'xterm-screen';
+    screenEl.getBoundingClientRect = () => ({ left: 100, top: 50 }) as DOMRect;
+    const host = document.createElement('div');
+    host.appendChild(screenEl);
+    term.element = host;
+
+    expect(
+      term.wheelHandler({
+        deltaY: 120,
+        deltaMode: 0,
+        clientX: 605,
+        clientY: 160,
+      } as unknown as WheelEvent),
+    ).toBe(false);
+    expect(terminal.input).toHaveBeenCalledTimes(1);
+    const [, payload] = terminal.input.mock.calls[0] as [string, string];
+    const tick = '\x1b[<65;51;7M';
+    expect(payload.length).toBeGreaterThan(0);
+    expect(payload.length % tick.length).toBe(0);
+    expect(payload.replaceAll(tick, '')).toBe('');
+  });
+
+  test('pointer mapping falls back to the terminal element rect when .xterm-screen is absent', async () => {
+    const { bridge, terminal } = makeBridge({ ok: true, ptyId: 'pty-1' });
+    render(<TerminalPanel bridge={bridge} />);
+    await waitFor(() => expect(lastTerm?.wheelHandler).toBeTruthy());
+    const term = lastTerm;
+    if (term?.wheelHandler == null) throw new Error('wheel handler not attached');
+    term.modes.mouseTrackingMode = 'any';
+    term.mouseEncoding = 'SGR';
+
+    const host = document.createElement('div');
+    host.getBoundingClientRect = () => ({ left: 200, top: 100 }) as DOMRect;
+    term.element = host;
+
+    expect(
+      term.wheelHandler({
+        deltaY: 120,
+        deltaMode: 0,
+        clientX: 705,
+        clientY: 210,
+      } as unknown as WheelEvent),
+    ).toBe(false);
+    expect(terminal.input).toHaveBeenCalledTimes(1);
+    const [, payload] = terminal.input.mock.calls[0] as [string, string];
+    const tick = '\x1b[<65;51;7M';
+    expect(payload.length).toBeGreaterThan(0);
+    expect(payload.length % tick.length).toBe(0);
+    expect(payload.replaceAll(tick, '')).toBe('');
   });
 
   test('mode transition resets the wheel accumulator (no stale carry across apps)', async () => {

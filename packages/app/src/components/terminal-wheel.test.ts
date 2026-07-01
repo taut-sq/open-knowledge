@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { nextWheelReports, sgrWheelReport, type WheelReportOptions } from './terminal-wheel';
+import {
+  nextWheelReports,
+  sgrWheelReport,
+  type WheelReportOptions,
+  wheelReportPosition,
+} from './terminal-wheel';
 
 const PIXEL = 0;
 const LINE = 1;
@@ -93,8 +98,42 @@ describe('nextWheelReports', () => {
 });
 
 describe('sgrWheelReport', () => {
-  test('encodes SGR wheel up/down press at position 1;1', () => {
-    expect(sgrWheelReport(64)).toBe('\x1b[<64;1;1M');
-    expect(sgrWheelReport(65)).toBe('\x1b[<65;1;1M');
+  test('encodes SGR wheel up/down press at the given position', () => {
+    expect(sgrWheelReport(64, { x: 12, y: 7 })).toBe('\x1b[<64;12;7M');
+    expect(sgrWheelReport(65, { x: 1, y: 1 })).toBe('\x1b[<65;1;1M');
+  });
+});
+
+describe('wheelReportPosition', () => {
+  const CELLS = { cellWidth: 10, cellHeight: 20, cols: 80, rows: 24, pixels: false };
+
+  test('maps pointer offset to the 1-based cell under it', () => {
+    expect(wheelReportPosition(0, 0, CELLS)).toEqual({ x: 1, y: 1 });
+    expect(wheelReportPosition(9.9, 19.9, CELLS)).toEqual({ x: 1, y: 1 });
+    expect(wheelReportPosition(10, 20, CELLS)).toEqual({ x: 2, y: 2 });
+    expect(wheelReportPosition(505, 110, CELLS)).toEqual({ x: 51, y: 6 });
+  });
+
+  test('clamps to the viewport bounds (pointer over padding/scrollbar)', () => {
+    expect(wheelReportPosition(-5, -5, CELLS)).toEqual({ x: 1, y: 1 });
+    expect(wheelReportPosition(9999, 9999, CELLS)).toEqual({ x: 80, y: 24 });
+  });
+
+  test('falls back to viewport center when the offset is unmeasurable', () => {
+    expect(wheelReportPosition(undefined, undefined, CELLS)).toEqual({ x: 40, y: 12 });
+    expect(wheelReportPosition(Number.NaN, Number.NaN, CELLS)).toEqual({ x: 40, y: 12 });
+  });
+
+  test('falls back to horizontal center when cell width is unmeasured (cells mode)', () => {
+    const noWidth = { ...CELLS, cellWidth: undefined };
+    expect(wheelReportPosition(505, 110, noWidth)).toEqual({ x: 40, y: 6 });
+  });
+
+  test('SGR_PIXELS mode reports 1-based CSS-px coordinates', () => {
+    const px = { ...CELLS, pixels: true };
+    expect(wheelReportPosition(0, 0, px)).toEqual({ x: 1, y: 1 });
+    expect(wheelReportPosition(505.7, 110.2, px)).toEqual({ x: 506, y: 111 });
+    expect(wheelReportPosition(9999, 9999, px)).toEqual({ x: 800, y: 480 });
+    expect(wheelReportPosition(undefined, undefined, px)).toEqual({ x: 400, y: 240 });
   });
 });

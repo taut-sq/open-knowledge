@@ -22,7 +22,7 @@ import { TerminalCliMissingBanner } from './TerminalCliMissingBanner';
 import { type TerminalExitInfo, TerminalExitNotice } from './TerminalExitNotice';
 import { TerminalRefusalNotice } from './TerminalRefusalNotice';
 import { xtermThemeForMode } from './terminal-theme';
-import { nextWheelReports, sgrWheelReport } from './terminal-wheel';
+import { nextWheelReports, sgrWheelReport, wheelReportPosition } from './terminal-wheel';
 
 interface TerminalPanelProps {
   /** Desktop bridge — the panel is rendered only on the Electron host, where
@@ -201,7 +201,9 @@ function TerminalSession({
         term as unknown as {
           _core?: {
             coreMouseService?: { activeEncoding?: string };
-            _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } };
+            _renderService?: {
+              dimensions?: { css?: { cell?: { width?: number; height?: number } } };
+            };
           };
         }
       )._core;
@@ -230,7 +232,23 @@ function TerminalSession({
         { cellHeight, sensitivity: 1.5, maxRowsPerEvent: 20, viewportRows: term.rows },
       );
       wheelRowAccumulator = accumulator;
-      if (count > 0) bridge.terminal.input(ptyId, sgrWheelReport(button).repeat(count));
+      if (count > 0) {
+        const rect = (
+          term.element?.querySelector('.xterm-screen') ?? term.element
+        )?.getBoundingClientRect();
+        const position = wheelReportPosition(
+          rect === undefined ? undefined : event.clientX - rect.left,
+          rect === undefined ? undefined : event.clientY - rect.top,
+          {
+            cellWidth: core?._renderService?.dimensions?.css?.cell?.width,
+            cellHeight,
+            cols: term.cols,
+            rows: term.rows,
+            pixels: encoding === 'SGR_PIXELS',
+          },
+        );
+        bridge.terminal.input(ptyId, sgrWheelReport(button, position).repeat(count));
+      }
       return false;
     });
 
