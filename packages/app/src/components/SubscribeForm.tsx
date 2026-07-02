@@ -7,7 +7,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { submitSubscribe } from '@/lib/subscribe';
+import { type SubscribeSource, submitSubscribe } from '@/lib/subscribe';
 import { cn } from '@/lib/utils';
 
 interface SubscribeValues {
@@ -15,6 +15,7 @@ interface SubscribeValues {
 }
 
 export interface SubscribeFormProps {
+  source: SubscribeSource;
   title?: ReactNode;
   description?: ReactNode;
   onSuccess?: () => void;
@@ -25,6 +26,7 @@ export interface SubscribeFormProps {
 }
 
 export function SubscribeForm({
+  source,
   title,
   description,
   onSuccess,
@@ -55,7 +57,7 @@ export function SubscribeForm({
 
   async function onSubmit(values: SubscribeValues) {
     form.clearErrors('root');
-    const result = await submitSubscribe(values.email);
+    const result = await submitSubscribe(values.email, source);
     if (result.ok) {
       setSubscribed(true);
       onSuccess?.();

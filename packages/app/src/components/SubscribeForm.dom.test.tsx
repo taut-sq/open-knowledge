@@ -17,7 +17,7 @@ mock.module('@/lib/subscribe', () => ({ submitSubscribe }));
 
 async function renderForm(onSuccess?: () => void) {
   const { SubscribeForm } = await import('./SubscribeForm');
-  render(<SubscribeForm onSuccess={onSuccess} />);
+  render(<SubscribeForm source="resources_menu" onSuccess={onSuccess} />);
 }
 
 describe('SubscribeForm', () => {
@@ -44,7 +44,9 @@ describe('SubscribeForm', () => {
     await userEvent.type(screen.getByTestId('subscribe-email'), 'someone@example.com');
     await userEvent.click(screen.getByTestId('subscribe-submit'));
 
-    await waitFor(() => expect(submitSubscribe).toHaveBeenCalledWith('someone@example.com'));
+    await waitFor(() =>
+      expect(submitSubscribe).toHaveBeenCalledWith('someone@example.com', 'resources_menu'),
+    );
     expect(onSuccess).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/Watch your inbox/i)).not.toBeNull();
     expect(screen.queryByTestId('subscribe-email')).toBeNull();

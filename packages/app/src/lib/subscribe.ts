@@ -1,15 +1,20 @@
 const SUBSCRIBE_ENDPOINT = 'https://openknowledge.ai/api/subscribe';
 
+export type SubscribeSource = 'resources_menu' | 'post_update_card';
+
 export type SubscribeResult =
   | { ok: true }
   | { ok: false; reason: 'invalid' | 'unavailable' | 'error' };
 
-export async function submitSubscribe(email: string): Promise<SubscribeResult> {
+export async function submitSubscribe(
+  email: string,
+  source: SubscribeSource,
+): Promise<SubscribeResult> {
   try {
     const response = await fetch(SUBSCRIBE_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, source }),
       signal: AbortSignal.timeout(15_000),
     });
     if (response.ok) {

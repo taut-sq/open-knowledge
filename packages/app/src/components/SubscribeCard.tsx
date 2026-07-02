@@ -59,6 +59,7 @@ export function SubscribeCard({
     >
       <div className="px-3 py-2.5">
         <SubscribeForm
+          source="post_update_card"
           compactSubmit
           description={<Trans>Product updates in your inbox.</Trans>}
           onSuccess={() => {

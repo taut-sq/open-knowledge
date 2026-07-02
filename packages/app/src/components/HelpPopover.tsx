@@ -190,6 +190,7 @@ export const HelpPopover: FC = () => {
                       plus a gap rather than overlapping the menu. */}
                   <PopoverContent side="left" align="center" sideOffset={20} className="w-80">
                     <SubscribeForm
+                      source="resources_menu"
                       autoFocus
                       onDismiss={() => setSubscribeOpen(false)}
                       onSuccess={() => subscribeCardStore.markSubscribed()}
