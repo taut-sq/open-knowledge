@@ -261,6 +261,20 @@
   border-radius: 0;
 }
 
+/* ------------------------------------------------------------------
+ * .ok-tabs-h2 — opt-in modifier (layered on .ok-flush-tabs) that gives a
+ * page's install-path tabs the visual weight of an <h2> section heading:
+ * extra space above so they stand out from the preceding paragraph, and
+ * trigger labels sized to match a Fumadocs prose `##`. Scoped to the page
+ * that opts in — the shared .ok-flush-tabs (e.g. Quickstart) is unchanged.
+ * ------------------------------------------------------------------ */
+.ok-tabs-h2 {
+  margin-top: 2.5rem;
+}
+.ok-tabs-h2 [role="tab"] {
+  font-size: 1.5rem;
+}
+
 .slide-btn-accent {
   background-color: var(--slide-accent);
   color: #fff;
