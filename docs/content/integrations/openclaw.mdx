@@ -4,52 +4,29 @@ description: Use OpenKnowledge with OpenClaw agents over MCP.
 icon: custom/OpenClaw
 ---
 
-OpenClaw is an agent gateway: it runs agents that connect to MCP servers. Register OpenKnowledge as one of those servers and every agent OpenClaw runs can read, search, and write your knowledge base through OK's tools — with full attribution, link-awareness, conflict-awareness, and a live browser preview. Inside an OK project, agents work markdown through those tools rather than native file access, so every edit stays attributed and previewable.
+OpenClaw is an agent gateway: it runs agents that connect to MCP servers. Once OpenKnowledge is registered as one of them, every agent OpenClaw runs can read, search, and write your knowledge base through OK's tools — with full attribution, link-awareness, conflict-awareness, and a live browser preview. Inside an OK project, agents work markdown through those tools rather than native file access, so every edit stays attributed and previewable.
+
+## Install
+
+<McpInstall editor="OpenClaw">
+  <p>
+    After <code>ok init</code> writes the config, run <code>openclaw mcp reload</code> so active
+    agents pick up the entry — <code>ok start</code> isn't needed here, since OpenClaw manages its
+    own server lifecycle.
+  </p>
+</McpInstall>
+
+`ok init` writes the OpenKnowledge server into `~/.openclaw/openclaw.json` under `mcp.servers`, using the same resilient launcher every other editor gets — it finds `ok` whether you installed the desktop app or the npm CLI, so there's no PATH to configure.
 
 <Callout type="info">
-  Unlike Cursor, Codex, and Claude Code, OpenClaw is **not** auto-detected by `ok init`. You register the OpenKnowledge MCP server in OpenClaw's own config — the JSON block below. `ok init` is still how you turn a folder into a knowledge base.
+  The managed entry doesn't pin a project. Each OK tool call takes a `cwd` argument to target a specific knowledge base — pass it once and it sticks for that session — so one registration serves every project (and git worktree) an agent visits. If you previously hand-wrote an entry with a `cwd` pinned, `ok init` replaces it with the managed launcher; pass `cwd` per tool call instead.
 </Callout>
-
-## Register the OpenKnowledge MCP server
-
-Add the server to `~/.openclaw/openclaw.json` under `mcp.servers`, pointing `cwd` at the knowledge base you want agents to land in:
-
-```jsonc
-// ~/.openclaw/openclaw.json
-{
-  "mcp": {
-    "servers": {
-      "open-knowledge": {
-        "command": "ok",
-        "args": ["mcp"],
-        "cwd": "/path/to/your/knowledge-base"
-      }
-    }
-  }
-}
-```
-
-OpenClaw can also register servers from the command line (`openclaw mcp add …`) — run `openclaw mcp add --help` for the flags on your build. The JSON block above is the path we've verified end to end.
-
-<Callout type="warn">
-  **`ok` may not be on OpenClaw's PATH.** OpenClaw's runtime shell often doesn't have `ok` on `PATH`, so `"command": "ok"` can fail to launch the server. If it does, point `command` at the absolute binary the installer drops — `~/.ok/bin/ok` on a standard install. A JSON config isn't shell-expanded, so write the path out in full rather than with `~`:
-
-  ```jsonc
-  "command": "/Users/<your-username>/.ok/bin/ok"
-  ```
-</Callout>
-
-`cwd` is the default knowledge base the server targets, but you can override it per call: every OK tool accepts a `cwd` argument, so an agent can point at a different project (or a git worktree) without touching the config — pass it once and it sticks for that session.
-
-## Reload
-
-After editing the config, run `openclaw mcp reload` so active agents pick up the change. If your build needs a full gateway restart instead, restart it.
 
 ## Verify
 
 Two complementary checks — the probe confirms the gateway can reach the server; the prompt confirms an agent can actually call its tools.
 
-**Server-side** — confirm OpenClaw can launch the server and its tools enumerate:
+**Server-side** — confirm OpenClaw launched the server and its tools enumerate:
 
 ```bash
 openclaw mcp doctor --probe         # -> open-knowledge: ok
@@ -66,7 +43,7 @@ If the agent doesn't see the tool, run tool discovery — some runtimes lazy-loa
 
 ## Initialize a knowledge base
 
-If the folder in `cwd` isn't an OK project yet, make it one:
+`ok init` turns a folder into a knowledge base (and, on the same run, registers the MCP server above):
 
 ```bash
 ok init /path/to/your/knowledge-base
@@ -139,8 +116,9 @@ For the complete tool surface, see the [MCP reference](/docs/reference/mcp).
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Server won't launch / `command not found` | `ok` not on OpenClaw's PATH | Point `command` at the absolute binary: `/Users/<your-username>/.ok/bin/ok` |
-| `openclaw mcp probe` shows 0 tools | wrong `cwd`, or the folder isn't a KB yet | Set `cwd` to a real folder and `ok init` it |
+| `ok init` showed OpenClaw as `config root missing; skipped` | `~/.openclaw/` doesn't exist yet, so OpenClaw wasn't detected | Launch OpenClaw once (it creates its home directory), then re-run `ok init` |
+| `ok init` reported the config was `left unchanged` | OpenKnowledge couldn't safely parse `~/.openclaw/openclaw.json` | Fix the JSON and re-run `ok init` |
+| `openclaw mcp probe` shows 0 tools | server couldn't launch, or the folder isn't a KB yet | Confirm `ok` is installed (desktop app or `npm i -g @inkeep/open-knowledge`), and `ok init` the folder |
 | Agent doesn't see `mcp__open-knowledge__*` | MCP tools lazy-loaded | Run tool discovery, then `openclaw mcp reload` |
 | `ok init` "refreshed" a parent project, no new KB | upward project resolution | Run `ok init` outside any existing `.ok` tree |
 | Broken-link warning on a just-written doc | forward link to a not-yet-created target | Create the target, then re-check `links({ kind: "dead" })` |

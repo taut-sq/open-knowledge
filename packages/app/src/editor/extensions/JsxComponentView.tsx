@@ -947,7 +947,14 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
           title={t`Edit ${descriptor.displayName ?? descriptor.name} source`}
           renderPreview={(value) => {
             const Component = descriptor.Component;
-            const previewProps = { ...renderProps, [editableSource.propName]: value };
+            const previewProps = {
+              ...renderProps,
+              [editableSource.propName]: value,
+              ...(descriptor.name === 'MermaidFence' && {
+                className: 'border-0 bg-transparent rounded-none',
+              }),
+            };
+
             return (
               <div className="flex h-full w-full items-center justify-center p-4">
                 <Component {...previewProps} />
@@ -981,7 +988,7 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
           }}
         />
       ) : null}
-      {/* z-[60] overrides the shadcn popover base (z-50) so the PropPanel
+      {/* z-60 overrides the shadcn popover base (z-50) so the PropPanel
           reliably sits above other z-50 surfaces (wiki-link Dialog overlays,
           sonner toasts, internal-link Dialogs). The chrome bar in globals.css
           also uses z-50; a PopoverContent at the same level is ordered by
@@ -992,7 +999,7 @@ export function JsxComponentView({ node, editor, extension, getPos, selected }: 
           side={showPlaceholder ? 'bottom' : 'right'}
           align={showPlaceholder ? 'center' : 'start'}
           sideOffset={showPlaceholder ? -4 : 8}
-          className="w-64 p-3 z-[60] overflow-y-auto subtle-scrollbar max-h-[var(--radix-popper-available-height)] overscroll-contain"
+          className="w-64 p-3 z-60 overflow-y-auto subtle-scrollbar max-h-(--radix-popper-available-height) overscroll-contain"
           onCloseAutoFocus={
             isSelfClosingLeaf
               ? (e) => {

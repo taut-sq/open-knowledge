@@ -1,10 +1,24 @@
-import { Trans } from '@lingui/react/macro';
-import { AlertTriangle } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Trans, useLingui } from '@lingui/react/macro';
+import type { default as PanZoomNS, PanzoomObject } from '@panzoom/panzoom';
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  RefreshCcw,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
+import type { default as MermaidNS } from 'mermaid';
+import { type ComponentProps, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils.ts';
 import { useJsxComponentHost } from './jsx-host-context.tsx';
 
 interface MermaidProps {
   chart?: string;
+  className?: string;
 }
 
 interface RenderState {
@@ -13,7 +27,18 @@ interface RenderState {
   error: string;
 }
 
-let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+const MERMAID_ZOOM_MIN = 0.5;
+const MERMAID_ZOOM_MAX = 4;
+const MERMAID_ZOOM_STEP = 0.25;
+const MERMAID_PAN_STEP = 48;
+const buttonProps: ComponentProps<typeof Button> = {
+  type: 'button',
+  size: 'icon-sm',
+  variant: 'secondary',
+  className: 'border-border',
+};
+
+let mermaidPromise: Promise<typeof MermaidNS> | null = null;
 function loadMermaid() {
   mermaidPromise ||= import('mermaid')
     .then((mod) => {
@@ -31,6 +56,17 @@ function loadMermaid() {
       throw err;
     });
   return mermaidPromise;
+}
+
+let panzoomPromise: Promise<typeof PanZoomNS> | null = null;
+function loadPanzoom() {
+  panzoomPromise ||= import('@panzoom/panzoom')
+    .then((mod) => mod.default)
+    .catch((err) => {
+      panzoomPromise = null;
+      throw err;
+    });
+  return panzoomPromise;
 }
 
 const SHAPES: ReadonlyArray<{ open: string; close: string }> = [
@@ -257,10 +293,9 @@ export function rewriteSequenceParticipant(
   return null;
 }
 
-export function MermaidView(props: MermaidProps) {
-  const chart = props.chart ?? '';
+export function MermaidView({ chart = '', className }: MermaidProps) {
   const reactId = useId();
-  const renderId = `mermaid-${reactId.replace(/:/g, '_')}`;
+  const renderId = `mermaid-${reactId.replaceAll(':', '_')}`;
   const [state, setState] = useState<RenderState>({ status: 'idle', svg: '', error: '' });
   const host = useJsxComponentHost();
   const canEdit = host?.editor.isEditable ?? false;
@@ -278,6 +313,7 @@ export function MermaidView(props: MermaidProps) {
     }
     let cancelled = false;
     setState((prev) => ({ ...prev, status: 'rendering' }));
+    void loadPanzoom().catch(() => undefined);
     loadMermaid()
       .then(async (m) => {
         const result = await m.render(renderId, chart);
@@ -661,13 +697,164 @@ export function MermaidView(props: MermaidProps) {
     );
   }
 
+  if (state.status === 'ready') {
+    return (
+      <div
+        ref={containerRef}
+        className={cn(
+          'mermaid mermaid-ready flex h-full min-h-64 w-full overflow-hidden rounded-md border border-border/60 bg-background',
+          className,
+        )}
+        data-component-type="mermaid"
+      >
+        <MermaidInteractiveView svg={state.svg} />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
       className={`mermaid mermaid-${state.status}`}
       data-component-type="mermaid"
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid.render with securityLevel:'strict' returns a sanitized SVG string with no script execution; this is the documented integration path.
-      dangerouslySetInnerHTML={{ __html: state.svg }}
     />
+  );
+}
+
+function MermaidInteractiveView({ svg }: { svg: string }) {
+  const { t } = useLingui();
+  const svgHostRef = useRef<HTMLDivElement | null>(null);
+  const panzoomRef = useRef<PanzoomObject | null>(null);
+  const labels = {
+    zoomIn: t`Zoom in`,
+    zoomOut: t`Zoom out`,
+    reset: t`Reset view`,
+    panUp: t`Pan up`,
+    panDown: t`Pan down`,
+    panLeft: t`Pan left`,
+    panRight: t`Pan right`,
+    toolbar: t`Mermaid diagram controls`,
+  } as const;
+
+  useEffect(() => {
+    if (!svg.trim()) return;
+    const svgElement = svgHostRef.current?.querySelector<SVGElement>('svg');
+    if (svgElement?.namespaceURI !== 'http://www.w3.org/2000/svg') return;
+
+    let disposed = false;
+    let panzoom: PanzoomObject | null = null;
+
+    loadPanzoom()
+      .then((Panzoom) => {
+        if (disposed) return;
+
+        panzoom = Panzoom(svgElement, {
+          canvas: true,
+          cursor: 'default',
+          maxScale: MERMAID_ZOOM_MAX,
+          minScale: MERMAID_ZOOM_MIN,
+          noBind: true,
+          step: MERMAID_ZOOM_STEP,
+          touchAction: 'auto',
+        });
+        panzoomRef.current = panzoom;
+      })
+      .catch((err) => {
+        console.warn('[Mermaid] panzoom setup failed:', err);
+        if (panzoomRef.current === panzoom) {
+          panzoomRef.current = null;
+        }
+      });
+
+    return () => {
+      disposed = true;
+      if (panzoomRef.current === panzoom) {
+        panzoomRef.current = null;
+      }
+      panzoom?.destroy();
+    };
+  }, [svg]);
+
+  const panBy = (x: number, y: number) => {
+    panzoomRef.current?.pan(x, y, { relative: true });
+  };
+
+  return (
+    <div
+      className="relative flex min-h-0 flex-1 overflow-hidden bg-muted/20"
+      contentEditable={false}
+    >
+      <div
+        ref={svgHostRef}
+        className="ok-mermaid-svg flex min-h-0 flex-1 items-center justify-center [&>svg]:size-full [&>svg]:select-none"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid.render with securityLevel:'strict' returns a sanitized SVG string with no script execution; this is the documented integration path.
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <div
+        className="absolute right-3 bottom-3 grid grid-cols-3 gap-1"
+        data-testid="mermaid-actions"
+        role="toolbar"
+        aria-label={labels.toolbar}
+      >
+        <span aria-hidden="true" />
+        <Button
+          {...buttonProps}
+          title={labels.panUp}
+          aria-label={labels.panUp}
+          onClick={() => panBy(0, -MERMAID_PAN_STEP)}
+        >
+          <ArrowUp className="size-4" aria-hidden="true" />
+        </Button>
+        <Button
+          {...buttonProps}
+          title={labels.zoomIn}
+          aria-label={labels.zoomIn}
+          onClick={() => panzoomRef.current?.zoomIn()}
+        >
+          <ZoomIn className="size-4" aria-hidden="true" />
+        </Button>
+        <Button
+          {...buttonProps}
+          title={labels.panLeft}
+          aria-label={labels.panLeft}
+          onClick={() => panBy(-MERMAID_PAN_STEP, 0)}
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+        </Button>
+        <Button
+          {...buttonProps}
+          title={labels.reset}
+          aria-label={labels.reset}
+          onClick={() => panzoomRef.current?.reset()}
+        >
+          <RefreshCcw className="size-4" aria-hidden="true" />
+        </Button>
+        <Button
+          {...buttonProps}
+          title={labels.panRight}
+          aria-label={labels.panRight}
+          onClick={() => panBy(MERMAID_PAN_STEP, 0)}
+        >
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Button>
+        <span aria-hidden="true" />
+        <Button
+          {...buttonProps}
+          title={labels.panDown}
+          aria-label={labels.panDown}
+          onClick={() => panBy(0, MERMAID_PAN_STEP)}
+        >
+          <ArrowDown className="size-4" aria-hidden="true" />
+        </Button>
+        <Button
+          {...buttonProps}
+          title={labels.zoomOut}
+          aria-label={labels.zoomOut}
+          onClick={() => panzoomRef.current?.zoomOut()}
+        >
+          <ZoomOut className="size-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </div>
   );
 }

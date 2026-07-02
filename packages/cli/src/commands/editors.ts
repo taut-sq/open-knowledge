@@ -223,12 +223,20 @@ export function resolveOpenCodeConfigPath(options: AppSupportOptions = {}): stri
   return pathApiForPlatform(platformName).join(resolveOpenCodeConfigDir(options), 'opencode.json');
 }
 
+export function resolveOpenClawConfigPath(options: AppSupportOptions = {}): string {
+  const platformName = options.platformName ?? process.platform;
+  const home = options.home ?? homedir();
+  return pathApiForPlatform(platformName).join(home, '.openclaw', 'openclaw.json');
+}
+
 export interface EditorMcpTarget {
   id: EditorId;
   label: string;
   configPath: (cwd: string, home?: string) => string;
   format: 'json' | 'toml';
   topLevelKey: 'mcpServers' | 'servers' | 'mcp_servers' | 'mcp';
+  serverMapSubKey?: string;
+  offerOnlyWhenDetected?: boolean;
   serverName: (cwd: string) => string;
   buildEntry: (cwd: string, options?: McpInstallOptions) => Record<string, unknown>;
   scope: 'project' | 'global';
@@ -300,6 +308,19 @@ export const EDITOR_TARGETS: Record<EditorId, EditorMcpTarget> = {
     detectPath: (_cwd, home) => dirname(resolveOpenCodeConfigPath({ home })),
     projectConfigPath: (cwd) => join(cwd, 'opencode.json'),
     projectSkillPath: (cwd) => join(cwd, '.opencode', 'skills', 'open-knowledge', 'SKILL.md'),
+  },
+  openclaw: {
+    id: 'openclaw',
+    label: EDITOR_LABELS.openclaw,
+    configPath: (_cwd, home) => resolveOpenClawConfigPath({ home }),
+    format: 'json',
+    topLevelKey: 'mcp',
+    serverMapSubKey: 'servers',
+    serverName: () => MCP_SERVER_NAME,
+    buildEntry: (_cwd, options) => buildManagedServerEntry(options),
+    scope: 'global',
+    detectPath: (_cwd, home) => join(home ?? homedir(), '.openclaw'),
+    offerOnlyWhenDetected: true,
   },
 };
 

@@ -273,9 +273,9 @@ describe('M1 smoke', () => {
         typeName: 'EditorId',
         canonicalPath: editorsConstantPath,
         canonicalRe: /type\s+EditorId\s*=([^;]+);/,
-        expectedLiteralCount: 5,
+        expectedLiteralCount: 6,
         inlineRe:
-          /'claude'\s*\|\s*'claude-desktop'\s*\|\s*'cursor'\s*\|\s*'codex'\s*\|\s*'opencode'/,
+          /'claude'\s*\|\s*'claude-desktop'\s*\|\s*'cursor'\s*\|\s*'codex'\s*\|\s*'opencode'\s*\|\s*'openclaw'/,
         mirrors: [
           ['cli/commands/editors.ts', cliEditorsPath],
           ['desktop/shared/ipc-channels.ts', ipcChannelsPath],

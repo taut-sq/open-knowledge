@@ -1695,6 +1695,11 @@ Homepage: https://github.com/open-draft/until
 
 Copyright (c) 2021 Artem Zakharchenko
 
+### `@panzoom/panzoom@4.6.2`
+Homepage: https://github.com/timmywil/panzoom
+
+_(No LICENSE file in package; SPDX identifier in `package.json` is the sole declared grant.)_
+
 ### `@parcel/watcher@2.5.6`
 Homepage: https://github.com/parcel-bundler/watcher
 

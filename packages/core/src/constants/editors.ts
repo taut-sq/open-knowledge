@@ -1,4 +1,4 @@
-export type EditorId = 'claude' | 'claude-desktop' | 'cursor' | 'codex' | 'opencode';
+export type EditorId = 'claude' | 'claude-desktop' | 'cursor' | 'codex' | 'opencode' | 'openclaw';
 
 export const ALL_EDITOR_IDS = [
   'claude',
@@ -6,6 +6,7 @@ export const ALL_EDITOR_IDS = [
   'cursor',
   'codex',
   'opencode',
+  'openclaw',
 ] as const satisfies readonly EditorId[];
 
 export const EDITOR_LABELS = {
@@ -14,6 +15,7 @@ export const EDITOR_LABELS = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
+  openclaw: 'OpenClaw',
 } as const satisfies Record<EditorId, string>;
 
 /**
@@ -58,6 +60,7 @@ export const EDITOR_PROJECT_SKILL_ROOT = {
   cursor: '.cursor/skills',
   codex: '.codex/skills',
   opencode: '.opencode/skills',
+  openclaw: null,
 } as const satisfies Record<EditorId, string | null>;
 
 export const PROJECT_SKILL_EDITOR_IDS = ALL_EDITOR_IDS.filter(
@@ -78,4 +81,5 @@ export const EDITOR_PROJECT_CONFIG_PATH = {
   cursor: '.cursor/mcp.json',
   codex: '.codex/config.toml',
   opencode: 'opencode.json',
+  openclaw: null,
 } as const satisfies Record<EditorId, string | null>;

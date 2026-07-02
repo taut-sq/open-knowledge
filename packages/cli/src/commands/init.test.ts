@@ -657,6 +657,7 @@ describe('runInit', () => {
       mkdirSync(dirname(cursorConfigPath()), { recursive: true });
       mkdirSync(dirname(codexConfigPath()), { recursive: true });
       mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
+      mkdirSync(join(fakeHome, '.openclaw'), { recursive: true });
 
       const result = await runInitForTest({ editors: [...ALL_EDITOR_IDS] });
 
@@ -670,6 +671,10 @@ describe('runInit', () => {
       expect(existsSync(cursorConfigPath())).toBe(true);
       expect(existsSync(codexConfigPath())).toBe(true);
       expect(existsSync(opencodeConfigPath())).toBe(true);
+      const openclawConfig = JSON.parse(
+        readFileSync(join(fakeHome, '.openclaw', 'openclaw.json'), 'utf-8'),
+      );
+      expect(openclawConfig.mcp.servers['open-knowledge']).toEqual(PUBLISHED_CHAIN_ENTRY);
     });
 
     it('overwrites across all targeted editors', async () => {
@@ -1971,6 +1976,7 @@ describe('detectInstalledEditors', () => {
     mkdirSync(dirname(cursorConfigPath()), { recursive: true });
     mkdirSync(dirname(codexConfigPath()), { recursive: true });
     mkdirSync(dirname(opencodeConfigPath()), { recursive: true });
+    mkdirSync(join(fakeHome, '.openclaw'), { recursive: true });
     const detected = detectInstalledEditors(testDir, fakeHome);
     expect(detected).toEqual(expect.arrayContaining([...ALL_EDITOR_IDS]));
     expect(detected).toHaveLength(ALL_EDITOR_IDS.length);

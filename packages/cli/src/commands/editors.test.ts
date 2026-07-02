@@ -3,6 +3,7 @@ import {
   buildManagedServerEntry,
   CHAIN_V1,
   CHAIN_VERSION_SENTINEL,
+  EDITOR_TARGETS,
   type EditorId,
   isEntryUpToDate,
   isOwnManagedEntry,
@@ -12,6 +13,7 @@ import {
   resolveCodexConfigPath,
   resolveCursorConfigPath,
   resolveEditorTargets,
+  resolveOpenClawConfigPath,
   resolveOpenCodeConfigPath,
 } from './editors.ts';
 
@@ -183,6 +185,32 @@ describe('resolveOpenCodeConfigPath', () => {
   });
 });
 
+describe('resolveOpenClawConfigPath', () => {
+  it('builds the global OpenClaw config path (home-relative on every platform)', () => {
+    expect(resolveOpenClawConfigPath({ home: '/Users/alice', platformName: 'darwin' })).toBe(
+      '/Users/alice/.openclaw/openclaw.json',
+    );
+    expect(resolveOpenClawConfigPath({ home: '/home/alice', platformName: 'linux' })).toBe(
+      '/home/alice/.openclaw/openclaw.json',
+    );
+  });
+});
+
+describe('EDITOR_TARGETS.openclaw', () => {
+  it('nests the managed launcher under mcp.servers', () => {
+    const t = EDITOR_TARGETS.openclaw;
+    expect(t.topLevelKey).toBe('mcp');
+    expect(t.serverMapSubKey).toBe('servers');
+    expect(t.format).toBe('json');
+    expect(t.scope).toBe('global');
+    expect(t.configPath('', '/Users/alice')).toBe('/Users/alice/.openclaw/openclaw.json');
+    expect(t.buildEntry('', { mode: 'published' })).toEqual({
+      command: '/bin/sh',
+      args: ['-l', '-c', CHAIN_V1],
+    });
+  });
+});
+
 describe('CHAIN_V1', () => {
   it('starts with the version sentinel', () => {
     expect(CHAIN_V1.startsWith(CHAIN_VERSION_SENTINEL)).toBe(true);
@@ -268,7 +296,7 @@ describe('buildManagedServerEntry', () => {
   });
 
   it('every editor target produces the byte-identical chain entry', () => {
-    const editors: EditorId[] = ['claude', 'claude-desktop', 'cursor', 'codex'];
+    const editors: EditorId[] = ['claude', 'claude-desktop', 'cursor', 'codex', 'openclaw'];
     const baseline = buildManagedServerEntry({ mode: 'published' });
     for (const id of editors) {
       const target = resolveEditorTargets([id])[0];

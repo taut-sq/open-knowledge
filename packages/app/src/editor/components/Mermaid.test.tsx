@@ -1,6 +1,15 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import {
+import { renderLinguiTemplate } from '@/test-utils/lingui-mock';
+import * as actualLinguiReactMacro from '../../../tests/lingui-macro-shim';
+
+mock.module('@lingui/react/macro', () => ({
+  ...actualLinguiReactMacro,
+  Trans: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useLingui: () => ({ t: renderLinguiTemplate }),
+}));
+
+const {
   extractEdgeInfo,
   extractSourceNodeId,
   findEdgeLabelInSource,
@@ -9,7 +18,7 @@ import {
   MermaidView,
   rewriteSequenceParticipant,
   spliceNewLabel,
-} from './Mermaid.tsx';
+} = await import('./Mermaid.tsx');
 
 describe('MermaidView — placeholder branch', () => {
   test('empty chart renders the placeholder shell', () => {

@@ -3808,6 +3808,10 @@ msgid "Medium section heading."
 msgstr ""
 
 #: src/editor/components/Mermaid.tsx
+msgid "Mermaid diagram controls"
+msgstr ""
+
+#: src/editor/components/Mermaid.tsx
 msgid "Mermaid diagram failed to render."
 msgstr ""
 
@@ -4821,6 +4825,22 @@ msgstr ""
 msgid "Pages are embedded the first time a search needs them."
 msgstr ""
 
+#: src/editor/components/Mermaid.tsx
+msgid "Pan down"
+msgstr ""
+
+#: src/editor/components/Mermaid.tsx
+msgid "Pan left"
+msgstr ""
+
+#: src/editor/components/Mermaid.tsx
+msgid "Pan right"
+msgstr ""
+
+#: src/editor/components/Mermaid.tsx
+msgid "Pan up"
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 msgid "Paragraph"
 msgstr ""
@@ -5377,6 +5397,10 @@ msgstr ""
 
 #: src/components/settings/SettingsDialogBody.tsx
 msgid "Reset to default"
+msgstr ""
+
+#: src/editor/components/Mermaid.tsx
+msgid "Reset view"
 msgstr ""
 
 #: src/editor/components/ResizeHandles.tsx
@@ -7351,10 +7375,12 @@ msgstr ""
 msgid "Your share link is ready below."
 msgstr ""
 
+#: src/editor/components/Mermaid.tsx
 #: src/editor/components/Pdf.tsx
 msgid "Zoom in"
 msgstr ""
 
+#: src/editor/components/Mermaid.tsx
 #: src/editor/components/Pdf.tsx
 msgid "Zoom out"
 msgstr ""

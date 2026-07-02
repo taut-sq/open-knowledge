@@ -40,6 +40,7 @@
     "07q4Qk": ["File sidebar"],
     "09Tv5j": ["Reconnecting…"],
     "0BB9ID": ["No headings yet."],
+    "0BfhAj": ["Reset view"],
     "0E9DR6": ["Type to find a doc"],
     "0Er6-M": ["Restarting"],
     "0Gd0NU": ["Shared"],
@@ -910,6 +911,7 @@
     "N_7kkF": [
       "Read through this codebase and draft a technical spec for the most complex module: an overview, the architecture, key files, and open questions, all linked from a specs index page."
     ],
+    "NcurBF": ["Pan down"],
     "NjrIak": ["File: <0>", ["fixedName"], ".md</0>"],
     "NkXEFS": ["Restore failed — document unchanged"],
     "NmPNJJ": ["Copy code"],
@@ -992,6 +994,7 @@
     "PqYWiC": [
       "Couldn't restart the server automatically. Try running `ok stop all` in a terminal, then reopen this project — or restart your computer if it persists."
     ],
+    "PrhzDE": ["Pan up"],
     "Pyp1NA": ["Restore to this point?"],
     "Q5fqMz": ["Connection error — try again"],
     "Q6hhn8": ["Preferences"],
@@ -1138,6 +1141,7 @@
     "UfW9Kr": [
       "Your search queries and the full text of matching pages are sent to your embeddings provider (OpenAI by default) to compute embeddings."
     ],
+    "UhpfxY": ["Pan left"],
     "UkQGhd": ["Hide replace"],
     "Up2_7p": ["Copy full path"],
     "Uuj_R4": ["New from template"],
@@ -1565,6 +1569,7 @@
     "gijbne": ["Failed to rename path"],
     "gk_-qj": ["Couldn't rename template: ", ["0"]],
     "gljvbT": [["words", "plural", { "one": ["word"], "other": ["words"] }]],
+    "glzsS_": ["Pan right"],
     "gmJ0An": ["Failed to open folder."],
     "goO4Ll": ["Editor status bar"],
     "gp3I7-": ["Before syncing, set your identity for git commits:"],
@@ -2035,6 +2040,7 @@
     "ti6aF_": ["Ask ", ["0"], " CLI"],
     "tiWX6q": ["Source editor"],
     "tjXez2": ["blog-post"],
+    "toyw51": ["Mermaid diagram controls"],
     "tsiTqO": ["Paste your API key"],
     "u-9fWA": ["See <0>Architecture</0> for the system overview."],
     "u3BOHd": [["fileCount", "plural", { "one": ["#", " file"], "other": ["#", " files"] }]],

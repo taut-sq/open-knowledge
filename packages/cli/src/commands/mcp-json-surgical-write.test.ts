@@ -9,13 +9,17 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parse as parseJsonc } from 'jsonc-parser';
 import { CHAIN_V1, EDITOR_TARGETS, type EditorId, type EditorMcpTarget } from './editors.ts';
-import { writeEditorMcpConfig } from './init.ts';
+import { readExistingMcpEntry, writeEditorMcpConfig } from './init.ts';
 
 function targetForFile(id: EditorId, configPath: string): EditorMcpTarget {
-  return { ...EDITOR_TARGETS[id], configPath: () => configPath };
+  return {
+    ...EDITOR_TARGETS[id],
+    configPath: () => configPath,
+    detectPath: () => dirname(configPath),
+  };
 }
 
 function write(id: EditorId, configPath: string) {
@@ -205,6 +209,90 @@ describe('surgical JSON MCP write', () => {
     const mcp = parsed.mcp as Record<string, unknown>;
     expect(mcp.other).toEqual({ type: 'local', enabled: true, command: ['node', 'x.js'] });
     expect(mcp['open-knowledge']).toEqual(OPENCODE_ENTRY);
+  });
+
+  it('openclaw: inserts the nested entry under `mcp.servers`, preserving comments + siblings', () => {
+    const configPath = tempFile('openclaw.json');
+    const original = `{
+  "mcp": {
+    "servers": {
+      "other": { "command": "node", "args": ["x.js"] }
+    }
+  },
+  "gateway": { "port": 8080 }
+}
+`;
+    writeFileSync(configPath, original);
+
+    const result = write('openclaw', configPath);
+    expect(result.action).toBe('written');
+
+    const after = readFileSync(configPath, 'utf-8');
+    expect(after).toContain('// openclaw gateway config');
+    const parsed = parseConfig(after);
+    const mcp = parsed.mcp as Record<string, Record<string, unknown>>;
+    expect(mcp.servers.other).toEqual({ command: 'node', args: ['x.js'] });
+    expect(mcp.servers['open-knowledge']).toEqual(PUBLISHED_CHAIN_ENTRY);
+    expect(parsed.gateway).toEqual({ port: 8080 });
+  });
+
+  it('openclaw: builds the nested `mcp.servers` container when the config is absent', () => {
+    const configPath = tempFile('openclaw.json');
+    const result = write('openclaw', configPath);
+    expect(result.action).toBe('written');
+    const mcp = parseConfig(readFileSync(configPath, 'utf-8')).mcp as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(mcp.servers['open-knowledge']).toEqual(PUBLISHED_CHAIN_ENTRY);
+  });
+
+  it('openclaw: classify reads our nested entry back, and is no-entry when `servers` is absent', () => {
+    const configPath = tempFile('openclaw.json');
+    const target = targetForFile('openclaw', configPath);
+    write('openclaw', configPath);
+    expect(readExistingMcpEntry(target, '')).toEqual(PUBLISHED_CHAIN_ENTRY);
+    writeFileSync(configPath, JSON.stringify({ mcp: { other: { command: 'x' } } }));
+    expect(readExistingMcpEntry(target, '')).toBeNull();
+  });
+
+  it('openclaw: is gated on detection even under skipAvailabilityCheck (write-gate)', () => {
+    const configPath = tempFile('openclaw.json');
+    const target: EditorMcpTarget = {
+      ...EDITOR_TARGETS.openclaw,
+      configPath: () => configPath,
+      detectPath: () => join(dirname(configPath), 'no-such-openclaw-root'),
+    };
+    const result = writeEditorMcpConfig(target, '', {
+      mode: 'published',
+      skipAvailabilityCheck: true,
+    });
+    expect(result.action).toBe('skipped-missing');
+    expect(existsSync(configPath)).toBe(false);
+  });
+
+  it('openclaw: updating our nested entry rewrites only our slot', () => {
+    const configPath = tempFile('openclaw.json');
+    writeFileSync(
+      configPath,
+      `{
+  "mcp": {
+    "servers": {
+      "keep": { "command": "node", "args": ["keep.js"] },
+      "open-knowledge": { "command": "stale", "args": ["old"] }
+    }
+  }
+}
+`,
+    );
+    const result = write('openclaw', configPath);
+    expect(result.action).toBe('overwritten');
+    const mcp = parseConfig(readFileSync(configPath, 'utf-8')).mcp as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(mcp.servers.keep).toEqual({ command: 'node', args: ['keep.js'] });
+    expect(mcp.servers['open-knowledge']).toEqual(PUBLISHED_CHAIN_ENTRY);
   });
 
   it('updating an existing entry rewrites only our slot, leaving siblings intact', () => {

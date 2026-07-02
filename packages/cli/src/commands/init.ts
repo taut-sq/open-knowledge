@@ -153,14 +153,43 @@ type JsonUpsertOutcome =
   | { kind: 'written' | 'overwritten' }
   | { kind: 'declined'; reason: McpDeclineReason };
 
+function serverMapPath(
+  topLevelKey: string,
+  subKey: string | undefined,
+  serverName: string,
+): string[] {
+  return subKey === undefined ? [topLevelKey, serverName] : [topLevelKey, subKey, serverName];
+}
+
+function freshServerMapObject(
+  topLevelKey: string,
+  subKey: string | undefined,
+  serverName: string,
+  entry: Record<string, unknown>,
+): Record<string, unknown> {
+  const inner = { [serverName]: entry };
+  return { [topLevelKey]: subKey === undefined ? inner : { [subKey]: inner } };
+}
+
+function readServerContainer(
+  root: Record<string, unknown>,
+  topLevelKey: string,
+  subKey: string | undefined,
+): unknown {
+  const top = root[topLevelKey];
+  if (subKey === undefined) return top;
+  return isObject(top) ? top[subKey] : undefined;
+}
+
 function upsertJsonMcpConfig(
   configPath: string,
   topLevelKey: string,
   serverName: string,
   entry: Record<string, unknown>,
+  subKey?: string,
 ): JsonUpsertOutcome {
   if (!existsSync(configPath)) {
-    writeJsonConfig(configPath, { [topLevelKey]: { [serverName]: entry } });
+    writeJsonConfig(configPath, freshServerMapObject(topLevelKey, subKey, serverName, entry));
     return { kind: 'written' };
   }
   let raw: string;
@@ -171,7 +200,7 @@ function upsertJsonMcpConfig(
     return { kind: 'declined', reason: 'unparseable' };
   }
   if (raw.trim() === '') {
-    writeJsonConfig(configPath, { [topLevelKey]: { [serverName]: entry } });
+    writeJsonConfig(configPath, freshServerMapObject(topLevelKey, subKey, serverName, entry));
     return { kind: 'written' };
   }
   if (Buffer.byteLength(raw, 'utf-8') > JSON_CONFIG_MAX_BYTES) {
@@ -184,7 +213,7 @@ function upsertJsonMcpConfig(
   }
 
   const root = getNodeValue(tree) as Record<string, unknown>;
-  const container = root[topLevelKey];
+  const container = readServerContainer(root, topLevelKey, subKey);
   const existing = isObject(container) ? container[serverName] : undefined;
   const entryExists = existing !== undefined;
   if (entryExists && jsonValueEqual(existing, entry)) {
@@ -194,7 +223,7 @@ function upsertJsonMcpConfig(
   const hasBom = raw.charCodeAt(0) === 0xfeff;
   const body = hasBom ? raw.slice(1) : raw;
   const eol = body.includes('\r\n') ? '\r\n' : '\n';
-  const edits = modifyJsonc(body, [topLevelKey, serverName], entry, {
+  const edits = modifyJsonc(body, serverMapPath(topLevelKey, subKey, serverName), entry, {
     formattingOptions: { ...detectJsonIndent(body), eol },
   });
   const newText = `${hasBom ? '\uFEFF' : ''}${applyJsoncEdits(body, edits)}`;
@@ -613,11 +642,9 @@ export function writeEditorMcpConfig(
     };
   }
 
-  if (
-    !configPathOverride &&
-    !installOptions.skipAvailabilityCheck &&
-    !isEditorTargetAvailable(target, cwd, home)
-  ) {
+  const enforceAvailability =
+    !installOptions.skipAvailabilityCheck || target.offerOnlyWhenDetected === true;
+  if (!configPathOverride && enforceAvailability && !isEditorTargetAvailable(target, cwd, home)) {
     return {
       editorId: target.id,
       label: target.label,
@@ -695,7 +722,13 @@ export function writeEditorMcpConfig(
           if (tomlOutcome.kind === 'declined') captured.declineReason = tomlOutcome.reason;
           return;
         }
-        const outcome = upsertJsonMcpConfig(writePath, target.topLevelKey, serverName, targetEntry);
+        const outcome = upsertJsonMcpConfig(
+          writePath,
+          target.topLevelKey,
+          serverName,
+          targetEntry,
+          target.serverMapSubKey,
+        );
         captured.action = outcome.kind;
         if (outcome.kind === 'declined') captured.declineReason = outcome.reason;
       },
@@ -794,8 +827,9 @@ function classifyContainer(
   config: Record<string, unknown>,
   topLevelKey: string,
   serverName: string,
+  subKey?: string,
 ): McpEntryClassification {
-  const servers = config[topLevelKey];
+  const servers = readServerContainer(config, topLevelKey, subKey);
   if (!isObject(servers)) return { kind: 'no-entry' };
   const existing = servers[serverName];
   if (!isObject(existing)) return { kind: 'no-entry' };
@@ -843,7 +877,7 @@ export function classifyExistingMcpEntry(
     } catch {
       return { kind: 'decline', reason: 'unparseable' };
     }
-    return classifyContainer(config, target.topLevelKey, serverName);
+    return classifyContainer(config, target.topLevelKey, serverName, target.serverMapSubKey);
   }
 
   const tree = parseJsoncObjectTree(raw);
@@ -855,6 +889,7 @@ export function classifyExistingMcpEntry(
     getNodeValue(tree) as Record<string, unknown>,
     target.topLevelKey,
     serverName,
+    target.serverMapSubKey,
   );
 }
 
