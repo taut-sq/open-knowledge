@@ -91,7 +91,7 @@ describe('MCP stdio shim server resolution', () => {
       }) as never,
     });
 
-    expect(url).toBe('http://localhost:4123/mcp');
+    expect(url).toBe('http://127.0.0.1:4123/mcp');
   });
 
   test('missing lock spawns ok start and polls until a live port appears', async () => {
@@ -126,7 +126,7 @@ describe('MCP stdio shim server resolution', () => {
       pollIntervalMs: 1,
     });
 
-    expect(url).toBe('http://localhost:4123/mcp');
+    expect(url).toBe('http://127.0.0.1:4123/mcp');
     expect(calls).toHaveLength(1);
     expect(calls[0]?.cmd).toBe(process.execPath);
     expect(calls[0]?.args.at(-1)).toBe('start');
@@ -146,7 +146,7 @@ describe('MCP stdio shim server resolution', () => {
     expect((err as Error).message).toContain('OK_MCP_AUTOSTART=0');
   });
 
-  test('valid port override bypasses discovery and formats wildcard host as localhost', async () => {
+  test('valid port override bypasses discovery and targets the default loopback host', async () => {
     const url = await resolveMcpHttpUrl({
       lockDir,
       contentDir: tmp,
@@ -160,7 +160,7 @@ describe('MCP stdio shim server resolution', () => {
       }) as never,
     });
 
-    expect(url).toBe('http://localhost:6789/mcp');
+    expect(url).toBe('http://127.0.0.1:6789/mcp');
   });
 
   test('invalid port override rejects before spawn', async () => {
@@ -261,7 +261,7 @@ describe('MCP stdio shim server resolution', () => {
         },
         'http://localhost:4123/mcp',
       ),
-    ).toBe('ws://localhost:4123');
+    ).toBe('ws://127.0.0.1:4123');
 
     expect(
       resolveMcpKeepaliveWsUrl(

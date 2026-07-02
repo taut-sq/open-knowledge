@@ -1,6 +1,7 @@
 import type { Server as HttpServer, ServerResponse } from 'node:http';
 import {
   ASSET_EXTENSIONS,
+  DEFAULT_SERVER_HOST,
   defaultScheduler,
   EXECUTABLE_BLOCKLIST_EXTENSIONS,
   INLINE_RENDERABLE_EXTENSIONS,
@@ -177,7 +178,7 @@ export async function startUiServer(opts: StartUiServerOptions): Promise<UiServe
         return;
       }
       proxyRequest(req, res, {
-        upstreamHost: 'localhost',
+        upstreamHost: DEFAULT_SERVER_HOST,
         upstreamPort: lock.port,
       });
       return;
@@ -237,7 +238,14 @@ export async function startUiServer(opts: StartUiServerOptions): Promise<UiServe
       clientSocket.destroy();
       return;
     }
-    proxyUpgrade(req, clientSocket, head, 'localhost', lock.port, upgradeSocketsForShutdown);
+    proxyUpgrade(
+      req,
+      clientSocket,
+      head,
+      DEFAULT_SERVER_HOST,
+      lock.port,
+      upgradeSocketsForShutdown,
+    );
   };
   const drainUpgradeSockets = (): void => {
     for (const sock of upgradeSocketsForShutdown) {

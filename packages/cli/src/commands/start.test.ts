@@ -41,8 +41,8 @@ describe('resolveHost', () => {
     expect(resolveHost({}, { HOST: '0.0.0.0' })).toBe('0.0.0.0');
   });
 
-  test('falls back to DEFAULT_SERVER_HOST (localhost) when both flag and env are absent', () => {
-    expect(resolveHost({}, {})).toBe('localhost');
+  test('falls back to DEFAULT_SERVER_HOST (numeric IPv4 loopback) when both flag and env are absent', () => {
+    expect(resolveHost({}, {})).toBe('127.0.0.1');
   });
 
   test('explicit undefined --host falls through to env (precedence: flag > env > default)', () => {

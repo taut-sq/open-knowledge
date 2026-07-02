@@ -4,7 +4,11 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:f
 import { join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { setTimeout as wait } from 'node:timers/promises';
-import { clientVersionHeaders, SPAWN_ERROR_LOG } from '@inkeep/open-knowledge-core';
+import {
+  clientVersionHeaders,
+  DEFAULT_SERVER_HOST,
+  SPAWN_ERROR_LOG,
+} from '@inkeep/open-knowledge-core';
 import { startKeepalive as defaultStartKeepalive } from '@inkeep/open-knowledge-core/keepalive';
 import {
   AutoStartDisabledError,
@@ -184,11 +188,11 @@ export async function resolveMcpHttpUrl(opts: ResolveMcpHttpUrlOptions): Promise
         `invalid --port value '${opts.portOverride}' — HTTP MCP shim requires a positive port`,
       );
     }
-    return mcpUrlForPort('localhost', parsed);
+    return mcpUrlForPort(DEFAULT_SERVER_HOST, parsed);
   }
 
   const existingPort = livePortFromLock(readLock(), isAlive);
-  if (existingPort !== undefined) return mcpUrlForPort('localhost', existingPort);
+  if (existingPort !== undefined) return mcpUrlForPort(DEFAULT_SERVER_HOST, existingPort);
 
   if (opts.envAutoStart === '0') {
     throw new AutoStartDisabledError(
@@ -237,7 +241,7 @@ export async function resolveMcpHttpUrl(opts: ResolveMcpHttpUrlOptions): Promise
     }
     await sleep(pollIntervalMs);
     const port = livePortFromLock(readLock(), isAlive);
-    if (port !== undefined) return mcpUrlForPort('localhost', port);
+    if (port !== undefined) return mcpUrlForPort(DEFAULT_SERVER_HOST, port);
   }
 
   if (asyncSpawnError) {
@@ -257,7 +261,7 @@ export function resolveMcpKeepaliveWsUrl(
   const readLock = opts.readLock ?? (() => readServerLock(opts.lockDir));
   const isAlive = opts.isAlive ?? defaultIsProcessAlive;
   const port = livePortFromLock(readLock(), isAlive);
-  if (port !== undefined) return wsUrlForPort('localhost', port);
+  if (port !== undefined) return wsUrlForPort(DEFAULT_SERVER_HOST, port);
   return undefined;
 }
 
