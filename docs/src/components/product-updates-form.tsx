@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { MarketingButton } from '@/components/marketing-button';
@@ -19,6 +19,13 @@ type SubscribeValues = z.infer<typeof subscribeSchema>;
 export function ProductUpdatesForm() {
   const [submitFailed, setSubmitFailed] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const successRef = useRef<HTMLParagraphElement>(null);
+
+  // After a successful submit the input + button unmount and the confirmation
+  // replaces them; move focus to it so keyboard/SR focus isn't orphaned.
+  useEffect(() => {
+    if (subscribed) successRef.current?.focus();
+  }, [subscribed]);
 
   const form = useForm<SubscribeValues>({
     resolver: zodResolver(subscribeSchema),
@@ -53,7 +60,12 @@ export function ProductUpdatesForm() {
     <div className="mt-6 border-t border-fd-border pt-4">
       <p className="mb-2 text-1sm font-medium text-fd-foreground">Product updates</p>
       {subscribed ? (
-        <p className="text-xs text-fd-muted-foreground" role="status">
+        <p
+          ref={successRef}
+          tabIndex={-1}
+          className="text-xs text-fd-muted-foreground focus:outline-none"
+          role="status"
+        >
           Thanks for subscribing. Watch your inbox for product updates.
         </p>
       ) : (
