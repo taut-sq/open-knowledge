@@ -164,6 +164,10 @@ msgstr ""
 msgid "{0}m ago"
 msgstr ""
 
+#: src/components/EditorTabs.tsx
+msgid "{accessibleLabel} (conflict)"
+msgstr ""
+
 #: src/components/SyncStatusBadge.tsx
 msgid "{ahead, plural, one {# commit ahead} other {# commits ahead}}"
 msgstr ""
@@ -554,6 +558,22 @@ msgstr ""
 
 #: src/components/EditorTabs.tsx
 msgid "Activate new tab"
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate one of the first eight editor tabs."
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate the last editor tab."
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate the next editor tab."
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate the previous editor tab."
 msgstr ""
 
 #: src/components/ActivityModeContent.tsx
@@ -3556,8 +3576,16 @@ msgstr ""
 msgid "Join us on Discord"
 msgstr ""
 
+#: src/lib/keyboard-shortcuts.ts
+msgid "Jump to last tab"
+msgstr ""
+
 #: src/editor/components/Pdf.tsx
 msgid "Jump to page {pageNumber}"
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Jump to tab 1-8"
 msgstr ""
 
 #: src/components/FolderOverview.tsx
@@ -4114,6 +4142,7 @@ msgid "New skill"
 msgstr ""
 
 #: src/components/EditorTabs.tsx
+#: src/lib/keyboard-shortcuts.ts
 msgid "New tab"
 msgstr ""
 
@@ -4138,6 +4167,10 @@ msgstr ""
 
 #: src/lib/keyboard-shortcuts.ts
 msgid "Next source diagnostic"
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Next tab"
 msgstr ""
 
 #: src/components/FileSidebar.tsx
@@ -4502,6 +4535,10 @@ msgstr ""
 
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Open <0>Customize</0> in the sidebar <1/> <2>Skills</2>."
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Open a blank editor tab."
 msgstr ""
 
 #: src/components/PublishToGitHubDialog.tsx
@@ -4998,6 +5035,10 @@ msgstr ""
 msgid "Previous match"
 msgstr ""
 
+#: src/lib/keyboard-shortcuts.ts
+msgid "Previous tab"
+msgstr ""
+
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Private"
 msgstr ""
@@ -5350,6 +5391,14 @@ msgstr ""
 
 #: src/components/TemplateForm.tsx
 msgid "Renaming changes the file on disk and the id agents use to pick this template."
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Reopen closed tab"
+msgstr ""
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Reopen the most recently closed editor tab."
 msgstr ""
 
 #: src/components/EditorActivityPool.tsx

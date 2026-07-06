@@ -50,6 +50,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from '@/components/ui/input-group';
+import { Kbd } from '@/components/ui/kbd';
 import { useDocumentContext } from '@/editor/DocumentContext';
 import { captureRenameSnapshots } from '@/editor/editor-cache';
 import {
@@ -62,6 +63,7 @@ import {
 import { useLifecycleStatus } from '@/hooks/use-lifecycle-status';
 import { hashFromDocName } from '@/lib/doc-hash';
 import { emitDocumentsChanged } from '@/lib/documents-events';
+import { matchesKeyboardShortcut } from '@/lib/keyboard-shortcuts';
 import { parseServerResponse, parseSuccessOrWarn } from '@/lib/parse-server-response';
 import { cn } from '@/lib/utils';
 import {
@@ -119,6 +121,55 @@ function stripRenameExtensionSuffix(value: string, docExt: string): string {
     (ext) => value.length > ext.length && lowerValue.endsWith(ext.toLowerCase()),
   );
   return extension ? value.slice(0, -extension.length) : value;
+}
+
+function hasTabShortcutModifier(event: globalThis.KeyboardEvent): boolean {
+  return event.metaKey || event.ctrlKey;
+}
+
+const TAB_SHORTCUT_HINT_DELAY_MS = 1000;
+
+function shortcutDigitForIndex(index: number, tabCount: number): string | null {
+  if (index < 0 || index >= tabCount) return null;
+  if (index < 8) return String(index + 1);
+  return index === tabCount - 1 ? '9' : null;
+}
+
+function tabShortcutHintForIndex(index: number, tabCount: number): string | null {
+  return shortcutDigitForIndex(index, tabCount);
+}
+
+function tabAriaKeyShortcutsForIndex(index: number, tabCount: number): string | undefined {
+  const shortcutDigit = shortcutDigitForIndex(index, tabCount);
+  if (!shortcutDigit) return undefined;
+  return [`Meta+${shortcutDigit}`, `Control+${shortcutDigit}`].join(' ');
+}
+
+function jumpTabIndexFromShortcut(
+  event: globalThis.KeyboardEvent,
+  tabCount: number,
+): number | null {
+  if (!hasTabShortcutModifier(event) || event.altKey || event.shiftKey) return null;
+  if (!/^[1-9]$/.test(event.key)) return null;
+  const digit = Number(event.key);
+  if (digit === 9) return tabCount > 0 ? tabCount - 1 : null;
+  const index = digit - 1;
+  return index < Math.min(8, tabCount) ? index : null;
+}
+
+function TabShortcutHint({ value }: { value: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="editor-tab-shortcut-hint"
+      className={cn(
+        getTabCloseButtonClass(true),
+        'font-mono tabular-nums hover:bg-transparent animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none motion-reduce:duration-0',
+      )}
+    >
+      <Kbd className="text-[10px]">{`⌘${value}`}</Kbd>
+    </span>
+  );
 }
 
 /**
@@ -279,19 +330,27 @@ function EditorTabContextMenu({
 function TabPinOrCloseButton({
   accessibleLabel,
   closeTab,
+  forceCloseVisible = false,
   isActive,
   isPinned,
+  shortcutHint = null,
   tabId,
   unpinTab,
 }: {
   accessibleLabel: string;
   closeTab: (tabId: string) => void;
+  forceCloseVisible?: boolean;
   isActive: boolean;
   isPinned: boolean;
+  shortcutHint?: string | null;
   tabId: string;
   unpinTab: (tabId: string) => void;
 }) {
   const { t } = useLingui();
+  if (shortcutHint) {
+    return <TabShortcutHint value={shortcutHint} />;
+  }
+
   if (isPinned) {
     return (
       <Button
@@ -318,7 +377,7 @@ function TabPinOrCloseButton({
       size="icon-xs"
       aria-label={t`Close ${accessibleLabel}`}
       data-testid="editor-tab-close-button"
-      className={getTabCloseButtonClass(isActive)}
+      className={getTabCloseButtonClass(forceCloseVisible || isActive)}
       tabIndex={getTabCloseButtonTabIndex(isActive)}
       onClick={(event) => {
         event.stopPropagation();
@@ -330,26 +389,64 @@ function TabPinOrCloseButton({
   );
 }
 
-/**
- * Per-tab lifecycle-status reader for the conflict badge. Renders an inline
- * `⚠` icon adjacent to the tab name when the doc's `lifecycle.status` is
- * `'conflict'`. Informational only — clicking the tab still goes through the
- * existing tab-click activation; the editor-area swap to DiffViewBoundary
- * fires from the lifecycle observer on the active tab, not from this badge.
- *
- * Returns `null` when the doc is clean or has no pool entry (closed tab) so
- * the badge auto-clears as soon as the lifecycle Y.Map drops the conflict
- * status.
- */
-function TabConflictBadge({ docName }: { docName: string }) {
-  const status = useLifecycleStatus(docName);
-  if (status !== 'conflict') return null;
+// The parent tab button owns the accessible conflict label; this icon is visual.
+function TabConflictBadge({ hasConflict }: { hasConflict: boolean }) {
+  if (!hasConflict) return null;
   return (
     <AlertTriangle
-      aria-label="Conflict"
+      aria-hidden="true"
       data-testid="editor-tab-conflict-badge"
       className="mr-1 size-3.5 shrink-0 text-amber-500"
     />
+  );
+}
+
+function DocumentTabButton({
+  accessibleLabel,
+  activateTab,
+  baseName,
+  docName,
+  enterRenameMode,
+  extension,
+  hideDocExtension,
+  tabId,
+}: {
+  accessibleLabel: string;
+  activateTab: (tabId: string) => void;
+  baseName: string;
+  docName: string;
+  enterRenameMode: (tabId: string, docName: string) => void;
+  extension: string;
+  hideDocExtension: boolean;
+  tabId: string;
+}) {
+  const { t } = useLingui();
+  const lifecycleStatus = useLifecycleStatus(docName);
+  const hasConflict = lifecycleStatus === 'conflict';
+  const buttonAccessibleLabel = hasConflict ? t`${accessibleLabel} (conflict)` : accessibleLabel;
+
+  return (
+    <button
+      type="button"
+      aria-label={buttonAccessibleLabel}
+      title={buttonAccessibleLabel}
+      className={TAB_BUTTON_CLASS}
+      onClick={() => {
+        activateTab(tabId);
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        enterRenameMode(tabId, docName);
+      }}
+      tabIndex={-1}
+    >
+      <TabConflictBadge hasConflict={hasConflict} />
+      <span className="flex min-w-0 flex-1 items-center">
+        <span className="min-w-0 truncate">{baseName}</span>
+        {!hideDocExtension && <span className="shrink-0">{extension}</span>}
+      </span>
+    </button>
   );
 }
 
@@ -373,6 +470,7 @@ export function EditorTabs() {
     openTabs,
     pinTab,
     pinnedTabIds,
+    reopenClosedTab,
     remapTabsForRename,
     reorderTabs,
     unpinTab,
@@ -386,11 +484,15 @@ export function EditorTabs() {
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [isRenameLoading, setIsRenameLoading] = useState(false);
+  const [showTabShortcutHints, setShowTabShortcutHints] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const commitInProgressRef = useRef(false);
   const cancelRequestedRef = useRef(false);
   const lastFailedValueRef = useRef<string | null>(null);
   const activeDocNameRef = useRef(activeDocName);
+  const tabShortcutHintTimerRef = useRef<number | null>(null);
+  const isTabShortcutModifierHeldRef = useRef(false);
+  const showTabShortcutHintsRef = useRef(false);
   const activeTabId =
     activeContextTabId ??
     (activeTarget
@@ -407,6 +509,14 @@ export function EditorTabs() {
   useEffect(() => {
     activeDocNameRef.current = activeDocName;
   }, [activeDocName]);
+
+  useEffect(() => {
+    return () => {
+      if (tabShortcutHintTimerRef.current === null) return;
+      window.clearTimeout(tabShortcutHintTimerRef.current);
+      tabShortcutHintTimerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeTabScrollKey) return;
@@ -615,6 +725,115 @@ export function EditorTabs() {
     for (const tabId of emptyTabIds) closeNewTab(tabId);
   }
 
+  useEffect(() => {
+    const currentNewTabIds = new Set(newTabIds);
+
+    function clearTabShortcutHintTimer() {
+      if (tabShortcutHintTimerRef.current === null) return;
+      window.clearTimeout(tabShortcutHintTimerRef.current);
+      tabShortcutHintTimerRef.current = null;
+    }
+
+    function setTabShortcutModifierHeld(nextValue: boolean) {
+      if (isTabShortcutModifierHeldRef.current === nextValue) return;
+      isTabShortcutModifierHeldRef.current = nextValue;
+    }
+
+    function setTabShortcutHintsVisible(nextValue: boolean) {
+      if (showTabShortcutHintsRef.current === nextValue) return;
+      showTabShortcutHintsRef.current = nextValue;
+      setShowTabShortcutHints(nextValue);
+    }
+
+    function scheduleTabShortcutHintReveal() {
+      setTabShortcutModifierHeld(true);
+      if (showTabShortcutHintsRef.current || tabShortcutHintTimerRef.current !== null) return;
+      tabShortcutHintTimerRef.current = window.setTimeout(() => {
+        tabShortcutHintTimerRef.current = null;
+        if (!isTabShortcutModifierHeldRef.current) return;
+        setTabShortcutHintsVisible(true);
+      }, TAB_SHORTCUT_HINT_DELAY_MS);
+    }
+
+    function clearShortcutHints() {
+      clearTabShortcutHintTimer();
+      setTabShortcutModifierHeld(false);
+      setTabShortcutHintsVisible(false);
+    }
+
+    function activateVisibleTab(tabId: string) {
+      if (currentNewTabIds.has(tabId)) {
+        activateNewTab(tabId);
+      } else {
+        activateTab(tabId);
+      }
+    }
+
+    function activateTabByOffset(offset: number) {
+      if (visibleTabIds.length === 0) return;
+      const activeVisibleTabId = isNewTabActive ? activeNewTabId : activeTabId;
+      const activeIndex = activeVisibleTabId ? visibleTabIds.indexOf(activeVisibleTabId) : -1;
+      const baseIndex = activeIndex >= 0 ? activeIndex : 0;
+      const nextIndex = (baseIndex + offset + visibleTabIds.length) % visibleTabIds.length;
+      activateVisibleTab(visibleTabIds[nextIndex]);
+    }
+
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (hasTabShortcutModifier(event)) scheduleTabShortcutHintReveal();
+
+      if (matchesKeyboardShortcut(event, 'tab-new')) {
+        event.preventDefault();
+        openNewTab();
+        return;
+      }
+      if (matchesKeyboardShortcut(event, 'tab-reopen-closed')) {
+        event.preventDefault();
+        reopenClosedTab();
+        return;
+      }
+      if (matchesKeyboardShortcut(event, 'tab-next')) {
+        event.preventDefault();
+        activateTabByOffset(1);
+        return;
+      }
+      if (matchesKeyboardShortcut(event, 'tab-previous')) {
+        event.preventDefault();
+        activateTabByOffset(-1);
+        return;
+      }
+
+      const jumpIndex = jumpTabIndexFromShortcut(event, visibleTabIds.length);
+      if (jumpIndex === null) return;
+      event.preventDefault();
+      activateVisibleTab(visibleTabIds[jumpIndex]);
+    }
+
+    function onKeyUp(event: globalThis.KeyboardEvent) {
+      if (!event.metaKey && !event.ctrlKey) clearShortcutHints();
+    }
+
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    window.addEventListener('keyup', onKeyUp, { capture: true });
+    window.addEventListener('blur', clearShortcutHints);
+    document.addEventListener('visibilitychange', clearShortcutHints);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+      window.removeEventListener('keyup', onKeyUp, { capture: true });
+      window.removeEventListener('blur', clearShortcutHints);
+      document.removeEventListener('visibilitychange', clearShortcutHints);
+    };
+  }, [
+    activeNewTabId,
+    activeTabId,
+    activateNewTab,
+    activateTab,
+    isNewTabActive,
+    newTabIds,
+    openNewTab,
+    reopenClosedTab,
+    visibleTabIds,
+  ]);
+
   // Tab drag-reorder. PointerSensor `distance: 8` keeps plain clicks from
   // initiating a drag (tabs differ from the PropertyPanel drag-handle pattern,
   // where the handle is a dedicated child — here the entire tab is the drag
@@ -629,6 +848,7 @@ export function EditorTabs() {
       keyboardCodes: TAB_KEYBOARD_DRAG_CODES,
     }),
   );
+  const forceTabCloseVisible = showTabShortcutHints;
 
   function handleDragStart() {
     setTabReorderBounds(measureTabReorderBounds(tabListRef.current));
@@ -689,7 +909,11 @@ export function EditorTabs() {
           }}
         >
           <SortableContext items={[...visibleTabIds]} strategy={horizontalListSortingStrategy}>
-            {visibleTabIds.map((tabId) => {
+            {visibleTabIds.map((tabId, tabIndex) => {
+              const shortcutHint = showTabShortcutHints
+                ? tabShortcutHintForIndex(tabIndex, visibleTabIds.length)
+                : null;
+              const ariaKeyShortcuts = tabAriaKeyShortcutsForIndex(tabIndex, visibleTabIds.length);
               if (newTabIdSet.has(tabId)) {
                 const isActive = tabId === activeNewTabId;
                 return (
@@ -708,6 +932,7 @@ export function EditorTabs() {
                       tabId={tabId}
                       activateFromKeyboard={() => activateNewTab(tabId)}
                       aria-current={isActive ? 'page' : undefined}
+                      aria-keyshortcuts={ariaKeyShortcuts}
                       data-active-tab={isActive ? 'true' : undefined}
                       className={cn(
                         TAB_BASE_CLASS,
@@ -735,19 +960,23 @@ export function EditorTabs() {
                           <Trans>New tab</Trans>
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        aria-label={t`Close new tab`}
-                        data-testid="editor-new-tab-placeholder-close"
-                        className={getTabCloseButtonClass(isActive)}
-                        tabIndex={getTabCloseButtonTabIndex(isActive)}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          closeNewTab(tabId);
-                        }}
-                      >
-                        <XIcon aria-hidden="true" className="size-3.5" />
-                      </button>
+                      {shortcutHint ? (
+                        <TabShortcutHint value={shortcutHint} />
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={t`Close new tab`}
+                          data-testid="editor-new-tab-placeholder-close"
+                          className={getTabCloseButtonClass(forceTabCloseVisible || isActive)}
+                          tabIndex={getTabCloseButtonTabIndex(isActive)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            closeNewTab(tabId);
+                          }}
+                        >
+                          <XIcon aria-hidden="true" className="size-3.5" />
+                        </button>
+                      )}
                     </SortableTab>
                   </EditorTabContextMenu>
                 );
@@ -774,6 +1003,7 @@ export function EditorTabs() {
                       tabId={tabId}
                       activateFromKeyboard={() => activateTab(tabId)}
                       aria-current={isActive ? 'page' : undefined}
+                      aria-keyshortcuts={ariaKeyShortcuts}
                       data-active-tab={isActive ? 'true' : undefined}
                       className={cn(
                         TAB_BASE_CLASS,
@@ -823,8 +1053,10 @@ export function EditorTabs() {
                       <TabPinOrCloseButton
                         accessibleLabel={accessibleLabel}
                         closeTab={closeTab}
+                        forceCloseVisible={forceTabCloseVisible}
                         isActive={isActive}
                         isPinned={isPinned}
+                        shortcutHint={shortcutHint}
                         tabId={tabId}
                         unpinTab={unpinTab}
                       />
@@ -855,6 +1087,7 @@ export function EditorTabs() {
                       tabId={tabId}
                       activateFromKeyboard={() => activateTab(tabId)}
                       aria-current={isActive ? 'page' : undefined}
+                      aria-keyshortcuts={ariaKeyShortcuts}
                       data-active-tab={isActive ? 'true' : undefined}
                       className={cn(
                         TAB_BASE_CLASS,
@@ -902,8 +1135,10 @@ export function EditorTabs() {
                       <TabPinOrCloseButton
                         accessibleLabel={accessibleLabel}
                         closeTab={closeTab}
+                        forceCloseVisible={forceTabCloseVisible}
                         isActive={isActive}
                         isPinned={isPinned}
+                        shortcutHint={shortcutHint}
                         tabId={tabId}
                         unpinTab={unpinTab}
                       />
@@ -936,6 +1171,7 @@ export function EditorTabs() {
                     activateFromKeyboard={() => activateTab(tabId)}
                     disabled={isRenaming}
                     aria-current={isActive ? 'page' : undefined}
+                    aria-keyshortcuts={ariaKeyShortcuts}
                     data-active-tab={isActive ? 'true' : undefined}
                     className={cn(
                       TAB_BASE_CLASS,
@@ -1003,32 +1239,23 @@ export function EditorTabs() {
                       </>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          aria-label={accessibleLabel}
-                          title={accessibleLabel}
-                          className={TAB_BUTTON_CLASS}
-                          onClick={() => {
-                            activateTab(tabId);
-                          }}
-                          onDoubleClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            enterRenameMode(tabId, docName);
-                          }}
-                          tabIndex={-1}
-                        >
-                          <TabConflictBadge docName={docName} />
-                          <span className="flex min-w-0 flex-1 items-center">
-                            <span className="min-w-0 truncate">{baseName}</span>
-                            {!hideDocExtension && <span className="shrink-0">{extension}</span>}
-                          </span>
-                        </button>
+                        <DocumentTabButton
+                          accessibleLabel={accessibleLabel}
+                          activateTab={activateTab}
+                          baseName={baseName}
+                          docName={docName}
+                          enterRenameMode={enterRenameMode}
+                          extension={extension}
+                          hideDocExtension={hideDocExtension}
+                          tabId={tabId}
+                        />
                         <TabPinOrCloseButton
                           accessibleLabel={accessibleLabel}
                           closeTab={closeTab}
+                          forceCloseVisible={forceTabCloseVisible}
                           isActive={isActive}
                           isPinned={isPinned}
+                          shortcutHint={shortcutHint}
                           tabId={tabId}
                           unpinTab={unpinTab}
                         />
