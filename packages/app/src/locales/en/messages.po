@@ -164,6 +164,10 @@ msgstr "{0}h ago"
 msgid "{0}m ago"
 msgstr "{0}m ago"
 
+#: src/components/EditorTabs.tsx
+msgid "{accessibleLabel} (conflict)"
+msgstr "{accessibleLabel} (conflict)"
+
 #: src/components/SyncStatusBadge.tsx
 msgid "{ahead, plural, one {# commit ahead} other {# commits ahead}}"
 msgstr "{ahead, plural, one {# commit ahead} other {# commits ahead}}"
@@ -560,6 +564,22 @@ msgstr "Actions for {label}"
 #: src/components/EditorTabs.tsx
 msgid "Activate new tab"
 msgstr "Activate new tab"
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate one of the first eight editor tabs."
+msgstr "Activate one of the first eight editor tabs."
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate the last editor tab."
+msgstr "Activate the last editor tab."
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate the next editor tab."
+msgstr "Activate the next editor tab."
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Activate the previous editor tab."
+msgstr "Activate the previous editor tab."
 
 #: src/components/ActivityModeContent.tsx
 msgid "Active"
@@ -3561,9 +3581,17 @@ msgstr "Items to be created"
 msgid "Join us on Discord"
 msgstr "Join us on Discord"
 
+#: src/lib/keyboard-shortcuts.ts
+msgid "Jump to last tab"
+msgstr "Jump to last tab"
+
 #: src/editor/components/Pdf.tsx
 msgid "Jump to page {pageNumber}"
 msgstr "Jump to page {pageNumber}"
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Jump to tab 1-8"
+msgstr "Jump to tab 1-8"
 
 #: src/components/FolderOverview.tsx
 #: src/components/FolderTimelineCard.tsx
@@ -4119,6 +4147,7 @@ msgid "New skill"
 msgstr "New skill"
 
 #: src/components/EditorTabs.tsx
+#: src/lib/keyboard-shortcuts.ts
 msgid "New tab"
 msgstr "New tab"
 
@@ -4144,6 +4173,10 @@ msgstr "Next match"
 #: src/lib/keyboard-shortcuts.ts
 msgid "Next source diagnostic"
 msgstr "Next source diagnostic"
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Next tab"
+msgstr "Next tab"
 
 #: src/components/FileSidebar.tsx
 msgid "No AI agents installed"
@@ -4508,6 +4541,10 @@ msgstr "Open <0><1>{verificationUri}</1><2/></0> and enter this code:"
 #: src/components/InstallInClaudeDesktopDialog.tsx
 msgid "Open <0>Customize</0> in the sidebar <1/> <2>Skills</2>."
 msgstr "Open <0>Customize</0> in the sidebar <1/> <2>Skills</2>."
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Open a blank editor tab."
+msgstr "Open a blank editor tab."
 
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Open a doc to share its URL."
@@ -5003,6 +5040,10 @@ msgstr "Preview unavailable: {errorDetail}"
 msgid "Previous match"
 msgstr "Previous match"
 
+#: src/lib/keyboard-shortcuts.ts
+msgid "Previous tab"
+msgstr "Previous tab"
+
 #: src/components/PublishToGitHubDialog.tsx
 msgid "Private"
 msgstr "Private"
@@ -5356,6 +5397,14 @@ msgstr "Renaming"
 #: src/components/TemplateForm.tsx
 msgid "Renaming changes the file on disk and the id agents use to pick this template."
 msgstr "Renaming changes the file on disk and the id agents use to pick this template."
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Reopen closed tab"
+msgstr "Reopen closed tab"
+
+#: src/lib/keyboard-shortcuts.ts
+msgid "Reopen the most recently closed editor tab."
+msgstr "Reopen the most recently closed editor tab."
 
 #: src/components/EditorActivityPool.tsx
 msgid "Reopening \"{docName}\" with a fresh local collaboration cache."

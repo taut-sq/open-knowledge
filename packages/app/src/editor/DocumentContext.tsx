@@ -181,6 +181,8 @@ interface DocumentContextValue {
   activateNewTab: (tabId: string) => void;
   /** Close the empty tab placeholder and return to the nearest document tab. */
   closeNewTab: (tabId: string) => void;
+  /** Reopen the most recently closed editor tab, if any. */
+  reopenClosedTab: () => void;
   /**
    * Close multiple visible tabs with a single active-tab/navigation decision.
    * Pinned tabs are skipped unless `force` is set for backing file/folder removal.
@@ -613,6 +615,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   const newTabIdsRef = useRef<string[]>(newTabIds);
   const visibleTabIdsRef = useRef<string[]>(visibleTabIds);
   const nextNewTabOrdinalRef = useRef(1);
+  const recentlyClosedTabsRef = useRef<string[]>([]);
   // Set true when the user explicitly CLOSES (or unpins/replaces) a tab during
   // the async session-restore window. Bails the restore merge so a freshly-
   // closed tab cannot resurrect from the about-to-arrive restored snapshot.
@@ -1232,11 +1235,78 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     openTargetWithOptions(target, options);
   };
 
+  function pushRecentlyClosedTabs(tabIds: readonly string[]) {
+    if (tabIds.length === 0) return;
+    recentlyClosedTabsRef.current = [...recentlyClosedTabsRef.current, ...tabIds].slice(-50);
+  }
+
+  const activateTabById = (tabId: string) => {
+    const tab = parseEditorTabId(tabId);
+    commitActiveNewTabId(null);
+    commitActiveTabId(tabId);
+    if (tab.kind === 'doc') {
+      if (collabUrl !== null) {
+        const p = getPool(collabUrl);
+        const entry = p.open(tab.docName);
+        if (!entry) return;
+        p.setActive(tab.docName);
+      }
+      setActiveTarget({ kind: 'doc', target: tab.docName, docName: tab.docName });
+      const nextHash = hashFromDocName(tab.docName);
+      if (window.location.hash !== nextHash) window.location.hash = nextHash;
+      return;
+    }
+    if (collabUrl !== null) {
+      const p = getPool(collabUrl);
+      p.clearActive();
+    }
+    if (tab.kind === 'asset') {
+      setActiveTarget(assetTargetForPath(tab.assetPath));
+      const nextHash = hashFromAssetPath(tab.assetPath);
+      if (window.location.hash !== nextHash) window.location.hash = nextHash;
+      return;
+    }
+    if (tab.kind === 'skill-file') {
+      setActiveTarget({
+        kind: 'skill-file',
+        target: `${tab.scope}/${tab.name}/${tab.path}`,
+        scope: tab.scope,
+        name: tab.name,
+        path: tab.path,
+      });
+      const nextHash = hashFromSkillFile({ scope: tab.scope, name: tab.name, path: tab.path });
+      if (window.location.hash !== nextHash) window.location.hash = nextHash;
+      return;
+    }
+    setActiveTarget({ kind: 'folder', target: tab.folderPath, folderPath: tab.folderPath });
+    const nextHash = hashFromFolderPath(tab.folderPath);
+    if (window.location.hash !== nextHash) window.location.hash = nextHash;
+  };
+
+  const openNewTabById = () => {
+    // Open a blank tab — additive, no close-during-restore mark.
+    const nextNewTabId = `new-tab:${nextNewTabOrdinalRef.current}`;
+    nextNewTabOrdinalRef.current += 1;
+    commitNewTabIds([...newTabIdsRef.current, nextNewTabId]);
+    commitActiveNewTabId(nextNewTabId);
+    if (collabUrl !== null) {
+      const p = getPool(collabUrl);
+      p.clearActive();
+    }
+    setActiveTarget(null);
+    commitActiveTabId(null);
+    if (window.location.hash !== '') {
+      window.location.hash = '';
+    }
+  };
+
   const closeTabById = (tabId: string) => {
     if (pinnedTabIdsRef.current.includes(tabId)) return;
+    if (!openTabsRef.current.includes(tabId)) return;
     markTabSessionClosedDuringRestore();
     let nextActiveTabId: string | null = null;
     const closingDocName = docNameForTabId(tabId);
+    pushRecentlyClosedTabs([tabId]);
     if (collabUrl !== null) {
       const p = getPool(collabUrl);
       if (closingDocName && !hasOpenDocTab(openTabsRef.current, closingDocName, new Set([tabId]))) {
@@ -1410,46 +1480,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     activateTab: (tabId: string) => {
       // Activate doesn't open/close tabs — only changes the active tab. The
       // restore's shouldRestoreActive gate respects the current hash, so no mark.
-      const tab = parseEditorTabId(tabId);
-      commitActiveNewTabId(null);
-      commitActiveTabId(tabId);
-      if (tab.kind === 'doc') {
-        if (collabUrl !== null) {
-          const p = getPool(collabUrl);
-          const entry = p.open(tab.docName);
-          if (!entry) return;
-          p.setActive(tab.docName);
-        }
-        setActiveTarget({ kind: 'doc', target: tab.docName, docName: tab.docName });
-        const nextHash = hashFromDocName(tab.docName);
-        if (window.location.hash !== nextHash) window.location.hash = nextHash;
-        return;
-      }
-      if (collabUrl !== null) {
-        const p = getPool(collabUrl);
-        p.clearActive();
-      }
-      if (tab.kind === 'asset') {
-        setActiveTarget(assetTargetForPath(tab.assetPath));
-        const nextHash = hashFromAssetPath(tab.assetPath);
-        if (window.location.hash !== nextHash) window.location.hash = nextHash;
-        return;
-      }
-      if (tab.kind === 'skill-file') {
-        setActiveTarget({
-          kind: 'skill-file',
-          target: `${tab.scope}/${tab.name}/${tab.path}`,
-          scope: tab.scope,
-          name: tab.name,
-          path: tab.path,
-        });
-        const nextHash = hashFromSkillFile({ scope: tab.scope, name: tab.name, path: tab.path });
-        if (window.location.hash !== nextHash) window.location.hash = nextHash;
-        return;
-      }
-      setActiveTarget({ kind: 'folder', target: tab.folderPath, folderPath: tab.folderPath });
-      const nextHash = hashFromFolderPath(tab.folderPath);
-      if (window.location.hash !== nextHash) window.location.hash = nextHash;
+      activateTabById(tabId);
     },
     reorderTabs: (newOrder: readonly string[], draggedTabId: string) => {
       // Tab drag-reorder. newOrder is the desired visibleTabIds order after
@@ -1520,22 +1551,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     newTabIds,
     activeNewTabId,
     isNewTabActive,
-    openNewTab: () => {
-      // Open a blank tab — additive, no close-during-restore mark.
-      const nextNewTabId = `new-tab:${nextNewTabOrdinalRef.current}`;
-      nextNewTabOrdinalRef.current += 1;
-      commitNewTabIds([...newTabIdsRef.current, nextNewTabId]);
-      commitActiveNewTabId(nextNewTabId);
-      if (collabUrl !== null) {
-        const p = getPool(collabUrl);
-        p.clearActive();
-      }
-      setActiveTarget(null);
-      commitActiveTabId(null);
-      if (window.location.hash !== '') {
-        window.location.hash = '';
-      }
-    },
+    openNewTab: openNewTabById,
     activateNewTab: (tabId: string) => {
       // Activate only — no open/close. No close-during-restore mark.
       if (!newTabIdsRef.current.includes(tabId)) return;
@@ -1551,6 +1567,29 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       }
     },
     closeNewTab: closeNewTabById,
+    reopenClosedTab: () => {
+      const stack = [...recentlyClosedTabsRef.current];
+      while (stack.length > 0) {
+        const tabId = stack.pop();
+        if (!tabId) continue;
+        if (openTabsRef.current.includes(tabId)) {
+          recentlyClosedTabsRef.current = stack;
+          continue;
+        }
+        const nextOpenTabs = addOpenTab(
+          openTabsRef.current,
+          tabId,
+          MAX_POOL,
+          pinnedTabIdsRef.current,
+        );
+        if (!nextOpenTabs.includes(tabId)) return;
+        recentlyClosedTabsRef.current = stack;
+        commitOpenTabs(nextOpenTabs);
+        activateTabById(tabId);
+        return;
+      }
+      recentlyClosedTabsRef.current = [];
+    },
     closeTabs: (tabIds: readonly string[], options: CloseTabsOptions = {}) => {
       const requestedTabIds = tabIds.filter((tabId) => tabId.length > 0);
       const closingTabIds = new Set(
@@ -1560,6 +1599,9 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       );
       if (closingTabIds.size === 0) return;
       markTabSessionClosedDuringRestore();
+      if (!options.force) {
+        pushRecentlyClosedTabs(openTabsRef.current.filter((tabId) => closingTabIds.has(tabId)));
+      }
       if (collabUrl !== null) {
         const p = getPool(collabUrl);
         const closingByDocName = new Map<string, Set<string>>();

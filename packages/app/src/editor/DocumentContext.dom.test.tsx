@@ -5,9 +5,11 @@ import { type ReactNode, useLayoutEffect, useState } from 'react';
 import type { OkDesktopBridge } from '@/lib/desktop-bridge-types';
 import { docTabId, localTabSessionStorageKey } from './editor-tabs';
 
+let mockCollabUrl: string | null = null;
+
 mock.module('@/lib/use-collab-url', () => ({
   useCollabUrl: () => ({
-    collabUrl: null,
+    collabUrl: mockCollabUrl,
     attempts: 0,
     terminal: false,
     lastError: null,
@@ -19,6 +21,8 @@ const { DocumentProvider, useDocumentContext } = await import('./DocumentContext
 
 const PINNED_TAB_ID = docTabId('Pinned.md');
 const OTHER_TAB_ID = docTabId('Other.md');
+const THIRD_TAB_ID = docTabId('Third.md');
+const originalFetch = globalThis.fetch;
 
 function seedTabSession() {
   window.localStorage.setItem(
@@ -41,6 +45,19 @@ function seedActiveOtherTabSession() {
       pinnedTabIds: [],
       activeDocName: 'Other.md',
       activeTabId: OTHER_TAB_ID,
+      updatedAt: new Date('2026-05-13T00:00:00.000Z').toISOString(),
+    }),
+  );
+}
+
+function seedThreeTabSession() {
+  window.localStorage.setItem(
+    localTabSessionStorageKey(window.location.origin),
+    JSON.stringify({
+      openTabs: [PINNED_TAB_ID, OTHER_TAB_ID, THIRD_TAB_ID],
+      pinnedTabIds: [],
+      activeDocName: 'Pinned.md',
+      activeTabId: PINNED_TAB_ID,
       updatedAt: new Date('2026-05-13T00:00:00.000Z').toISOString(),
     }),
   );
@@ -131,8 +148,20 @@ function CloseActiveHarness() {
       <button type="button" onClick={() => ctx.openNewTab()}>
         Open new
       </button>
+      <button type="button" onClick={() => ctx.openDocument('Other.md')}>
+        Open other
+      </button>
+      <button type="button" onClick={() => ctx.closeTab(OTHER_TAB_ID)}>
+        Close other
+      </button>
+      <button type="button" onClick={() => ctx.closeTab(THIRD_TAB_ID)}>
+        Close third
+      </button>
       <button type="button" onClick={() => setHandled(String(ctx.closeActiveTabOrWindow()))}>
         Close active
+      </button>
+      <button type="button" onClick={() => ctx.reopenClosedTab()}>
+        Reopen closed
       </button>
     </>
   );
@@ -156,6 +185,8 @@ describe('DocumentContext tab close force contract', () => {
   afterEach(() => {
     cleanup();
     delete window.okDesktop;
+    mockCollabUrl = null;
+    globalThis.fetch = originalFetch;
     window.localStorage.clear();
     window.location.hash = '';
   });
@@ -192,6 +223,63 @@ describe('DocumentContext tab close force contract', () => {
     expect(screen.getByTestId('close-handled').textContent).toBe('true');
     expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
     expect(screen.getByTestId('active-tab').textContent).toBe(PINNED_TAB_ID);
+  });
+
+  test('reopenClosedTab restores the most recently closed tab and activates it', async () => {
+    seedActiveOtherTabSession();
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
+    expect(screen.getByTestId('active-tab').textContent).toBe(PINNED_TAB_ID);
+
+    await user.click(screen.getByRole('button', { name: 'Reopen closed' }));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(`${PINNED_TAB_ID}|${OTHER_TAB_ID}`);
+    expect(screen.getByTestId('active-tab').textContent).toBe(OTHER_TAB_ID);
+  });
+
+  test('reopenClosedTab skips already-open entries and continues to the next closed tab', async () => {
+    mockCollabUrl = 'ws://localhost:1/collab';
+    globalThis.fetch = mock(() => Promise.reject(new Error('unexpected fetch'))) as never;
+    seedThreeTabSession();
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Close third' }));
+    await user.click(screen.getByRole('button', { name: 'Close other' }));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(PINNED_TAB_ID);
+
+    await user.click(screen.getByRole('button', { name: 'Open other' }));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(`${PINNED_TAB_ID}|${OTHER_TAB_ID}`);
+    expect(screen.getByTestId('active-tab').textContent).toBe(OTHER_TAB_ID);
+
+    await user.click(screen.getByRole('button', { name: 'Reopen closed' }));
+
+    expect(screen.getByTestId('open-tabs').textContent).toBe(
+      `${PINNED_TAB_ID}|${OTHER_TAB_ID}|${THIRD_TAB_ID}`,
+    );
+    expect(screen.getByTestId('active-tab').textContent).toBe(THIRD_TAB_ID);
+  });
+
+  test('reopenClosedTab ignores closed new-tab placeholders', async () => {
+    render(<CloseActiveHarness />, { wrapper: ProviderHarness });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Open new' }));
+    await user.click(screen.getByRole('button', { name: 'Close active' }));
+
+    expect(screen.getByTestId('new-tabs').textContent).toBe('');
+    expect(screen.getByTestId('active-new-tab').textContent).toBe('');
+
+    await user.click(screen.getByRole('button', { name: 'Reopen closed' }));
+
+    expect(screen.getByTestId('new-tabs').textContent).toBe('');
+    expect(screen.getByTestId('active-new-tab').textContent).toBe('');
   });
 
   test('closeActiveTabOrWindow skips active pinned tab and closes the next visible unpinned tab', async () => {
