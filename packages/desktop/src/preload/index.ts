@@ -50,6 +50,7 @@ import type {
   OkWhatsNewInfo,
 } from '../shared/bridge-contract.ts';
 import { createInvoker } from '../shared/ipc-invoke.ts';
+import { resolveOkDesktopMode } from '../shared/ok-desktop-mode.ts';
 
 const invoke = createInvoker(ipcRenderer);
 
@@ -202,8 +203,7 @@ function readConfigFromArgv(): OkDesktopConfig {
   const apiOrigin = parseArg('api-origin') ?? '';
   const projectPath = parseArg('project-path') ?? '';
   const projectName = parseArg('project-name') ?? '';
-  const modeRaw = parseArg('mode') ?? 'editor';
-  const mode: OkDesktopConfig['mode'] = modeRaw === 'navigator' ? 'navigator' : 'editor';
+  const mode = resolveOkDesktopMode(parseArg('mode'));
   // Present only on ephemeral single-file windows (`ok <file>`); every normal
   // project window omits the flag and coerces to `false`.
   const singleFile = parseArg('single-file') === '1';

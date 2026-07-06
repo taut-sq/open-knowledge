@@ -11,6 +11,7 @@ import {
   writePreferBareTerminal,
 } from '@/lib/terminal-new-tab-store';
 import { loadStickyAgent, saveStickyAgent, terminalCliId } from '@/lib/unified-agent-store';
+import { cn } from '@/lib/utils';
 import { emitOpenAskAiComposer } from './ask-ai-composer-events';
 import type { TerminalLaunchIntent } from './EditorPane';
 import { subscribeToActiveTerminalInput } from './handoff/terminal-input-events';
@@ -49,8 +50,21 @@ function focusTerminalSession(id: string) {
 interface TerminalSessionsHostProps {
   /** Desktop bridge — the host renders only on the Electron surface. */
   readonly bridge: OkDesktopBridge;
+  /**
+   * Which surface hosts the sessions. `'dock'` (default) is the editor's
+   * docked terminal: visibility-driven seeding, dock-toggle + collapse controls,
+   * ⌘1–9 scoped to focus inside the host. `'window'` is the standalone terminal
+   * window: always visible, seeds its first tab on mount, the tab row doubles as
+   * the macOS title bar, no dock/collapse controls (window management is the
+   * OS's), and ⌘1–9 is scope-free (the whole window is the terminal). Everything
+   * else — the new-chat split button, OSC tab titles, menu actions, liveness,
+   * reload rehydration — is identical by construction: one session model, two
+   * placements.
+   */
+  readonly variant?: 'dock' | 'window';
   /** Controlled visibility. The host reflects this and reports close-last back
-   *  through {@link onVisibleChange}; it never owns it. */
+   *  through {@link onVisibleChange}; it never owns it. The window variant pins
+   *  it `true` and maps the close-last report to `window.close()`. */
   readonly visible: boolean;
   readonly onVisibleChange: (visible: boolean) => void;
   /** "Open in terminal" launch intent — each new intent opens its own tab. */
@@ -73,10 +87,12 @@ interface TerminalSessionsHostProps {
   /** Return focus to the editor when the terminal hides or the last tab closes. */
   readonly onRequestEditorFocus: () => void;
   /** Current dock position — passed to the tab strip's dock-toggle + collapse
-   *  controls so their icons/labels reflect where the terminal lives. */
-  readonly dockPosition: TerminalDockPosition;
-  /** Flip the dock between bottom and right (the tab strip's dock-toggle button). */
-  readonly onToggleDock: () => void;
+   *  controls so their icons/labels reflect where the terminal lives. Dock
+   *  variant only. */
+  readonly dockPosition?: TerminalDockPosition;
+  /** Flip the dock between bottom and right (the tab strip's dock-toggle button).
+   *  Dock variant only — the strip renders no toggle without it. */
+  readonly onToggleDock?: () => void;
   /** Reports whether any PTY session is currently open. The header's New chat
    *  button reads this to decide between spawning a first chat and merely
    *  revealing the existing dock. */
@@ -93,6 +109,7 @@ interface TerminalSessionsHostProps {
  */
 export function TerminalSessionsHost({
   bridge,
+  variant = 'dock',
   visible,
   onVisibleChange,
   launch = null,
@@ -166,8 +183,11 @@ export function TerminalSessionsHost({
   // intent across re-renders.
   const lastHandledLaunchNonceRef = useRef<number | null>(visible && launch ? launch.nonce : null);
   // Tracks the prior `visible` so the open-from-hidden transition (false→true) is
-  // distinguishable from "still visible".
-  const prevVisibleRef = useRef(visible);
+  // distinguishable from "still visible". The window variant mounts already
+  // visible, so its mount IS the open transition — starting the ref false routes
+  // the first-tab seed through the same open path the dock uses (after any
+  // rehydration settles, so adopted reload survivors still win over a fresh seed).
+  const prevVisibleRef = useRef(variant === 'window' ? false : visible);
   // Live PTY id per session, reported up from each panel (null on teardown). Lets
   // the selection-bubble "Ask AI" input (requestActiveTerminalInput) write into an
   // already-open terminal's live shell (reuse) instead of the caret going to the
@@ -395,21 +415,32 @@ export function TerminalSessionsHost({
   // The Terminal application menu's per-session items act on the tab collection:
   // "New Terminal" opens a fresh tab, "Kill Terminal" closes the active one —
   // reusing the strip's own open/close paths so menu and strip stay identical.
+  // ⌘W (`close-active-tab-or-window`) closes the active tab in the WINDOW
+  // variant only — every BrowserWindow type must subscribe to it (menu.ts
+  // contract), and in the terminal window this host is the only subscriber
+  // (close-last then closes the window via the close-last report). In the
+  // editor window the doc tree owns ⌘W (DocumentContext closes the active doc
+  // tab); handling it here too would double-close.
   useEffect(() => {
     return bridge.onMenuAction((action) => {
       if (action === 'new-terminal') openSessionRef.current(null);
       else if (action === 'kill-terminal') closeActiveRef.current();
+      else if (action === 'close-active-tab-or-window' && variant === 'window')
+        closeActiveRef.current();
     });
-  }, [bridge]);
+  }, [bridge, variant]);
 
   // ⌘1–⌘9 jump straight to the Nth tab. Capture phase so a focused xterm can't
   // swallow the chord; scoped to focus inside the stable host div (which follows
   // the terminal to whichever dock) so the digit chord stays free everywhere else.
+  // The window variant skips the scope gate — the whole window is the terminal,
+  // so there is nothing else the digit chord could mean there.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (!/^[1-9]$/.test(event.key)) return;
-      if (hostEl == null || !hostEl.contains(document.activeElement)) return;
+      if (variant !== 'window' && (hostEl == null || !hostEl.contains(document.activeElement)))
+        return;
       const target = sessionsRef.current[Number(event.key) - 1];
       if (target == null) return;
       event.preventDefault();
@@ -419,7 +450,7 @@ export function TerminalSessionsHost({
     }
     window.addEventListener('keydown', onKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  }, [hostEl]);
+  }, [hostEl, variant]);
 
   // Reflect PTY liveness to main so the Terminal menu's "Kill Terminal" item
   // enables only while at least one session is live. A collapsed-but-alive
@@ -480,7 +511,10 @@ export function TerminalSessionsHost({
         onToggleDock={onToggleDock}
         // Collapse hides the terminal but keeps every session alive (hide is not
         // kill), exactly like the ⌘J toggle — the next reveal restores the tabs.
-        onCollapse={() => onVisibleChange(false)}
+        // The window has no collapse (closing the window is the OS affordance).
+        onCollapse={variant === 'window' ? undefined : () => onVisibleChange(false)}
+        // Window mode: the tab row doubles as the frameless window's title bar.
+        draggable={variant === 'window'}
         className="h-full"
       >
         {sessions.map((session) => (
@@ -492,7 +526,14 @@ export function TerminalSessionsHost({
             value={session.id}
             forceMount
             data-terminal-session={session.id}
-            className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+            // Window mode insets the terminal content by the traffic-light gutter
+            // (22px, = trafficLightPosition.x) so its left edge lines up with the
+            // bubbles and it isn't glued to the window's edges; the padding shows
+            // the window background, framing the xterm. The dock sits flush.
+            className={cn(
+              'm-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden',
+              variant === 'window' && 'px-[22px] pb-[22px]',
+            )}
           >
             <TerminalGate
               bridge={bridge}

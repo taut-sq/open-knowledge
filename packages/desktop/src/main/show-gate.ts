@@ -71,7 +71,7 @@ export interface ShowGateRegistry {
    * window destroyed before either signal arrives doesn't hold stale state.
    *
    * @param window - The window to register.
-   * @param opts.kind - Kind of window for diagnostic warns. 'editor' or 'navigator'.
+   * @param opts.kind - Kind of window for diagnostic warns. 'editor', 'navigator', or 'terminal'.
    */
   register(window: BrowserWindowLike, opts?: { kind?: WindowKind }): () => void;
   /**
@@ -83,7 +83,7 @@ export interface ShowGateRegistry {
   fireThemeApplied(window: BrowserWindowLike): void;
 }
 
-type WindowKind = 'editor' | 'navigator';
+type WindowKind = 'editor' | 'navigator' | 'terminal';
 
 interface PerWindowGateState {
   readyToShow: boolean;

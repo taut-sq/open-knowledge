@@ -248,6 +248,13 @@ export interface MenuDeps {
   onNewTerminal?(): void;
   onKillTerminal?(): void;
   /**
+   * Opens a new dedicated terminal WINDOW (distinct from `onNewTerminal`, which
+   * opens a tab in the docked panel). Main resolves the focused window's project
+   * and opens the window directly — no renderer round-trip. Optional for the
+   * deps-unwired unit-test contexts.
+   */
+  onNewTerminalWindow?(): void;
+  /**
    * Whether a terminal session is live (mounted). Gates "Kill Terminal" — a
    * collapsed-but-alive terminal still counts as live, so this tracks the dock
    * latch, not visibility. `undefined`/`false` keeps Kill Terminal disabled.
@@ -656,6 +663,14 @@ export function buildMenuTemplate(deps: MenuDeps): MenuItemConstructorOptions[] 
           label: 'New Terminal',
           enabled: deps.onNewTerminal !== undefined,
           click: () => deps.onNewTerminal?.(),
+        },
+        {
+          // Opens a dedicated terminal window (1:1 with VS Code's "New Terminal
+          // Window"). No accelerator — VS Code ships the command unbound, and
+          // ⌘J stays the docked Show/Hide Terminal toggle.
+          label: 'New Terminal Window',
+          enabled: deps.onNewTerminalWindow !== undefined,
+          click: () => deps.onNewTerminalWindow?.(),
         },
         {
           // Closes the active tab — kills its shell (not just hide). Enabled

@@ -113,7 +113,7 @@ export type OkSeedListPacksResult =
   | { ok: false; error: { kind: 'internal'; message: string } };
 
 /** Render mode picked by the main process when creating a BrowserWindow. */
-type OkDesktopMode = 'editor' | 'navigator';
+type OkDesktopMode = 'editor' | 'navigator' | 'terminal';
 
 /** Frozen snapshot of window-level config injected at preload-exposure time. */
 export interface OkDesktopConfig {

@@ -26,7 +26,7 @@ import type {
 import type { RecentProjectEntry } from './sharing/index.ts';
 
 /** Render mode picked by the main process when creating a BrowserWindow. */
-type OkDesktopMode = 'editor' | 'navigator';
+type OkDesktopMode = 'editor' | 'navigator' | 'terminal';
 
 /**
  * Config values injected at preload-exposure time. A frozen snapshot, not a
@@ -44,7 +44,7 @@ interface OkDesktopConfig {
   readonly projectPath: string;
   /** Display name for the project (usually basename of projectPath). */
   readonly projectName: string;
-  /** Render mode — `navigator` renders the Project Navigator, `editor` renders the doc editor. */
+  /** Render mode — `navigator` renders the Project Navigator, `editor` renders the doc editor, `terminal` renders the standalone terminal window. */
   readonly mode: OkDesktopMode;
 }
 

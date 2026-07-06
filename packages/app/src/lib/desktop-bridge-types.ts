@@ -135,7 +135,7 @@ export interface OkFindEnclosingGitRootResult {
   readonly distance: number;
 }
 
-type OkDesktopMode = 'editor' | 'navigator';
+type OkDesktopMode = 'editor' | 'navigator' | 'terminal';
 
 export interface OkDesktopConfig {
   readonly collabUrl: string;

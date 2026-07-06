@@ -1017,14 +1017,22 @@ describe('buildMenuTemplate — top-level Terminal menu (New / Kill)', () => {
     expect(windowIdx).toBeGreaterThan(terminalIdx);
   });
 
-  test('contains exactly New Terminal then Kill Terminal; New Terminal is click-only (no ⌘J)', () => {
+  test('contains New Terminal, New Terminal Window, then Kill Terminal; New Terminal is click-only (no ⌘J)', () => {
     const template = buildMenuTemplate(
-      makeDeps({ onNewTerminal: mock(() => {}), onKillTerminal: mock(() => {}) }),
+      makeDeps({
+        onNewTerminal: mock(() => {}),
+        onNewTerminalWindow: mock(() => {}),
+        onKillTerminal: mock(() => {}),
+      }),
     );
     const sub = findByLabel(template, 'Terminal')?.submenu as
       | MenuItemConstructorOptions[]
       | undefined;
-    expect(sub?.map((i) => i.label)).toEqual(['New Terminal', 'Kill Terminal']);
+    expect(sub?.map((i) => i.label)).toEqual([
+      'New Terminal',
+      'New Terminal Window',
+      'Kill Terminal',
+    ]);
     // No accelerator: ⌘J belongs to the View → Show/Hide Terminal toggle, so
     // advertising it here too would only mislabel this item.
     expect(findByLabel(template, 'New Terminal')?.accelerator).toBeUndefined();
@@ -1133,5 +1141,45 @@ describe('buildMenuTemplate — Edit → Check spelling while typing', () => {
     const spellIdx = sub.findIndex((i) => i.label === 'Check spelling while typing');
     expect(selectAllIdx).toBeGreaterThanOrEqual(0);
     expect(spellIdx).toBeGreaterThan(selectAllIdx);
+  });
+});
+
+describe('Terminal menu — New Terminal Window', () => {
+  test('appears in the Terminal submenu beside New Terminal', () => {
+    const template = buildMenuTemplate(makeDeps({ onNewTerminalWindow: mock(() => {}) }));
+    const terminalMenu = template.find((i) => i.label === 'Terminal');
+    const sub = terminalMenu?.submenu as MenuItemConstructorOptions[] | undefined;
+    if (!sub) throw new Error('Terminal submenu missing');
+    const labels = sub.map((i) => i.label);
+    expect(labels).toContain('New Terminal');
+    expect(labels).toContain('New Terminal Window');
+  });
+
+  test('renders with no keyboard accelerator', () => {
+    const item = findByLabel(
+      buildMenuTemplate(makeDeps({ onNewTerminalWindow: mock(() => {}) })),
+      'New Terminal Window',
+    );
+    expect(item).toBeDefined();
+    expect(item?.accelerator).toBeUndefined();
+  });
+
+  test('click invokes onNewTerminalWindow', () => {
+    const onNewTerminalWindow = mock(() => {});
+    const item = findByLabel(
+      buildMenuTemplate(makeDeps({ onNewTerminalWindow })),
+      'New Terminal Window',
+    );
+    (item?.click as (() => void) | undefined)?.();
+    expect(onNewTerminalWindow).toHaveBeenCalledTimes(1);
+  });
+
+  test('disabled when the dep is omitted, enabled when wired', () => {
+    expect(findByLabel(buildMenuTemplate(makeDeps()), 'New Terminal Window')?.enabled).toBe(false);
+    const wired = findByLabel(
+      buildMenuTemplate(makeDeps({ onNewTerminalWindow: mock(() => {}) })),
+      'New Terminal Window',
+    );
+    expect(wired?.enabled).toBe(true);
   });
 });

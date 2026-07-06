@@ -59,3 +59,13 @@ export function recordConcurrentSessions(info: { count: number }): void {
     () => undefined,
   );
 }
+
+/**
+ * Emit one `ok.desktop.terminalWindowOpened` span — the count-only adoption
+ * marker for the "New Terminal Window" command. The span itself is the count;
+ * it carries no attributes (no project path, no command contents), mirroring
+ * `recordTerminalSession`. SDK disabled → no-op.
+ */
+export function recordTerminalWindowOpened(): void {
+  withSpanSync('ok.desktop.terminalWindowOpened', {}, () => undefined);
+}

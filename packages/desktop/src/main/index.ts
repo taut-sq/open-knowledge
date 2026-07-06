@@ -277,7 +277,14 @@ import {
   recordConcurrentSessions,
   recordShellExit,
   recordTerminalSession,
+  recordTerminalWindowOpened,
 } from './terminal-telemetry.ts';
+import {
+  createTerminalWindow,
+  resolveTerminalWindowProject,
+  type TerminalBrowserWindow,
+} from './terminal-window.ts';
+import { getTerminalWindowContext, resolvePtyProjectRoot } from './terminal-window-registry.ts';
 import { applyThemeApplied } from './theme-applied-handler.ts';
 import { applyThemeSource, isOkThemeSource } from './theme-handler.ts';
 import {
@@ -2059,6 +2066,7 @@ async function runApplicationMenuRefresh(): Promise<void> {
     onToggleTerminal: () => sendMenuActionToFocused('toggle-terminal'),
     onNewTerminal: () => sendMenuActionToFocused('new-terminal'),
     onKillTerminal: () => sendMenuActionToFocused('kill-terminal'),
+    onNewTerminalWindow: () => openTerminalWindow(),
     onExpandAll: () => sendMenuActionToFocused('expand-all-tree'),
     onCollapseAll: () => sendMenuActionToFocused('collapse-all-tree'),
     // Edit -> "Check Spelling While Typing": the checkbox reflects the
@@ -2082,6 +2090,57 @@ function sendMenuActionToFocused(action: OkMenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   if (!target) return;
   sendToRenderer(target.webContents, 'ok:menu-action', action);
+}
+
+/**
+ * Terminal → "New Terminal Window": open a dedicated terminal window inheriting
+ * the focused window's project (the editor window's `windowsByPath` context, or
+ * a focused terminal window's registry context for chaining; project-less from
+ * the Navigator or with no focused project). Opens directly in main — like
+ * `openNavigator` — rather than round-tripping the renderer.
+ */
+function openTerminalWindow(): void {
+  if (terminalReaper == null) return; // PTY manager not yet wired (pre-boot) — unreachable from a menu click.
+  const focused = BrowserWindow.getFocusedWindow();
+  const editorCtx =
+    focused && wm ? wm.getContextForBrowserWindow(focused as unknown as BrowserWindowLike) : null;
+  const project = resolveTerminalWindowProject({
+    editor: editorCtx ?? null,
+    terminal: focused ? getTerminalWindowContext(focused.id) : undefined,
+  });
+  const rendererEntryPath = app.isPackaged
+    ? join(process.resourcesPath, 'app', 'index.html')
+    : join(__dirname, '../renderer/index.html');
+  createTerminalWindow({
+    createWindow: (opts) => {
+      const win = new BrowserWindow({
+        ...DEFAULT_WIN_OPTS,
+        minWidth: WINDOW_MIN_SIZE.EDITOR.width,
+        minHeight: WINDOW_MIN_SIZE.EDITOR.height,
+        title: opts.title,
+        webPreferences: {
+          ...DEFAULT_WIN_OPTS.webPreferences,
+          additionalArguments: withDebugFlagIfAllowed(opts.additionalArguments),
+          preload: join(__dirname, '../preload/index.js'),
+        },
+      });
+      // Keep our per-window title against the renderer's static <title> (same as
+      // editor windows). The per-window PTY reap is wired by the factory.
+      win.on('page-title-updated', (e) => {
+        e.preventDefault();
+      });
+      applyCascadePosition(win);
+      attachSpellcheckMenuToWindow(win);
+      return win as unknown as TerminalBrowserWindow;
+    },
+    rendererEntryPath,
+    rendererDevUrl,
+    appVersion: app.getVersion(),
+    showGate,
+    terminalReaper,
+    project,
+  });
+  recordTerminalWindowOpened();
 }
 
 /**
@@ -2495,12 +2554,21 @@ function registerIpcHandlers() {
 
   handle('ok:pty:create', async (event, opts) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    const ctx =
+    const editorCtx =
       win && wm ? wm.getContextForBrowserWindow(win as unknown as BrowserWindowLike) : null;
-    const projectPath = ctx?.projectPath ?? null;
-    // A window with no resolved ProjectContext (e.g. the Navigator) has no
-    // cwd to anchor a shell in — refuse rather than spawn at an arbitrary dir.
-    if (!win || !wm || !projectPath) {
+    // A standalone terminal window is not in `windowsByPath` (one-per-project,
+    // focus-existing), so `getContextForBrowserWindow` returns nothing for it.
+    // Editor windows keep their existing per-project resolution; a terminal
+    // window resolves its cwd from the windowId-keyed terminalWindows registry,
+    // falling back to homedir() when project-less (never null — create() refuses
+    // null). A window in neither map (e.g. the Navigator) resolves to null and
+    // is refused below rather than spawning a shell at an arbitrary dir.
+    const projectPath = resolvePtyProjectRoot({
+      editorProjectPath: editorCtx?.projectPath ?? null,
+      terminalWindow: win ? getTerminalWindowContext(win.id) : undefined,
+      homedir: osHomedir(),
+    });
+    if (!win || !projectPath) {
       logIpcError({
         event: 'ipc.error',
         channel: 'ok:pty:create',

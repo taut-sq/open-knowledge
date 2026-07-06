@@ -729,6 +729,20 @@ describe('TerminalDock multi-session', () => {
     expect(screen.getAllByTestId('terminal-session')).toHaveLength(1);
   });
 
+  test('⌘W (close-active-tab-or-window) is NOT handled by the dock — the editor owns it', async () => {
+    const user = userEvent.setup();
+    const view = renderDock(true);
+    await addTerminalTab(user);
+    expect(screen.getAllByTestId('terminal-session')).toHaveLength(2);
+
+    act(() => view.dispatchMenuAction('close-active-tab-or-window'));
+
+    // In the editor window ⌘W closes the active DOC tab (DocumentContext); the
+    // docked terminal must not also close a session, or one keystroke would
+    // close two things. Only the standalone terminal window handles this action.
+    expect(screen.getAllByTestId('terminal-session')).toHaveLength(2);
+  });
+
   test('Cmd+number jumps to the matching tab while the terminal is focused', async () => {
     const user = userEvent.setup();
     renderDock(true);
@@ -1018,5 +1032,97 @@ describe('TerminalSessionsHost focus-return gating across a dock move', () => {
     // Genuine hide: visible flips false → focus returns to the editor.
     act(() => rerender(ui(false, false)));
     expect(onEditorFocus).toHaveBeenCalled();
+  });
+});
+
+// The behavior-preservation contract for the terminal session model
+// (TerminalSessionsHost, shared by the dock and the standalone terminal
+// window): these five behaviors (close-last collapse, seed-on-reveal,
+// single-tab-per-launch-nonce, Cmd+number tab switch, close-active-neighbor
+// focus) are the ones most easily broken when the dock's container wiring and
+// the shared session core drift out of lockstep. Kept as a discrete, minimal
+// block — distinct from the broader suite above — so the dock and the window
+// share one stable, referenceable set to validate against.
+describe('TerminalDock extraction pins', () => {
+  beforeEach(() => {
+    terminalPanelProps = null;
+    panelHandle.collapse.mockClear();
+    panelHandle.resize.mockClear();
+    panelHandle.expand.mockClear();
+    sharedPanelRef.current = panelHandle;
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  test('pin: closing the last tab collapses the dock and returns focus to the editor', async () => {
+    const user = userEvent.setup();
+    const view = renderDock(true);
+    act(() => screen.getByTestId('terminal-session').focus());
+
+    await user.click(screen.getByRole('button', { name: 'Close Terminal 1' }));
+
+    expect(screen.queryAllByTestId('terminal-session')).toHaveLength(0);
+    expect(view.onVisibleChange).toHaveBeenCalledWith(false);
+    expect(document.activeElement).toBe(editorRegion());
+  });
+
+  test('pin: the dock seeds exactly one session when it becomes visible', () => {
+    const view = renderDock(false);
+    expect(screen.queryAllByTestId('terminal-session')).toHaveLength(0);
+
+    act(() => view.rerender(true));
+
+    expect(screen.getAllByTestId('terminal-session')).toHaveLength(1);
+    expect(view.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('pin: a repeated launch nonce does not open a second tab', () => {
+    const view = renderDock(true);
+
+    act(() => view.rerender(true, { prompt: 'work', nonce: 1 }));
+    expect(screen.getAllByTestId('terminal-session')).toHaveLength(2);
+
+    // An unrelated re-render carrying the already-handled nonce must not spawn
+    // another tab — one launch click means exactly one new tab.
+    act(() => view.rerender(true, { prompt: 'work', nonce: 1 }));
+    expect(screen.getAllByTestId('terminal-session')).toHaveLength(2);
+  });
+
+  test('pin: Cmd+number switches the active tab while the terminal is focused', async () => {
+    const user = userEvent.setup();
+    renderDock(true);
+    await addTerminalTab(user);
+    const panels = sessionPanels();
+    act(() => panels[1]?.querySelector<HTMLElement>('.xterm-helper-textarea')?.focus());
+
+    const event = new KeyboardEvent('keydown', {
+      key: '1',
+      metaKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(activePanelId()).toBe(panels[0]?.getAttribute('data-terminal-session'));
+  });
+
+  test('pin: closing the active tab moves focus to a surviving neighbor', async () => {
+    const user = userEvent.setup();
+    renderDock(true);
+    await addTerminalTab(user);
+    await addTerminalTab(user);
+    await user.click(screen.getByRole('tab', { name: 'Terminal 2' }));
+
+    await user.click(screen.getByRole('button', { name: 'Close Terminal 2' }));
+
+    const nowActive = activePanelId();
+    const focusSink = document.querySelector<HTMLElement>(
+      `[data-terminal-session="${nowActive}"] .xterm-helper-textarea`,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(focusSink));
   });
 });

@@ -25,7 +25,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { NavigatorApp } from '@/components/NavigatorApp';
+import { selectDesktopRootApp } from '@/components/desktop-root-app';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 // Side-effect import to load the `Window.okDesktop?` global augmentation.
@@ -50,7 +50,6 @@ import { installShareReceivedListener } from '@/lib/share/receive-store';
 import { seedInitialDocHashFromWindow } from '@/lib/single-file-initial-doc';
 import { installSubscribeCardStore } from '@/lib/subscribe-card-store';
 import { installUpdateNoticesBridge } from '@/lib/update-notices-store';
-import { App } from './App';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 // react-medium-image-zoom ships structural CSS (modal positioning, dialog
@@ -192,11 +191,12 @@ const queryClient = new QueryClient({
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
 
-// Electron Navigator-mode branch: when the desktop preload has
-// flagged `mode: 'navigator'`, render the lightweight launcher UI instead of
-// the full editor shell. CLI / web distribution: window.okDesktop is undefined,
-// so this is always the editor (`App`) path.
-const isNavigator = typeof window !== 'undefined' && window.okDesktop?.config.mode === 'navigator';
+// Electron window-mode branch: the desktop preload flags `mode` per window so
+// the renderer mounts the matching surface — `terminal` → the standalone
+// terminal window, `navigator` → the launcher, everything else → the editor
+// shell. CLI / web distribution: window.okDesktop is undefined, so this is
+// always the editor (`App`) path.
+const desktopBridge = typeof window === 'undefined' ? undefined : window.okDesktop;
 
 createRoot(root).render(
   <StrictMode>
@@ -209,9 +209,7 @@ createRoot(root).render(
           disableTransitionOnChange
           storageKey="ok-theme-v1"
         >
-          <TooltipProvider>
-            {isNavigator && window.okDesktop ? <NavigatorApp bridge={window.okDesktop} /> : <App />}
-          </TooltipProvider>
+          <TooltipProvider>{selectDesktopRootApp(desktopBridge)}</TooltipProvider>
           {/*
            * Sonner toaster for ad-hoc status/error toasts (clone dialog, file
            * tree, etc.). Auto-update notices are NOT routed here — they live
