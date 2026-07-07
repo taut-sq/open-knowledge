@@ -107,6 +107,21 @@ export const HOSTS_WITH_USER_SKILL_DIR: ReadonlyArray<{
 }));
 
 /**
+ * OpenKnowledge integration-doc slug per editor — the setup guide at
+ * `https://openknowledge.ai/docs/integrations/<slug>`. Consumed by the
+ * first-launch consent dialog to link an undetected tool to its setup guide.
+ * Claude Code and Claude Desktop share one page (`claude-code` covers both).
+ */
+export const EDITOR_SETUP_DOC_SLUG = {
+  claude: 'claude-code',
+  'claude-desktop': 'claude-code',
+  cursor: 'cursor',
+  codex: 'codex',
+  opencode: 'opencode',
+  openclaw: 'openclaw',
+} as const satisfies Record<EditorId, string>;
+
+/**
  * Project-relative MCP-config path per editor (POSIX, `cwd`-relative), or
  * `null` for an editor with no project-scope config (Claude Desktop is
  * user-global). Presence of this file is how an editor is detected as

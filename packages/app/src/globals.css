@@ -5147,3 +5147,7 @@ body:has([data-slot="dialog-overlay"], [data-slot="sheet-overlay"]) [data-sonner
   /* biome-ignore lint/complexity/noImportantStyles: sonner sets z-index inline on the toaster; only !important can beat an inline style. */
   z-index: 40 !important;
 }
+
+.inline-code {
+  @apply font-mono bg-muted text-inherit border border-border rounded-md px-1 py-0.5 text-sm;
+}

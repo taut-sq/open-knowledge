@@ -9,8 +9,8 @@
  * behavior (routed through `onOpenChange(false)` → skip()).
  *
  * The dialog also gates the shell-PATH install: a distinct pre-checked
- * toggle in its own "Terminal" section pinned above the scrollable editor
- * list, driven by `payload.pathInstall`. Hidden when no rc file is
+ * toggle in its own "Terminal" section, rendered first in the scrollable
+ * body above the editor list, driven by `payload.pathInstall`. Hidden when no rc file is
  * touchable; informational when the managed block is already on disk /
  * consent already granted. Unchecking degrades only `ok` in EXTERNAL
  * terminals — OpenKnowledge's built-in terminal injects `~/.ok/bin` itself
@@ -18,7 +18,9 @@
  * that.
  */
 
+import { EDITOR_SETUP_DOC_SLUG } from '@inkeep/open-knowledge-core';
 import { Trans, useLingui } from '@lingui/react/macro';
+import { ArrowUpRight, Info } from 'lucide-react';
 import { useId, useState } from 'react';
 import { toast as sonnerToast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -33,8 +35,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { OkMcpWiringEditorId, OkMcpWiringShowPayload } from '@/lib/desktop-bridge-types';
+import { dispatchExternalLinkClick } from '@/lib/external-link';
 import { type McpConsentStore, mcpConsentStore } from '@/lib/mcp-consent-store';
+import { cn } from '@/lib/utils';
 
 type EditorDetection = OkMcpWiringShowPayload['detectedEditors'][number];
 type PathInstallDescriptor = OkMcpWiringShowPayload['pathInstall'];
@@ -247,207 +252,265 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            <Trans>Add OpenKnowledge to your AI tools</Trans>
+            <Trans>Connect your AI tools to OpenKnowledge</Trans>
           </DialogTitle>
           <DialogDescription>
             <Trans>
-              OpenKnowledge manages the <code>open-knowledge</code> MCP server name, the{' '}
-              <code>open-knowledge-ui</code> launch config, and <code>ok</code> /{' '}
-              <code>open-knowledge</code> on PATH (including OK-owned symlinks). Using a custom
-              wrapper? Register it under a different name.
+              Give the AI tools you use access to read and update your projects. Pick what to set up
+              below, and change it anytime.
             </Trans>
           </DialogDescription>
         </DialogHeader>
 
-        {/*
-         * Shell-PATH consent section — its own pinned block ABOVE the
-         * scrollable editor list (DialogBody is the overflow container; a
-         * row inside it sits below the fold on machines with many editors).
-         * Distinct from the per-editor MCP checkboxes because the two
-         * decisions are independent (MCP runs over npx / the bundle
-         * wrapper, never bare `ok`). Hidden when no rc file is touchable;
-         * informational when a managed block is already on disk or consent
-         * was already granted.
-         */}
-        {pathInstall.shellDetected && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              <Trans comment="Section label above the shell-PATH toggle in the first-launch dialog">
-                Terminal
-              </Trans>
-            </span>
-            <div className="overflow-hidden rounded-md border border-border bg-card/50">
-              <Label
-                htmlFor={`${idPrefix}-path`}
-                className={
-                  pathActionable
-                    ? 'flex cursor-pointer items-start gap-2.5 px-3 py-2.5 font-normal hover:bg-accent'
-                    : 'flex items-start gap-2.5 px-3 py-2.5 font-normal'
-                }
-              >
-                <Checkbox
-                  id={`${idPrefix}-path`}
-                  checked={pathActionable ? pathChecked : true}
-                  disabled={busy || !pathActionable}
-                  onCheckedChange={() => setPathChecked((prev) => !prev)}
-                  className="mt-0.5"
-                  data-testid="mcp-consent-path-checkbox"
-                />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-sm font-medium text-foreground">
-                    <Trans comment="Toggle in the first-launch dialog that adds the ok CLI to the user's shell PATH">
-                      Add the <code>ok</code> command to your terminal
-                    </Trans>
+        <DialogBody className="flex flex-col gap-6 min-h-0">
+          {/*
+           * Shell-PATH consent section — rendered first inside the scrollable
+           * DialogBody, above the editor list. Distinct from the per-editor
+           * MCP checkboxes because the two decisions are independent (MCP runs
+           * over npx / the bundle wrapper, never bare `ok`). Hidden when no rc
+           * file is touchable; informational when a managed block is already
+           * on disk or consent was already granted.
+           */}
+          {pathInstall.shellDetected && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                <Trans comment="Section label above the shell-PATH toggle in the first-launch dialog">
+                  Terminal
+                </Trans>
+              </span>
+              <div className="overflow-hidden rounded-md border border-border bg-card/50">
+                <Label
+                  htmlFor={`${idPrefix}-path`}
+                  // items-start overrides the shadcn Label base `items-center`,
+                  // which on a flex column would center every child horizontally.
+                  className={
+                    pathActionable
+                      ? 'flex cursor-pointer flex-col items-start gap-1 px-3 py-2.5 font-normal hover:bg-accent'
+                      : 'flex flex-col items-start gap-1 px-3 py-2.5 font-normal'
+                  }
+                >
+                  {/* Checkbox centered against the title line only (not the whole
+                    column) so the `ok` code chip — taller than plain text — can't
+                    push it out of alignment. Subtexts sit below, indented to align
+                    under the title (checkbox size-4 = 1rem + gap-2.5 = 0.625rem). */}
+                  <span className="flex items-center gap-2.5">
+                    <Checkbox
+                      id={`${idPrefix}-path`}
+                      checked={pathActionable ? pathChecked : true}
+                      disabled={busy || !pathActionable}
+                      onCheckedChange={() => setPathChecked((prev) => !prev)}
+                      data-testid="mcp-consent-path-checkbox"
+                    />
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-foreground">
+                      <Trans comment="Toggle in the first-launch dialog that adds the ok CLI to the user's shell PATH">
+                        Add the <code className="inline-code">ok</code> command to your terminal
+                      </Trans>
+                      {pathActionable && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            {/* Nested inside the row <Label>, so stop the click from
+                              bubbling to toggle the checkbox. Radix opens the
+                              tooltip on hover/focus, not click, so preventing the
+                              click default costs nothing. */}
+                            <TooltipTrigger
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="text-muted-foreground hover:text-foreground"
+                              aria-label={t`What this changes`}
+                              data-testid="mcp-consent-path-info"
+                            >
+                              <Info className="size-3.5" aria-hidden />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p
+                                className="leading-relaxed wrap-break-word"
+                                data-testid="mcp-consent-path-status"
+                              >
+                                {t`Adds a managed block to ${pathInstall.rcFilesToTouch.join(', ')}`}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </span>
                   </span>
-                  <span
-                    className="text-xs text-muted-foreground"
-                    data-testid="mcp-consent-path-status"
-                  >
-                    {pathActionable
-                      ? t`Adds a managed block to ${pathInstall.rcFilesToTouch.join(', ')}`
-                      : t`Already set up — ok is available in your terminal`}
-                  </span>
+                  {!pathActionable && (
+                    <span
+                      className="ps-6.5 text-xs text-muted-foreground"
+                      data-testid="mcp-consent-path-status"
+                    >
+                      {t`Already set up — ok is available in your terminal`}
+                    </span>
+                  )}
                   {pathActionable && !pathChecked && (
                     <span
-                      className="text-xs text-amber-600 dark:text-amber-400"
+                      className="ps-6.5 text-xs text-amber-600 dark:text-amber-400"
                       data-testid="mcp-consent-path-warning"
                     >
                       <Trans comment="Warning shown when the user unchecks the PATH toggle — only external terminals degrade">
-                        <code>ok</code> won't run in external terminals until you add it later from
-                        the File menu. OpenKnowledge's built-in terminal and AI tools keep working.
+                        <code className="inline-code">ok</code> won't run in external terminals
+                        until you add it later from the File menu. OpenKnowledge's built-in terminal
+                        and AI tools keep working.
                       </Trans>
                     </span>
                   )}
-                </span>
-              </Label>
-            </div>
-          </div>
-        )}
-
-        <DialogBody>
-          {/* Group label only when the Terminal section renders above —
-              with a single group there is nothing to distinguish. */}
-          {pathInstall.shellDetected && (
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">
-              <Trans comment="Section label above the editor checkbox list in the first-launch dialog">
-                AI tools
-              </Trans>
+                </Label>
+              </div>
             </div>
           )}
-          <ul className="rounded-md border border-border bg-card/50 divide-y divide-border overflow-hidden">
-            {detectedEditors.map((editor) => {
-              const checked = selection.has(editor.id);
-              const checkboxId = `${idPrefix}-${editor.id}`;
-              // Per-editor disclosure when Add will overwrite the desktop-owned
-              // open-knowledge namespace. Any existing entry under that name is
-              // reclaimed; custom wrappers should use a different MCP server name.
-              const statusLabel = editor.willReplace
-                ? t`Will replace existing OpenKnowledge entry`
-                : editor.detected
-                  ? t`Detected on this machine`
-                  : t`Not detected`;
-              const statusClass = editor.willReplace
-                ? 'text-xs text-amber-600 dark:text-amber-400'
-                : 'text-xs text-muted-foreground';
-              return (
-                <li key={editor.id}>
-                  <Label
-                    htmlFor={checkboxId}
-                    className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 font-normal hover:bg-accent"
-                  >
-                    <Checkbox
-                      id={checkboxId}
-                      checked={checked}
-                      disabled={busy}
-                      onCheckedChange={() => onToggle(editor.id)}
-                      className="mt-0.5"
-                      data-testid={`mcp-consent-checkbox-${editor.id}`}
-                    />
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="text-sm font-medium text-foreground">{editor.label}</span>
-                      <span className={statusClass} data-testid={`mcp-consent-status-${editor.id}`}>
-                        {statusLabel}
-                      </span>
-                    </span>
-                  </Label>
-                </li>
-              );
-            })}
-          </ul>
-        </DialogBody>
-
-        {/*
-         * User-global Agent Skills consent section — one pre-checked row per
-         * bundle. Distinct from the editor list because skills install to every
-         * detected host by design (not per-editor). Unchecking an already-
-         * installed bundle removes it; the decision is honored by every install
-         * actor (desktop reclaim, ok init, ok start).
-         */}
-        {skillsOffered && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              <Trans comment="Section label above the skill checkboxes in the first-launch dialog">
-                Agent Skills
-              </Trans>
-            </span>
+            {/* Group label only when the Terminal section renders above —
+              with a single group there is nothing to distinguish. */}
+            {pathInstall.shellDetected && (
+              <div className="text-xs font-medium text-muted-foreground">
+                <Trans comment="Section label above the editor checkbox list in the first-launch dialog — each row wires OpenKnowledge's MCP server into that tool">
+                  MCP connections
+                </Trans>
+              </div>
+            )}
             <ul className="rounded-md border border-border bg-card/50 divide-y divide-border overflow-hidden">
-              {globalSkills.map((skill) => {
-                const checked = skillSelection.has(skill.id);
-                const checkboxId = `${idPrefix}-skill-${skill.id}`;
+              {detectedEditors.map((editor) => {
+                const checked = selection.has(editor.id);
+                const checkboxId = `${idPrefix}-${editor.id}`;
+                const setupUrl = `https://openknowledge.ai/docs/integrations/${EDITOR_SETUP_DOC_SLUG[editor.id]}`;
                 return (
-                  <li key={skill.id}>
+                  // Padding lives on the interactive children, not the <li>, so the
+                  // <Label> owns the full row width (flex-1) and height (py-2.5) —
+                  // the whole name area toggles, and only the link is excluded. The
+                  // link/status are siblings OUTSIDE the label (an anchor must never
+                  // be a label descendant). flex-wrap: the link drops to its own line
+                  // on narrow widths; willReplace uses basis-full to always sit below.
+                  <li key={editor.id} className="flex flex-wrap items-stretch hover:bg-accent">
                     <Label
                       htmlFor={checkboxId}
-                      className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 font-normal hover:bg-accent"
+                      className={cn(
+                        'flex flex-1 cursor-pointer items-center gap-2.5 px-3 py-2.5 font-normal',
+                        editor.willReplace ? 'pb-0.5' : '',
+                      )}
                     >
                       <Checkbox
                         id={checkboxId}
                         checked={checked}
                         disabled={busy}
-                        onCheckedChange={() =>
-                          setSkillSelection((prev) => toggleSkillId(prev, skill.id))
-                        }
-                        className="mt-0.5"
-                        data-testid={`mcp-consent-skill-checkbox-${skill.id}`}
+                        onCheckedChange={() => onToggle(editor.id)}
+                        data-testid={`mcp-consent-checkbox-${editor.id}`}
                       />
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="text-sm font-medium text-foreground">
-                          <code>{skill.name}</code>
-                        </span>
-                        <span
-                          className="text-xs text-muted-foreground"
-                          data-testid={`mcp-consent-skill-status-${skill.id}`}
-                        >
-                          {skill.id === 'discovery' ? (
-                            <Trans comment="Subtext for the open-knowledge-discovery skill row">
-                              Helps your coding agent recognize OpenKnowledge projects and route
-                              reads and writes through it.
-                            </Trans>
-                          ) : (
-                            <Trans comment="Subtext for the open-knowledge-write-skill skill row">
-                              Adds a guided workflow for authoring new Agent Skills.
-                            </Trans>
-                          )}
-                        </span>
-                        {skill.alreadyInstalled && !checked && (
-                          <span
-                            className="text-xs text-amber-600 dark:text-amber-400"
-                            data-testid={`mcp-consent-skill-warning-${skill.id}`}
-                          >
-                            <Trans comment="Warning shown when the user unchecks an already-installed skill">
-                              Removes this skill from your editors.
-                            </Trans>
-                          </span>
-                        )}
-                      </span>
+                      <span className="text-sm font-medium text-foreground">{editor.label}</span>
                     </Label>
+                    {/* Detected tools need no trailing line — the checked box says it.
+                      willReplace warns Add will overwrite an existing OK-managed entry
+                      (reclaimed by name); basis-full drops it to its own line below the
+                      name (ms-6.5 + px-3 = the row inset + checkbox 1rem + gap 0.625rem
+                      aligns it under the label). Undetected tools link to their setup
+                      guide, right-aligned, instead of a dead-end "Not detected". */}
+                    {editor.willReplace ? (
+                      <span
+                        className="ms-6.5 basis-full px-3 pb-2.5 text-xs text-amber-600 dark:text-amber-400"
+                        data-testid={`mcp-consent-status-${editor.id}`}
+                      >
+                        <Trans comment="Disclosure that Add will overwrite the tool's existing OpenKnowledge MCP entry">
+                          Will replace existing OpenKnowledge entry
+                        </Trans>
+                      </span>
+                    ) : editor.detected ? null : (
+                      <a
+                        href={setupUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => dispatchExternalLinkClick(e, setupUrl)}
+                        onAuxClick={(e) => dispatchExternalLinkClick(e, setupUrl)}
+                        // Per-tool name so a screen-reader link list distinguishes rows
+                        // (2.4.4); contains the visible text (2.5.3) and flags the
+                        // new-tab behavior the arrow icon shows sighted users.
+                        aria-label={t`How to set up ${editor.label} (opens in browser)`}
+                        className="flex items-center gap-0.5 px-3 py-2.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                        data-testid={`mcp-consent-status-${editor.id}`}
+                      >
+                        <Trans comment="Link on an undetected tool row to its OpenKnowledge setup guide">
+                          How to set up
+                        </Trans>
+                        <ArrowUpRight className="size-3" aria-hidden />
+                      </a>
+                    )}
                   </li>
                 );
               })}
             </ul>
           </div>
-        )}
-
+          {/*
+           * User-global Agent Skills consent section — one pre-checked row per
+           * bundle. Distinct from the editor list because skills install to every
+           * detected host by design (not per-editor). Unchecking an already-
+           * installed bundle removes it; the decision is honored by every install
+           * actor (desktop reclaim, ok init, ok start).
+           */}
+          {skillsOffered && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                <Trans comment="Section label above the skill checkboxes in the first-launch dialog">
+                  Agent Skills
+                </Trans>
+              </span>
+              <ul className="rounded-md border border-border bg-card/50 divide-y divide-border overflow-hidden">
+                {globalSkills.map((skill) => {
+                  const checked = skillSelection.has(skill.id);
+                  const checkboxId = `${idPrefix}-skill-${skill.id}`;
+                  return (
+                    <li key={skill.id}>
+                      <Label
+                        htmlFor={checkboxId}
+                        className="flex cursor-pointer items-start gap-2.5 px-3 py-2.5 font-normal hover:bg-accent"
+                      >
+                        <Checkbox
+                          id={checkboxId}
+                          checked={checked}
+                          disabled={busy}
+                          onCheckedChange={() =>
+                            setSkillSelection((prev) => toggleSkillId(prev, skill.id))
+                          }
+                          className="mt-0.5"
+                          data-testid={`mcp-consent-skill-checkbox-${skill.id}`}
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-sm font-medium text-foreground">
+                            <code>{skill.name}</code>
+                          </span>
+                          <span
+                            className="text-xs text-muted-foreground"
+                            data-testid={`mcp-consent-skill-status-${skill.id}`}
+                          >
+                            {skill.id === 'discovery' ? (
+                              <Trans comment="Subtext for the open-knowledge-discovery skill row">
+                                Helps your coding agent recognize OpenKnowledge projects and route
+                                reads and writes through it.
+                              </Trans>
+                            ) : (
+                              <Trans comment="Subtext for the open-knowledge-write-skill skill row">
+                                Adds a guided workflow for authoring new Agent Skills.
+                              </Trans>
+                            )}
+                          </span>
+                          {skill.alreadyInstalled && !checked && (
+                            <span
+                              className="text-xs text-amber-600 dark:text-amber-400"
+                              data-testid={`mcp-consent-skill-warning-${skill.id}`}
+                            >
+                              <Trans comment="Warning shown when the user unchecks an already-installed skill">
+                                Removes this skill from your editors.
+                              </Trans>
+                            </span>
+                          )}
+                        </span>
+                      </Label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </DialogBody>
         <DialogFooter>
           <Button
             variant="outline"
@@ -471,7 +534,7 @@ function McpConsentDialogForm({ payload, store, toast }: McpConsentDialogFormPro
               <Trans>Working</Trans>
             ) : (
               <Trans comment="Primary button that writes MCP config for the selected AI tools">
-                Add
+                Connect
               </Trans>
             )}
           </Button>

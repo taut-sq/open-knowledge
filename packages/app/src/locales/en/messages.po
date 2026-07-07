@@ -622,9 +622,7 @@ msgstr "Active panel content for the selected tab shows here."
 msgid "Activity"
 msgstr "Activity"
 
-#. Primary button that writes MCP config for the selected AI tools
 #: src/components/FrontmatterRow.tsx
-#: src/components/McpConsentDialogBody.tsx
 #: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Add"
@@ -669,10 +667,6 @@ msgstr "Add item to {keyName}"
 #: src/components/settings/SearchSection.tsx
 msgid "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
 msgstr "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "Add OpenKnowledge to your AI tools"
-msgstr "Add OpenKnowledge to your AI tools"
 
 #: src/components/settings/OkignoreSection.tsx
 msgid "Add pattern"
@@ -747,11 +741,6 @@ msgstr "Agent configuration file"
 #: src/components/McpConsentDialogBody.tsx
 msgid "Agent Skills"
 msgstr "Agent Skills"
-
-#. Section label above the editor checkbox list in the first-launch dialog
-#: src/components/McpConsentDialogBody.tsx
-msgid "AI tools"
-msgstr "AI tools"
 
 #: src/components/FolderOverview.tsx
 msgid "All files"
@@ -1502,6 +1491,11 @@ msgstr "Configure user, project, and integration settings."
 msgid "Conflict"
 msgstr "Conflict"
 
+#. Primary button that writes MCP config for the selected AI tools
+#: src/components/McpConsentDialogBody.tsx
+msgid "Connect"
+msgstr "Connect"
+
 #: src/components/settings/AccountSection.tsx
 msgid "Connect a GitHub account to browse and sync your repositories."
 msgstr "Connect a GitHub account to browse and sync your repositories."
@@ -1543,6 +1537,10 @@ msgstr "Connect to GitHub"
 #: src/components/ClaudeReadinessBanner.tsx
 msgid "Connect tools"
 msgstr "Connect tools"
+
+#: src/components/McpConsentDialogBody.tsx
+msgid "Connect your AI tools to OpenKnowledge"
+msgstr "Connect your AI tools to OpenKnowledge"
 
 #: src/components/AuthModal.tsx
 #: src/components/settings/AccountSection.tsx
@@ -2287,10 +2285,6 @@ msgstr "Details"
 #: src/components/settings/SkillTargetsPicker.tsx
 msgid "Detected from the editors this project is set up for. Adjust to control where every skill installs."
 msgstr "Detected from the editors this project is set up for. Adjust to control where every skill installs."
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "Detected on this machine"
-msgstr "Detected on this machine"
 
 #: src/components/CommandPalette.tsx
 #: src/components/handoff/OpenInAgentMenuItem.tsx
@@ -3212,6 +3206,10 @@ msgstr "GitHub authentication failed. Try signing in again."
 msgid "GitHub sign-in is missing or expired. Reconnect to resume syncing."
 msgstr "GitHub sign-in is missing or expired. Reconnect to resume syncing."
 
+#: src/components/McpConsentDialogBody.tsx
+msgid "Give the AI tools you use access to read and update your projects. Pick what to set up below, and change it anytime."
+msgstr "Give the AI tools you use access to read and update your projects. Pick what to set up below, and change it anytime."
+
 #: src/lib/keyboard-shortcuts.ts
 #: src/lib/skill-scope.ts
 msgid "Global"
@@ -3417,6 +3415,16 @@ msgstr "How does sharing work?"
 #: src/components/ShareFreshnessWarning.tsx
 msgid "How to push manually"
 msgstr "How to push manually"
+
+#. Link on an undetected tool row to its OpenKnowledge setup guide
+#: src/components/McpConsentDialogBody.tsx
+msgid "How to set up"
+msgstr "How to set up"
+
+#. placeholder {0}: editor.label
+#: src/components/McpConsentDialogBody.tsx
+msgid "How to set up {0} (opens in browser)"
+msgstr "How to set up {0} (opens in browser)"
 
 #: src/editor/slash-command/embed-starter-items.tsx
 msgid "HTML"
@@ -3966,6 +3974,11 @@ msgstr "Markdown source"
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Match case"
 msgstr "Match case"
+
+#. Section label above the editor checkbox list in the first-launch dialog — each row wires OpenKnowledge's MCP server into that tool
+#: src/components/McpConsentDialogBody.tsx
+msgid "MCP connections"
+msgstr "MCP connections"
 
 #: src/editor/slash-command/items.tsx
 msgid "Medium section heading."
@@ -4536,10 +4549,6 @@ msgstr "Not connected"
 msgid "Not connected to GitHub."
 msgstr "Not connected to GitHub."
 
-#: src/components/McpConsentDialogBody.tsx
-msgid "Not detected"
-msgstr "Not detected"
-
 #: src/components/CommandPalette.tsx
 #: src/components/handoff/OpenInAgentMenuItem.tsx
 msgid "Not installed"
@@ -4883,10 +4892,6 @@ msgstr "OpenKnowledge is using a GitHub account provided by the gh CLI. There's 
 #: src/components/settings/AccountSection.tsx
 msgid "OpenKnowledge is using this GitHub account."
 msgstr "OpenKnowledge is using this GitHub account."
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
-msgstr "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
 
 #: src/components/ConsentDialogBody.tsx
 msgid "OpenKnowledge stores its configuration and internal files inside a newly created <0>.ok</0> directory in your project root folder."
@@ -7524,6 +7529,10 @@ msgstr "What should the AI do? (optional)"
 msgid "What the agent may read, write, and surface."
 msgstr "What the agent may read, write, and surface."
 
+#: src/components/McpConsentDialogBody.tsx
+msgid "What this changes"
+msgstr "What this changes"
+
 #: src/components/empty-state/empty-state-copy.ts
 msgid "What would you like to create?"
 msgstr "What would you like to create?"
@@ -7576,6 +7585,7 @@ msgstr "Will be created at: <0>{targetPreview}</0>"
 msgid "Will be saved as <0>{sanitized}</0>."
 msgstr "Will be saved as <0>{sanitized}</0>."
 
+#. Disclosure that Add will overwrite the tool's existing OpenKnowledge MCP entry
 #: src/components/McpConsentDialogBody.tsx
 msgid "Will replace existing OpenKnowledge entry"
 msgstr "Will replace existing OpenKnowledge entry"

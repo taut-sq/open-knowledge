@@ -617,9 +617,7 @@ msgstr ""
 msgid "Activity"
 msgstr ""
 
-#. Primary button that writes MCP config for the selected AI tools
 #: src/components/FrontmatterRow.tsx
-#: src/components/McpConsentDialogBody.tsx
 #: src/components/ObjectWidget.tsx
 #: src/components/PropertyPanel.tsx
 msgid "Add"
@@ -663,10 +661,6 @@ msgstr ""
 
 #: src/components/settings/SearchSection.tsx
 msgid "Add meaning-based ranking to search so conceptually-related pages surface even when they share no keywords. This setting applies only to this computer."
-msgstr ""
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "Add OpenKnowledge to your AI tools"
 msgstr ""
 
 #: src/components/settings/OkignoreSection.tsx
@@ -741,11 +735,6 @@ msgstr ""
 #. Section label above the skill checkboxes in the first-launch dialog
 #: src/components/McpConsentDialogBody.tsx
 msgid "Agent Skills"
-msgstr ""
-
-#. Section label above the editor checkbox list in the first-launch dialog
-#: src/components/McpConsentDialogBody.tsx
-msgid "AI tools"
 msgstr ""
 
 #: src/components/FolderOverview.tsx
@@ -1497,6 +1486,11 @@ msgstr ""
 msgid "Conflict"
 msgstr ""
 
+#. Primary button that writes MCP config for the selected AI tools
+#: src/components/McpConsentDialogBody.tsx
+msgid "Connect"
+msgstr ""
+
 #: src/components/settings/AccountSection.tsx
 msgid "Connect a GitHub account to browse and sync your repositories."
 msgstr ""
@@ -1537,6 +1531,10 @@ msgstr ""
 
 #: src/components/ClaudeReadinessBanner.tsx
 msgid "Connect tools"
+msgstr ""
+
+#: src/components/McpConsentDialogBody.tsx
+msgid "Connect your AI tools to OpenKnowledge"
 msgstr ""
 
 #: src/components/AuthModal.tsx
@@ -2281,10 +2279,6 @@ msgstr ""
 
 #: src/components/settings/SkillTargetsPicker.tsx
 msgid "Detected from the editors this project is set up for. Adjust to control where every skill installs."
-msgstr ""
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "Detected on this machine"
 msgstr ""
 
 #: src/components/CommandPalette.tsx
@@ -3207,6 +3201,10 @@ msgstr ""
 msgid "GitHub sign-in is missing or expired. Reconnect to resume syncing."
 msgstr ""
 
+#: src/components/McpConsentDialogBody.tsx
+msgid "Give the AI tools you use access to read and update your projects. Pick what to set up below, and change it anytime."
+msgstr ""
+
 #: src/lib/keyboard-shortcuts.ts
 #: src/lib/skill-scope.ts
 msgid "Global"
@@ -3411,6 +3409,16 @@ msgstr ""
 
 #: src/components/ShareFreshnessWarning.tsx
 msgid "How to push manually"
+msgstr ""
+
+#. Link on an undetected tool row to its OpenKnowledge setup guide
+#: src/components/McpConsentDialogBody.tsx
+msgid "How to set up"
+msgstr ""
+
+#. placeholder {0}: editor.label
+#: src/components/McpConsentDialogBody.tsx
+msgid "How to set up {0} (opens in browser)"
 msgstr ""
 
 #: src/editor/slash-command/embed-starter-items.tsx
@@ -3960,6 +3968,11 @@ msgstr ""
 
 #: src/editor/find-replace/FindReplaceBar.tsx
 msgid "Match case"
+msgstr ""
+
+#. Section label above the editor checkbox list in the first-launch dialog — each row wires OpenKnowledge's MCP server into that tool
+#: src/components/McpConsentDialogBody.tsx
+msgid "MCP connections"
 msgstr ""
 
 #: src/editor/slash-command/items.tsx
@@ -4531,10 +4544,6 @@ msgstr ""
 msgid "Not connected to GitHub."
 msgstr ""
 
-#: src/components/McpConsentDialogBody.tsx
-msgid "Not detected"
-msgstr ""
-
 #: src/components/CommandPalette.tsx
 #: src/components/handoff/OpenInAgentMenuItem.tsx
 msgid "Not installed"
@@ -4877,10 +4886,6 @@ msgstr ""
 
 #: src/components/settings/AccountSection.tsx
 msgid "OpenKnowledge is using this GitHub account."
-msgstr ""
-
-#: src/components/McpConsentDialogBody.tsx
-msgid "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
 msgstr ""
 
 #: src/components/ConsentDialogBody.tsx
@@ -7519,6 +7524,10 @@ msgstr ""
 msgid "What the agent may read, write, and surface."
 msgstr ""
 
+#: src/components/McpConsentDialogBody.tsx
+msgid "What this changes"
+msgstr ""
+
 #: src/components/empty-state/empty-state-copy.ts
 msgid "What would you like to create?"
 msgstr ""
@@ -7571,6 +7580,7 @@ msgstr ""
 msgid "Will be saved as <0>{sanitized}</0>."
 msgstr ""
 
+#. Disclosure that Add will overwrite the tool's existing OpenKnowledge MCP entry
 #: src/components/McpConsentDialogBody.tsx
 msgid "Will replace existing OpenKnowledge entry"
 msgstr ""

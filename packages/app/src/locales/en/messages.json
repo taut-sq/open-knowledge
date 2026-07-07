@@ -530,6 +530,7 @@
     "Ck9XRt": ["Couldn't save the key — please try again."],
     "CmeH9S": ["Add property to ", ["keyName"]],
     "CvsD6Y": ["via ", ["viaTags"]],
+    "D-Oh1s": ["How to set up ", ["0"], " (opens in browser)"],
     "D12vtS": ["(detached)"],
     "D2CwBE": [
       "Create a new OpenKnowledge project from the <0>",
@@ -691,6 +692,9 @@
     "G8t9NN": ["Add a property"],
     "GA-UkN": [["keyName"], " type: ", ["typeLabel"], ". Click to change."],
     "GDvlUT": ["Role"],
+    "GF51cw": [
+      "Give the AI tools you use access to read and update your projects. Pick what to set up below, and change it anytime."
+    ],
     "GGsM4y": ["Selected in graph"],
     "GJH-AT": [
       ["docName"],
@@ -876,6 +880,7 @@
       ")."
     ],
     "LhWYpm": ["Other OK paths are tracked upstream:"],
+    "LiAw2k": ["What this changes"],
     "LlHqdU": ["Initializing project"],
     "Llyqvo": ["This usually means one of:"],
     "LpB85N": ["Plain"],
@@ -1038,6 +1043,7 @@
     "PRnH8G": ["of ", ["0"]],
     "PVUn_c": ["Open folder"],
     "PZt1uN": ["Search files, commands, projects, and AI handoff actions."],
+    "P_bX4O": ["How to set up"],
     "PdA9NZ": [["ahead"], " ahead"],
     "PdJZ5p": ["No skills yet."],
     "Pgu10b": ["Saved as <0>", ["slug"], ".md</0>"],
@@ -1344,9 +1350,6 @@
     "YC6_wP": ["Edit ", ["keyName"]],
     "YEP3X2": ["Delete a table when the active table cell selection covers the full table."],
     "YGIi_c": ["Reinstall"],
-    "YGQm6y": [
-      "OpenKnowledge manages the <0>open-knowledge</0> MCP server name, the <1>open-knowledge-ui</1> launch config, and <2>ok</2> / <3>open-knowledge</3> on PATH (including OK-owned symlinks). Using a custom wrapper? Register it under a different name."
-    ],
     "YJ1BTp": ["A skill with that name already exists."],
     "YKLP_-": ["Template renamed"],
     "YPFBfr": [["detail"], " - ", ["kind"], " \"", ["createdPath"], "\" still exists on disk"],
@@ -1482,7 +1485,6 @@
     ],
     "b4itZn": ["Working"],
     "b5aNbi": ["The ", ["targetNoun"], " could not be opened — try navigating to it manually."],
-    "bBE5tC": ["Detected on this machine"],
     "bBcFK_": ["Open emoji picker for ", ["keyName"]],
     "bD8I7O": ["Complete"],
     "bGa3Fk": ["Uploading file"],
@@ -1532,7 +1534,6 @@
     "cn1sLi": ["Couldn't connect OpenKnowledge tools to Claude Code. Please try again."],
     "cnGeoo": ["Delete"],
     "cqQyPB": ["Folder name"],
-    "crqzW5": ["AI tools"],
     "cs4mps": ["Config sharing"],
     "csDS2L": ["Available"],
     "ct2kv5": ["No headings in ", ["pageTarget"]],
@@ -1757,6 +1758,7 @@
     "iNFKkm": ["No diff."],
     "iO8V-7": ["Create worktree"],
     "iOHg1t": ["Open embedded URL in new tab"],
+    "iSLIjg": ["Connect"],
     "iSQTsg": ["Ordered list"],
     "iSnkwB": ["Failed to open cloned project."],
     "iTlqm3": [
@@ -2049,6 +2051,7 @@
     "pmKdif": ["Failed: ", ["loadError"]],
     "pmUArF": ["Workspace"],
     "ppDgFi": ["Restart with this app's version"],
+    "psfGPX": ["MCP connections"],
     "pzutoc": ["Italic"],
     "q2kXMG": ["Inline Math"],
     "q4YJl_": ["The terminal session ended (exit code ", ["0"], ")."],
@@ -2190,6 +2193,7 @@
     "tjXez2": ["blog-post"],
     "toyw51": ["Mermaid diagram controls"],
     "tsiTqO": ["Paste your API key"],
+    "tsyExA": ["Connect your AI tools to OpenKnowledge"],
     "u-9fWA": ["See <0>Architecture</0> for the system overview."],
     "u3BOHd": [["fileCount", "plural", { "one": ["#", " file"], "other": ["#", " files"] }]],
     "u3YnKw": ["Could not construct share URL."],
@@ -2254,7 +2258,6 @@
     "vGeNNQ": ["Copy a prompt and paste it into your agent to set up your project."],
     "vIxrEk": ["Fit width"],
     "vLyv1R": ["Hide"],
-    "vM7XUh": ["Add OpenKnowledge to your AI tools"],
     "vQIVHc": ["Folder properties"],
     "vWc9a0": ["Type to edit; <0>⌘ Enter</0> saves, <1>Esc</1> cancels."],
     "vZVeFG": ["Upload failed — please try again"],
@@ -2386,7 +2389,6 @@
     "ynIa4S": ["Visual editor list item"],
     "ypw6My": ["Showing top ", ["0"], " headings — keep typing to narrow"],
     "ysxgu8": ["project"],
-    "yu8Pzy": ["Not detected"],
     "yutJKi": ["Checklist with checkboxes."],
     "yvG-l1": ["Open source lint panel"],
     "yvHDYG": ["Claude Desktop"],

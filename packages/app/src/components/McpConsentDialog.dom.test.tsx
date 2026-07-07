@@ -115,14 +115,21 @@ describe('McpConsentDialog runtime behavior', () => {
   test('renders willReplace disclosure and preselects detected editors only', async () => {
     await renderDialog();
 
-    expect(screen.getByRole('dialog', { name: 'Add OpenKnowledge to your AI tools' })).toBeTruthy();
+    expect(
+      screen.getByRole('dialog', { name: 'Connect your AI tools to OpenKnowledge' }),
+    ).toBeTruthy();
     expect(screen.getByTestId('mcp-consent-status-claude').textContent).toBe(
       'Will replace existing OpenKnowledge entry',
     );
-    expect(screen.getByTestId('mcp-consent-status-cursor').textContent).toBe(
-      'Detected on this machine',
+    // Detected tools carry no status line — the checked box conveys it.
+    expect(screen.queryByTestId('mcp-consent-status-cursor')).toBeNull();
+    // Undetected tools link to their OpenKnowledge setup guide instead.
+    const codexStatus = screen.getByTestId('mcp-consent-status-codex');
+    expect(codexStatus.tagName).toBe('A');
+    expect(codexStatus.textContent).toContain('How to set up');
+    expect(codexStatus.getAttribute('href')).toBe(
+      'https://openknowledge.ai/docs/integrations/codex',
     );
-    expect(screen.getByTestId('mcp-consent-status-codex').textContent).toBe('Not detected');
     expect(screen.getByTestId('mcp-consent-checkbox-claude').getAttribute('aria-checked')).toBe(
       'true',
     );
@@ -131,6 +138,28 @@ describe('McpConsentDialog runtime behavior', () => {
     );
     expect(screen.getByTestId('mcp-consent-checkbox-codex').getAttribute('aria-checked')).toBe(
       'false',
+    );
+  });
+
+  test('undetected claude-desktop links to the shared claude-code guide (aliased slug)', async () => {
+    // claude-desktop → claude-code is the only non-1:1 entry in
+    // EDITOR_SETUP_DOC_SLUG; a regression to `editor.id` in the URL would 404.
+    await renderDialog(
+      makeHarness({
+        snapshot: {
+          detectedEditors: [
+            { id: 'claude-desktop', label: 'Claude Desktop', detected: false, willReplace: false },
+          ],
+          pathInstall: { shellDetected: false, rcFilesToTouch: [], alreadyInstalled: false },
+          globalSkills: [],
+        },
+      }),
+    );
+
+    const status = screen.getByTestId('mcp-consent-status-claude-desktop');
+    expect(status.tagName).toBe('A');
+    expect(status.getAttribute('href')).toBe(
+      'https://openknowledge.ai/docs/integrations/claude-code',
     );
   });
 
@@ -157,7 +186,7 @@ describe('McpConsentDialog runtime behavior', () => {
     });
 
     expect(skip.disabled).toBe(false);
-    expect(add.textContent).toBe('Add');
+    expect(add.textContent).toBe('Connect');
     expect(harness.confirmCalls).toEqual([{ editorIds: ['claude', 'cursor'], pathInstall: true }]);
     expect(harness.toastErrors).toEqual(['Could not write Claude config']);
 
@@ -207,27 +236,25 @@ describe('McpConsentDialog runtime behavior', () => {
 describe('McpConsentDialog PATH consent row', () => {
   afterEach(() => cleanup());
 
-  test('PATH section is pinned outside the scrollable editor list', async () => {
-    // The editor list can outgrow the dialog (DialogBody is the overflow
-    // container); the PATH toggle must stay visible without scrolling, so
-    // it lives in its own section ABOVE that container.
-    await renderDialog();
-
-    const pathCheckbox = screen.getByTestId('mcp-consent-path-checkbox');
-    expect(pathCheckbox.closest('[class*="overflow-y-auto"]')).toBeNull();
-    const editorCheckbox = screen.getByTestId('mcp-consent-checkbox-claude');
-    expect(editorCheckbox.closest('[class*="overflow-y-auto"]')).not.toBeNull();
-  });
-
   test('renders pre-checked with the rc-file disclosure; warning appears only when unchecked', async () => {
     await renderDialog();
 
     const checkbox = screen.getByTestId('mcp-consent-path-checkbox');
     expect(checkbox.getAttribute('aria-checked')).toBe('true');
     expect(checkbox.hasAttribute('disabled')).toBe(false);
-    expect(screen.getByTestId('mcp-consent-path-status').textContent).toBe(
-      'Adds a managed block to ~/.zshrc, ~/.config/fish/conf.d/open-knowledge.fish',
-    );
+    // The rc-file disclosure is behind an info tooltip; it mounts (portaled)
+    // only once the trigger is focused/hovered.
+    expect(screen.queryAllByTestId('mcp-consent-path-status')).toHaveLength(0);
+    screen.getByTestId('mcp-consent-path-info').focus();
+    // Radix renders TooltipContent twice when open — the visible portal copy
+    // plus a visually-hidden mirror for the aria-describedby association — so
+    // both carry the testid. Assert against the first match, not getByTestId.
+    await waitFor(() => {
+      const [status] = screen.getAllByTestId('mcp-consent-path-status');
+      expect(status?.textContent).toBe(
+        'Adds a managed block to ~/.zshrc, ~/.config/fish/conf.d/open-knowledge.fish',
+      );
+    });
     // Warning is uncheck-scoped: it names the real degradation (external
     // terminals only) at the moment the user is making that choice.
     expect(screen.queryByTestId('mcp-consent-path-warning')).toBeNull();
