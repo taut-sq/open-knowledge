@@ -228,6 +228,89 @@ describe('edit({ template }) — fence trailing whitespace (fm-delimiter hazard)
   });
 });
 
+describe('write({ document }) — template-availability nudge on create', () => {
+  // Templates only get used if the agent knows they exist; it may write from
+  // memory without an `exec ls` first. So a create into a folder that ships a
+  // template, with no `template` passed, surfaces the folder's menu — without
+  // blocking the write that already landed.
+  function withWriteStub(cwd: string, run: (handler: Handler) => Promise<void>) {
+    const stub = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (req.method === 'POST' && new URL(req.url).pathname === '/api/agent-write-md') {
+          const body = (await req.json()) as { docName?: string };
+          return Response.json({
+            docName: body.docName,
+            systemSubscriberCount: 1,
+            brokenLinks: [],
+          });
+        }
+        return Response.json({ error: 'unexpected request' }, { status: 404 });
+      },
+    });
+    let handler: Handler | undefined;
+    const server = {
+      registerTool(_name: string, _cfg: unknown, h: Handler) {
+        handler = h;
+      },
+    } as unknown as ServerInstance;
+    registerWrite(server, {
+      serverUrl: `http://127.0.0.1:${stub.port}`,
+      config: BASE_CONFIG,
+      resolveCwd: async () => cwd,
+    } as unknown as Parameters<typeof registerWrite>[1]);
+    if (!handler) throw new Error('tool did not register');
+    return (async () => {
+      try {
+        await run(handler);
+      } finally {
+        stub.stop(true);
+      }
+    })();
+  }
+
+  function seedNoteTemplate(cwd: string) {
+    mkdirSync(join(cwd, 'notes', '.ok', 'templates'), { recursive: true });
+    writeFileSync(
+      join(cwd, 'notes', '.ok', 'templates', 'note.md'),
+      '---\ntitle: Note\ndescription: A plain note\n---\n\n# \n',
+    );
+  }
+
+  test('create with no template nudges toward the folder template (text + structured)', async () => {
+    const cwd = newProject();
+    seedNoteTemplate(cwd);
+    await withWriteStub(cwd, async (write) => {
+      const r = await write({ document: { path: 'notes/first', content: '# First\n' } });
+      expect(r.isError).toBeUndefined();
+      expect(textOf(r)).toContain('templates you can start from: note (A plain note)');
+      const doc = (r.structuredContent?.document ?? {}) as Record<string, unknown>;
+      const hint = doc.templateHint as Array<{ name: string }> | undefined;
+      expect(hint?.[0]?.name).toBe('note');
+    });
+  });
+
+  test('create WITH a template does not nudge', async () => {
+    const cwd = newProject();
+    seedNoteTemplate(cwd);
+    await withWriteStub(cwd, async (write) => {
+      const r = await write({ document: { path: 'notes/second', template: 'note' } });
+      expect(r.isError).toBeUndefined();
+      expect(textOf(r)).not.toContain('templates you can start from');
+    });
+  });
+
+  test('create in a folder with no templates does not nudge', async () => {
+    const cwd = newProject();
+    mkdirSync(join(cwd, 'scratch'), { recursive: true });
+    await withWriteStub(cwd, async (write) => {
+      const r = await write({ document: { path: 'scratch/note', content: '# Note\n' } });
+      expect(r.isError).toBeUndefined();
+      expect(textOf(r)).not.toContain('templates you can start from');
+    });
+  });
+});
+
 describe('D13 migration meta-test — no retired tool name survives in the skill surface', () => {
   const RETIRED = [
     'write_document',

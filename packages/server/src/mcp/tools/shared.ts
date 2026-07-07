@@ -184,6 +184,13 @@ export const documentResultBaseShape = {
       "Advisory entries discriminated by `kind`. Write-integrity kinds — `content-divergence` (converged Y.Text didn't byte-match what you composed) and `disk-edit-reconciled` (an out-of-band disk edit was folded in before your write) — mean re-read the doc. The renderability kind `mermaid-parse-error` means the write landed but that fence will not render — fix it and re-edit.",
     ),
   brokenLinks: brokenLinksOutputField,
+  templateHint: z
+    .array(z.object({ name: z.string(), description: z.string().optional() }))
+    .min(1)
+    .optional()
+    .describe(
+      "Templates the parent folder offers, present only when a create passed no `template`. A nudge — the write already landed; pass `template` next time to match the folder's shape.",
+    ),
 } as const;
 
 /**

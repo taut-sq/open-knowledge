@@ -128,6 +128,12 @@ type WriteOneResult =
       position: string;
       fromTemplate?: string;
       extensionNote?: string;
+      /**
+       * Templates the parent folder offers, surfaced only on a create that
+       * passed no `template`. Nudges the agent toward the folder's shape
+       * without blocking the write that already landed.
+       */
+      templateHint?: readonly { name: string; description?: string }[];
       raw: WriteApiResult;
     }
   | { docName: string; ok: false; error: string };
@@ -276,6 +282,22 @@ async function writeOneDoc(
     effectivePosition = 'replace';
   }
 
+  // Nudge: creating a doc in a folder that ships templates, but reaching for
+  // none. Templates only get used if the agent knows they exist, and it may
+  // write from memory without an `exec ls` first — so surface the folder's menu
+  // on the write itself. Create-only (an overwrite/append is deliberate) and
+  // skipped when a template WAS used.
+  let templateHint: readonly { name: string; description?: string }[] | undefined;
+  if (spec.template === undefined && !docExists) {
+    const available = resolveTemplatesAvailable(cwd, parentFolderOf(docName), { depth: 1 });
+    if (available.length > 0) {
+      templateHint = available.map((t) => ({
+        name: t.name,
+        ...(t.description ? { description: t.description } : {}),
+      }));
+    }
+  }
+
   if (spec.template !== undefined) {
     const parentFolder = parentFolderOf(docName);
     const available = resolveTemplatesAvailable(cwd, parentFolder, { depth: 1 });
@@ -377,8 +399,20 @@ async function writeOneDoc(
     position: effectivePosition,
     ...(spec.template !== undefined ? { fromTemplate: spec.template } : {}),
     ...(extensionNote ? { extensionNote } : {}),
+    ...(templateHint ? { templateHint } : {}),
     raw: result,
   };
+}
+
+/**
+ * One-line nudge listing a folder's available templates. Info (`ℹ`), not a
+ * warning (`⚠`) — the write landed; this only points at a cleaner next time.
+ */
+function formatTemplateHintLine(hint: readonly { name: string; description?: string }[]): string {
+  const list = hint
+    .map((t) => (t.description ? `${t.name} (${t.description})` : t.name))
+    .join(', ');
+  return `ℹ This folder has templates you can start from: ${list}. Pass \`template: "${hint[0]?.name ?? ''}"\` next time to match the folder's shape (the doc still landed).`;
 }
 
 // ─────────────────────────── target handlers ───────────────────────────
@@ -698,6 +732,7 @@ async function handleBatch(
       position: r.position,
       ...(preview ? { previewUrl: preview.url } : {}),
       ...(warnings ? { warnings } : {}),
+      ...(r.templateHint ? { templateHint: r.templateHint } : {}),
       brokenLinks,
     };
   });
@@ -717,6 +752,11 @@ async function handleBatch(
     if (d?.ok) {
       const brokenBrief = formatBrokenLinkBrief(d.brokenLinks);
       if (brokenBrief) baseParts.push(brokenBrief);
+    }
+    if (r.ok && r.templateHint) {
+      baseParts.push(
+        `ℹ ${r.templateHint.length} template${r.templateHint.length === 1 ? '' : 's'} available here (pass \`template\`).`,
+      );
     }
     return baseParts.join(' ');
   });
@@ -788,6 +828,7 @@ async function handleSingleDoc(
     lines.push(...formatAdvisoryLines(advisoryWarnings));
   }
   lines.push(...formatBrokenLinkLines(brokenLinks));
+  if (w.templateHint) lines.push(formatTemplateHintLine(w.templateHint));
   const text = lines.join('\n');
 
   // Uniform preview envelope top-level; document-specific signals nest under
@@ -800,6 +841,7 @@ async function handleSingleDoc(
   if (hints) document.hints = hints;
   if (summaryResult) document.summary = summaryResult;
   if (advisoryWarnings) document.warnings = advisoryWarnings;
+  if (w.templateHint) document.templateHint = w.templateHint;
   const warning = noPreviewAnywhere ? buildPreviewAttachWarning(preview, autoOpen) : undefined;
   return textPlusStructured(text, nestDocResult(preview, warning, document));
 }
