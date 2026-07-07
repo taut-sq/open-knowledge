@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import {
+  getMachineId,
   isProcessAlive,
   isValidLockPid,
   type LockName,
@@ -30,6 +31,8 @@ interface InspectLockOptions {
   isAlive?: (pid: number) => boolean;
   /** Override for tests. Defaults to `os.hostname()`. */
   host?: string;
+  /** Override for tests. Defaults to `getMachineId()` from the server package. */
+  machineId?: string;
 }
 
 export function inspectLock(
@@ -69,6 +72,15 @@ export function inspectLock(
   const aliveProbe = opts.isAlive ?? isProcessAlive;
   if (!aliveProbe(lock.pid)) {
     return { status: 'dead-pid', lockPath, lock };
+  }
+  // Machine identity first: a lock stamped with this machine's stable ID is
+  // `alive` even when the recorded hostname has since drifted (the drift
+  // class the comment above describes). Hostname comparison survives only
+  // for legacy locks written by binaries that predate `machineId`.
+  if (typeof lock.machineId === 'string') {
+    return lock.machineId === (opts.machineId ?? getMachineId())
+      ? { status: 'alive', lockPath, lock }
+      : { status: 'foreign-host', lockPath, lock };
   }
   const localHost = opts.host ?? hostname();
   if (lock.hostname !== localHost) {

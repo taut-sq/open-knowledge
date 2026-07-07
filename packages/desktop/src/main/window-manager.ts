@@ -232,6 +232,17 @@ export interface ServerLockMetadataLike {
    */
   protocolVersion?: number;
   runtimeVersion?: string;
+  /**
+   * Stable machine identity (see server package `machine-id.ts`). Locks that
+   * carry it are machine-checked by `readServerLock` itself; absence means a
+   * legacy lock where hostname comparison is the only provenance signal.
+   */
+  machineId?: string;
+  /**
+   * Holder has begun teardown but still owns the lock until process exit.
+   * Draining locks are neither attachable nor a spawn-readiness signal.
+   */
+  draining?: boolean;
 }
 
 interface ProjectContext {
@@ -921,7 +932,6 @@ export class WindowManager {
     signalStopOwnedUtilityForks(this.windowsByPath.values(), this.deps.log);
 
     // Detached-spawn pids — two-phase SIGTERM → poll → SIGKILL.
-    const readLock = this.deps.readServerLock;
     const stopOne = async (canonicalKey: string, pid: number): Promise<void> => {
       // The map key IS `realpathSync(resolve(projectPath))`, so the lock
       // directory is computable directly without depending on
@@ -932,11 +942,9 @@ export class WindowManager {
       // This is the exact scenario the spec is designed for (MCP agents
       // writing while the editor window is closed).
       const projectPath = canonicalKey;
-      const lockDir = getLocalDir(projectPath);
       // SIGTERM first. `killProbe` (test-injectable wrapper around
       // `process.kill`) throws if the pid is already gone (ESRCH) — treat
-      // that as success (server already released the lock, we're done
-      // with this entry).
+      // that as success (server already exited, we're done with this entry).
       try {
         this.deps.killProbe(pid, 'SIGTERM');
       } catch (err) {
@@ -948,20 +956,16 @@ export class WindowManager {
           'SIGTERM failed during stopAllOwnedServers',
         );
       }
-      // Poll the lock for release. If `readServerLock` is not wired (back-
-      // compat for tests that don't exercise this path), skip the poll
-      // and proceed directly to SIGKILL — without a way to confirm release
-      // we can't know we should wait.
-      if (readLock) {
+      // Poll for PROCESS death, not lock release. The lock disappears while
+      // the process is still flushing telemetry/logs (and historically,
+      // seconds before exit) — treating lock-gone as stopped is exactly the
+      // window that let a relaunch spawn a duplicate alongside a live
+      // predecessor. Pid death is the only signal that means "gone".
+      {
         const graceMs = this.deps.sigtermGraceMs ?? DEFAULT_SIGTERM_GRACE_MS;
         const deadline = Date.now() + graceMs;
         while (Date.now() < deadline) {
-          const lock = readLock(lockDir);
-          if (lock === null || lock.pid !== pid) {
-            // Lock released (gone) OR taken over by a different pid —
-            // either way our SIGTERM target is no longer holding it.
-            return;
-          }
+          if (!this.isPidAlive(pid)) return;
           await new Promise<void>((resolveSleep) => {
             this.deps.setTimeout(() => {
               resolveSleep();
@@ -1073,6 +1077,23 @@ export class WindowManager {
   }
 
   /**
+   * Pid liveness probe for the SIGTERM grace polls. Prefers the injected
+   * `isProcessAlive` (shared with attach validation); falls back to a
+   * signal-0 `killProbe` so tests that wire only `killProbe` keep working.
+   * EPERM means "exists but not signalable" — alive.
+   */
+  private isPidAlive(pid: number): boolean {
+    const probe = this.deps.isProcessAlive;
+    if (probe) return probe(pid);
+    try {
+      this.deps.killProbe(pid, 0);
+      return true;
+    } catch (err) {
+      return (err as NodeJS.ErrnoException).code === 'EPERM';
+    }
+  }
+
+  /**
    * Terminate a server by pid using the same SIGTERM → grace-poll → SIGKILL
    * ladder as `stopAllOwnedServers`, but returning a caller-consumable outcome
    * instead of fire-and-forget logging. Used by `restartAttachedServer` to
@@ -1083,10 +1104,9 @@ export class WindowManager {
    * `killProbe` / `readServerLock` / the poll interval with that path.
    */
   private async terminateServerByPid(
-    lockDir: string,
+    _lockDir: string,
     pid: number,
   ): Promise<{ ok: true; escalated: boolean } | { ok: false; reason: 'eperm' | 'other' }> {
-    const readLock = this.deps.readServerLock;
     try {
       this.deps.killProbe(pid, 'SIGTERM');
     } catch (err) {
@@ -1094,14 +1114,15 @@ export class WindowManager {
       if (code === 'ESRCH') return { ok: true, escalated: false };
       return { ok: false, reason: code === 'EPERM' ? 'eperm' : 'other' };
     }
-    if (readLock) {
-      // Restart-specific grace (shorter than the auto-update teardown). Test
-      // override via `sigtermGraceMs` still wins.
+    {
+      // Poll for PROCESS death, not lock release — lock-gone precedes exit
+      // (see `stopAllOwnedServers`), and respawning inside that window is
+      // the duplicate-server bug. Restart-specific grace (shorter than the
+      // auto-update teardown). Test override via `sigtermGraceMs` still wins.
       const graceMs = this.deps.sigtermGraceMs ?? RESTART_SIGTERM_GRACE_MS;
       const deadline = Date.now() + graceMs;
       while (Date.now() < deadline) {
-        const lock = readLock(lockDir);
-        if (lock === null || lock.pid !== pid) return { ok: true, escalated: false };
+        if (!this.isPidAlive(pid)) return { ok: true, escalated: false };
         await new Promise<void>((resolveSleep) => {
           this.deps.setTimeout(() => resolveSleep(), DEFAULT_SIGTERM_POLL_MS);
         });
@@ -1115,6 +1136,50 @@ export class WindowManager {
       if (code === 'ESRCH') return { ok: true, escalated: true };
       return { ok: false, reason: code === 'EPERM' ? 'eperm' : 'other' };
     }
+  }
+
+  /**
+   * Explicit-user-consent recovery: stop whatever process holds this
+   * project's server.lock so a fresh open can proceed. Reached from the
+   * "Unable to open project" dialog's "Stop Server & Retry" button after a
+   * spawn collided with a holder that attach refused (foreign machineId
+   * after a hostname flap on a legacy lock, a tampered lock file, a wedged
+   * teardown that outlived the drain wait).
+   *
+   * Reads the RAW lock pid — deliberately bypassing `readServerLock`'s
+   * machine-identity filter, because the defining feature of this state is
+   * that identity checks refused the holder. Safe because it only runs on an
+   * explicit user click, the pid is range-validated, and never targets our
+   * own process. Uses the same SIGTERM → pid-death poll → SIGKILL ladder as
+   * the restart path. The dead holder's lock file is left behind for
+   * acquire-side dead-pid stale detection to replace on the retry.
+   */
+  async forceStopConflictingServer(
+    projectPath: string,
+  ): Promise<{ ok: true } | { ok: false; reason: 'eperm' | 'other' }> {
+    const lockDir = getLocalDir(resolve(projectPath));
+    let pid: unknown;
+    try {
+      pid = (JSON.parse(readFileSync(join(lockDir, 'server.lock'), 'utf-8')) as { pid?: unknown })
+        ?.pid;
+    } catch {
+      // No lock / unreadable — nothing to stop; the retry will proceed.
+      return { ok: true };
+    }
+    if (!isValidLockPidLocal(pid) || pid === process.pid) {
+      return { ok: true };
+    }
+    const term = await this.terminateServerByPid(lockDir, pid);
+    this.deps.log?.info(
+      {
+        event: 'desktop-force-stop-conflicting-server',
+        pid,
+        projectPath,
+        outcome: term.ok ? 'stopped' : term.reason,
+      },
+      '[window-manager] force-stopped conflicting server holder on user request',
+    );
+    return term.ok ? { ok: true } : term;
   }
 
   /**
@@ -2039,7 +2104,10 @@ export class WindowManager {
     const deadline = Date.now() + deadlineMs;
     while (Date.now() < deadline) {
       const lock = reader(lockDir);
-      if (lock !== null && lock.port > 0 && lock.kind !== undefined) {
+      // A draining lock is the PREDECESSOR still exiting, not the fresh
+      // spawn's readiness signal — keep polling until the successor's
+      // (non-draining) lock appears.
+      if (lock !== null && lock.draining !== true && lock.port > 0 && lock.kind !== undefined) {
         return lock;
       }
       await new Promise<void>((resolveSleep) => {
@@ -2094,8 +2162,19 @@ export class WindowManager {
       return null;
     };
     if (!isValidLockPidLocal(lock.pid)) return refuse('invalid-lock-pid');
-    if (lock.hostname !== getHost()) return refuse('foreign-hostname');
+    // Machine identity: locks carrying `machineId` were already machine-
+    // checked inside `readServerLock` (machineId-first, hostname only as the
+    // legacy fallback) — re-checking the hostname here would wrongly refuse
+    // a same-machine lock written before a hostname drift/rename. Only
+    // legacy locks (no machineId) still need the hostname comparison.
+    if (lock.machineId === undefined && lock.hostname !== getHost()) {
+      return refuse('foreign-hostname');
+    }
     if (!alive(lock.pid)) return refuse('lock-pid-dead');
+    // Draining = teardown began; the port closes before the process exits.
+    // Attaching would bind the window to a dying backend — fall through to
+    // spawn mode, whose `ok start` child waits out the drain.
+    if (lock.draining === true) return refuse('lock-draining');
     if (lock.port <= 0) return refuse('lock-port-zero');
     if (lock.kind === undefined) return refuse('legacy-lock-no-kind');
     if (lock.capabilities !== undefined && !lock.capabilities.includes('ws')) {

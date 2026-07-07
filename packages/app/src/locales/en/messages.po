@@ -4849,6 +4849,10 @@ msgstr "Open worktree"
 msgid "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 msgstr "Open, navigate, accept, or dismiss CodeMirror completion suggestions."
 
+#: src/components/NavigatorApp.tsx
+msgid "Opening {openingLabel}…"
+msgstr "Opening {openingLabel}…"
+
 #: src/components/ShareReceiveDialog.tsx
 msgid "Opening..."
 msgstr "Opening..."

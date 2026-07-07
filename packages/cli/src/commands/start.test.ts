@@ -29,6 +29,7 @@ import {
   tryDescribeLockCollision,
   type UiSpawnDecision,
   withEphemeralTempDirReap,
+  withIdleShutdownProcessExit,
 } from './start.ts';
 import { closeHttpServers, startUiServer, type UiServerHandle } from './ui.ts';
 
@@ -504,6 +505,87 @@ describe('shouldConnectToExistingServer (main-checkout connect guard)', () => {
   test('false when no live server (fresh worktree → boot)', () => {
     expect(shouldConnectToExistingServer(39848, null)).toBe(false);
     expect(shouldConnectToExistingServer(39848, { port: 0 })).toBe(false);
+  });
+  test('false for a draining server (teardown in progress — boot path waits it out)', () => {
+    expect(shouldConnectToExistingServer(39848, { port: 49530, draining: true })).toBe(false);
+  });
+});
+
+describe('withIdleShutdownProcessExit (idle-path zombie prevention)', () => {
+  test('exits 0 after the handler completes, logging an open-handle summary', async () => {
+    const order: string[] = [];
+    const logged: object[] = [];
+    let exitCode: number | undefined;
+    const wrapped = withIdleShutdownProcessExit(
+      async () => {
+        order.push('handler');
+      },
+      {
+        log: {
+          info: (obj) => {
+            logged.push(obj);
+          },
+          error: () => {},
+        },
+        exit: (code) => {
+          order.push('exit');
+          exitCode = code;
+        },
+        getActiveHandles: () => [new (class Socket {})(), new (class Socket {})(), null],
+      },
+    );
+    await wrapped();
+    expect(order).toEqual(['handler', 'exit']);
+    expect(exitCode).toBe(0);
+    const event = logged.find((o) => (o as { event?: string }).event === 'idle-shutdown-exit') as
+      | { openHandles: Record<string, number> }
+      | undefined;
+    expect(event).toBeDefined();
+    expect(event?.openHandles.Socket).toBe(2);
+  });
+
+  test('reports handlesAvailable: false when the runtime cannot enumerate handles (Bun)', async () => {
+    // Bun lacks process._getActiveHandles — the production path. The exit
+    // must still fire, and the log must mark the empty summary as a data
+    // gap rather than a clean state.
+    const logged: object[] = [];
+    let exitCode: number | undefined;
+    const wrapped = withIdleShutdownProcessExit(async () => {}, {
+      log: {
+        info: (obj) => {
+          logged.push(obj);
+        },
+        error: () => {},
+      },
+      exit: (code) => {
+        exitCode = code;
+      },
+      getActiveHandles: () => null,
+    });
+    await wrapped();
+    expect(exitCode).toBe(0);
+    const event = logged.find((o) => (o as { event?: string }).event === 'idle-shutdown-exit') as
+      | { openHandles: Record<string, number>; handlesAvailable: boolean }
+      | undefined;
+    expect(event?.handlesAvailable).toBe(false);
+    expect(event?.openHandles).toEqual({});
+  });
+
+  test('exits 1 when the handler throws — a failed teardown must not zombify', async () => {
+    let exitCode: number | undefined;
+    const wrapped = withIdleShutdownProcessExit(
+      async () => {
+        throw new Error('destroy blew up');
+      },
+      {
+        exit: (code) => {
+          exitCode = code;
+        },
+        getActiveHandles: () => [],
+      },
+    );
+    await wrapped();
+    expect(exitCode).toBe(1);
   });
 });
 

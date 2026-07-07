@@ -541,9 +541,16 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
       expect(parsed.port).toBe(booted.port);
     } finally {
       await booted.destroy();
-      // We owned the lock (acquired by replacing the stale entry), so we
-      // release on destroy.
-      expect(existsSync(resolve(lockDir, 'ui.lock'))).toBe(false);
+      // We owned the lock (acquired by replacing the stale entry), so destroy
+      // releases our claim — but the file survives marked draining until the
+      // process actually exits (unlink is deferred to the exit handler).
+      const postDestroy = JSON.parse(
+        await import('node:fs/promises').then((m) =>
+          m.readFile(resolve(lockDir, 'ui.lock'), 'utf-8'),
+        ),
+      ) as { pid: number; draining?: boolean };
+      expect(postDestroy.pid).toBe(process.pid);
+      expect(postDestroy.draining).toBe(true);
     }
   });
 
@@ -571,9 +578,12 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     const uiLockPath = resolve(projectDir, '.ok', 'local', 'ui.lock');
     expect(existsSync(uiLockPath)).toBe(true);
     await booted1.destroy();
-    expect(existsSync(uiLockPath)).toBe(false);
+    // Draining until process exit — not unlinked at destroy time.
+    const drained = JSON.parse(readFileSync(uiLockPath, 'utf-8')) as { draining?: boolean };
+    expect(drained.draining).toBe(true);
 
-    // A second boot for the same project acquires cleanly.
+    // A second boot for the same project acquires cleanly (same-pid
+    // idempotent rewrite clears the draining flag).
     const booted2 = await bootServer({
       host: '127.0.0.1',
       config: TEST_CONFIG,
@@ -589,6 +599,12 @@ describe('bootServer — reactShellDistDir + ui.lock advertisement', () => {
     try {
       await booted2.ready;
       expect(existsSync(uiLockPath)).toBe(true);
+      const reacquired = JSON.parse(readFileSync(uiLockPath, 'utf-8')) as {
+        pid: number;
+        draining?: boolean;
+      };
+      expect(reacquired.pid).toBe(process.pid);
+      expect(reacquired.draining).toBeUndefined();
     } finally {
       await booted2.destroy();
     }

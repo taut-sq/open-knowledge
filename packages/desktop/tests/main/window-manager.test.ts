@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import type { ShowGateRegistry } from '../../src/main/show-gate.ts';
 import {
@@ -781,6 +784,9 @@ describe('WindowManager', () => {
       });
       enableAttachProbe({
         readServerLock: () => (spawned ? freshLock : killed ? null : oldLock),
+        // The terminate poll watches PID death (not lock release) — the old
+        // server "exits" as soon as SIGTERM lands.
+        isProcessAlive: (pid) => (pid === 5555 ? !killed : true),
       });
       env.deps.killProbe = killProbe;
       env.deps.spawnDetachedServer = async () => {
@@ -840,7 +846,10 @@ describe('WindowManager', () => {
       env.deps.selfRuntimeVersion = '0.8.2';
       let killed = false;
       const oldLock = { ...liveLock, pid: 5555, protocolVersion: 1, runtimeVersion: '0.8.0' };
-      enableAttachProbe({ readServerLock: () => (killed ? null : oldLock) });
+      enableAttachProbe({
+        readServerLock: () => (killed ? null : oldLock),
+        isProcessAlive: (pid) => (pid === 5555 ? !killed : true),
+      });
       env.deps.killProbe = mock((_pid: number, signal: string) => {
         if (signal === 'SIGTERM') killed = true;
       });
@@ -873,10 +882,14 @@ describe('WindowManager', () => {
         if (signal === 'SIGTERM') killed = true;
       });
       env.deps.killProbe = killProbe;
-      // Foreign lock at attach-decision time; gone right after SIGTERM so the
-      // terminate poll returns on its first check (the env setTimeout never
-      // fires, so a poll that had to sleep would hang the test).
-      enableAttachProbe({ readServerLock: () => (killed ? null : liveLock) });
+      // Foreign lock at attach-decision time; the holder pid dies right after
+      // SIGTERM so the terminate poll (pid-death, not lock release) returns on
+      // its first check (the env setTimeout never fires, so a poll that had
+      // to sleep would hang the test).
+      enableAttachProbe({
+        readServerLock: () => (killed ? null : liveLock),
+        isProcessAlive: () => !killed,
+      });
 
       const wm = new WindowManager(env.deps);
       const promise = wm.createProjectWindow({ projectPath: '/tmp/dragon' });
@@ -1013,6 +1026,35 @@ describe('WindowManager', () => {
       expect(env.utilities.length).toBe(1);
       env.utilities[0]?.fire({ type: 'ready', port: 40002, apiOrigin: 'http://localhost:40002' });
       await p;
+    });
+
+    test('draining lock (teardown in progress) falls through to spawn mode', async () => {
+      enableAttachProbe({
+        readServerLock: () => ({ ...liveLock, draining: true }),
+      });
+
+      const wm = new WindowManager(env.deps);
+      const p = wm.createProjectWindow({ projectPath: '/tmp/dragon' });
+      await new Promise((r) => setTimeout(r, 5));
+      expect(env.utilities.length).toBe(1);
+      env.utilities[0]?.fire({ type: 'ready', port: 40005, apiOrigin: 'http://localhost:40005' });
+      await p;
+    });
+
+    test('machineId-carrying lock with a drifted hostname still attaches', async () => {
+      // readServerLock (production) already machine-checked a lock that
+      // carries machineId; the window-manager's own hostname gate must not
+      // re-refuse it after a macOS hostname rename.
+      enableAttachProbe({
+        readServerLock: () => ({ ...liveLock, machineId: 'stable-machine-id' }),
+        hostname: () => 'renamed-since-lock-was-written',
+      });
+
+      const wm = new WindowManager(env.deps);
+      const ctx = await wm.createProjectWindow({ projectPath: '/tmp/dragon' });
+      expect(env.utilities.length).toBe(0);
+      expect(ctx.ownsServer).toBe(false);
+      expect(ctx.port).toBe(59534);
     });
 
     test('foreign-host lock falls through (D44 case c)', async () => {
@@ -1258,6 +1300,41 @@ describe('WindowManager', () => {
         expect(env.utilities.length).toBe(0);
       });
 
+      test('spawn-poll skips a draining predecessor lock and connects to the fresh spawn', async () => {
+        enableSyncTimers();
+        // Restart window: the dying predecessor still holds its lock (marked
+        // draining — the file survives until its process exits). The attach
+        // gate must refuse it, and the spawn-readiness poll must NOT mistake
+        // it for the fresh spawn's lock — only the successor's non-draining
+        // lock is the readiness signal.
+        const drainingPredecessor: ServerLockMetadataLike = {
+          ...spawnedLock,
+          pid: 77001,
+          port: 55555,
+          draining: true,
+        };
+        let readCount = 0;
+        env.deps.readServerLock = () => {
+          readCount++;
+          // Attach gate + first poll reads see the draining predecessor;
+          // then the fresh spawn's lock lands.
+          return readCount <= 3 ? drainingPredecessor : spawnedLock;
+        };
+        env.deps.isProcessAlive = () => true;
+        env.deps.hostname = () => 'my-host';
+        env.deps.probeWsUpgrade = () => Promise.resolve(true);
+        const spawn = mock(() => Promise.resolve({ pid: 91001 }));
+        env.deps.spawnDetachedServer = spawn;
+
+        const wm = new WindowManager(env.deps);
+        const ctx = await wm.createProjectWindow({ projectPath: '/tmp/spawned-project' });
+
+        expect(spawn).toHaveBeenCalledTimes(1);
+        // Connected to the successor's port — never the draining predecessor's.
+        expect(ctx.port).toBe(spawnedLock.port);
+        expect(ctx.ownsServer).toBe(false);
+      });
+
       test('attach-eligible lock pre-empts detached spawn (does NOT spawn a duplicate)', async () => {
         enableSyncTimers();
         // An attachable lock is already present — the desktop attaches rather
@@ -1275,6 +1352,89 @@ describe('WindowManager', () => {
 
         expect(spawn).not.toHaveBeenCalled();
         expect(ctx.port).toBe(60111);
+      });
+    });
+
+    describe('forceStopConflictingServer (dialog "Stop Server & Retry")', () => {
+      function seedRawLock(pid: number): string {
+        const projectPath = mkdtempSync(join(tmpdir(), 'ok-force-stop-'));
+        const lockDir = join(projectPath, '.ok', 'local');
+        mkdirSync(lockDir, { recursive: true });
+        // Tampered/foreign identity on purpose — the method must bypass the
+        // machine-identity filter and act on the raw pid.
+        writeFileSync(
+          join(lockDir, 'server.lock'),
+          JSON.stringify({
+            pid,
+            hostname: 'some-old-hostname',
+            machineId: 'not-this-machine',
+            port: 61000,
+            startedAt: '2026-07-07T00:00:00.000Z',
+            worktreeRoot: projectPath,
+            kind: 'interactive',
+          }),
+          'utf-8',
+        );
+        return projectPath;
+      }
+
+      test('SIGTERMs the raw lock pid even when its identity looks foreign', async () => {
+        const killedPids = new Set<number>();
+        const killCalls: Array<{ pid: number; signal: NodeJS.Signals | number }> = [];
+        env.deps.killProbe = (pid, signal) => {
+          killCalls.push({ pid, signal });
+          if (signal === 'SIGTERM') killedPids.add(pid);
+        };
+        env.deps.isProcessAlive = (pid) => !killedPids.has(pid);
+        const projectPath = seedRawLock(64321);
+
+        const wm = new WindowManager(env.deps);
+        const outcome = await wm.forceStopConflictingServer(projectPath);
+
+        expect(outcome).toEqual({ ok: true });
+        expect(killCalls).toContainEqual({ pid: 64321, signal: 'SIGTERM' });
+      });
+
+      test('no lock file → ok without signalling anything', async () => {
+        const killCalls: number[] = [];
+        env.deps.killProbe = (pid) => {
+          killCalls.push(pid);
+        };
+        const projectPath = mkdtempSync(join(tmpdir(), 'ok-force-stop-empty-'));
+
+        const wm = new WindowManager(env.deps);
+        const outcome = await wm.forceStopConflictingServer(projectPath);
+
+        expect(outcome).toEqual({ ok: true });
+        expect(killCalls).toHaveLength(0);
+      });
+
+      test('EPERM (other user account) surfaces as a failure', async () => {
+        env.deps.killProbe = () => {
+          const err = new Error('operation not permitted') as NodeJS.ErrnoException;
+          err.code = 'EPERM';
+          throw err;
+        };
+        const projectPath = seedRawLock(64322);
+
+        const wm = new WindowManager(env.deps);
+        const outcome = await wm.forceStopConflictingServer(projectPath);
+
+        expect(outcome).toEqual({ ok: false, reason: 'eperm' });
+      });
+
+      test('never signals a hostile lock pid (0/1/self)', async () => {
+        const killCalls: number[] = [];
+        env.deps.killProbe = (pid) => {
+          killCalls.push(pid);
+        };
+        for (const badPid of [0, 1, process.pid]) {
+          const projectPath = seedRawLock(badPid);
+          const wm = new WindowManager(env.deps);
+          const outcome = await wm.forceStopConflictingServer(projectPath);
+          expect(outcome).toEqual({ ok: true });
+        }
+        expect(killCalls).toHaveLength(0);
       });
     });
 
@@ -1381,13 +1541,16 @@ describe('WindowManager', () => {
           // post-stop reads via the kill mock).
           return n === 1 ? null : (lockByCwd.get(lockDir) ?? null);
         };
-        env.deps.isProcessAlive = () => true;
+        // Liveness follows the kill mock below: a SIGTERMed pid counts as
+        // exited (the stop poll watches pid death, not lock release).
+        const killedPids = new Set<number>();
+        env.deps.isProcessAlive = (pid) => !killedPids.has(pid);
         env.deps.hostname = () => 'my-host';
         env.deps.probeWsUpgrade = () => Promise.resolve(true);
         let nextSpawnPid = 91001;
         env.deps.spawnDetachedServer = () => Promise.resolve({ pid: nextSpawnPid++ });
 
-        // Inject killProbe so we record signals + simulate lock release.
+        // Inject killProbe so we record signals + simulate the server exiting.
         // The dep is already wired in WindowManagerDeps (used by the
         // post-exit liveness probe + now also by stopAllOwnedServers
         // and the spawn-lock-timeout orphan cleanup) — cleaner than
@@ -1395,8 +1558,10 @@ describe('WindowManager', () => {
         const killCalls: Array<{ pid: number; signal: NodeJS.Signals | 0 }> = [];
         env.deps.killProbe = (pid: number, signal: NodeJS.Signals | 0) => {
           killCalls.push({ pid, signal });
-          // Simulate the server reacting to SIGTERM by releasing its lock.
+          // Simulate the server reacting to SIGTERM by exiting (pid dies,
+          // and its lock file goes with it via the exit-time unlink).
           if (signal === 'SIGTERM') {
+            killedPids.add(pid);
             for (const [dir, lock] of lockByCwd.entries()) {
               if (lock.pid === pid) {
                 lockByCwd.delete(dir);

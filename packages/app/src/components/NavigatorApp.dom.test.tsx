@@ -201,6 +201,39 @@ describe('NavigatorApp launcher runtime behavior', () => {
     });
   });
 
+  test('shows the "Opening…" overlay while a project open is in flight, then clears it', async () => {
+    const bridge = createBridge();
+    // Defer the open so the overlay is observable mid-flight — this mirrors
+    // production, where `project.open` stays pending through the whole
+    // main-side spawn + lock-poll (and the Stop-Server-Retry path).
+    let resolveOpen: (() => void) | undefined;
+    bridge.project.open = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOpen = resolve;
+        }),
+    );
+    await renderNavigator(bridge);
+
+    expect(screen.queryByTestId('nav-opening-overlay')).toBeNull();
+    fireEvent.click(await screen.findByText('Recent Project'));
+
+    const overlay = await screen.findByTestId('nav-opening-overlay');
+    // Label is the path's last segment, not the full path.
+    expect(overlay.textContent).toContain('Opening recent');
+    expect(overlay.getAttribute('role')).toBe('status');
+
+    // Failure-path parity: the main-side wrapper swallows errors and resolves
+    // the invoke, so the overlay must clear on resolution (on the success path
+    // main closes this window instead).
+    act(() => {
+      resolveOpen?.();
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('nav-opening-overlay')).toBeNull();
+    });
+  });
+
   test('labels a linked-worktree recent with its branch over its base project, leaving plain projects unchanged', async () => {
     const bridge = createBridge();
     bridge.project.listRecent = mock(() =>

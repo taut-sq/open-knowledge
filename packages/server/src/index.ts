@@ -256,6 +256,7 @@ export {
   type PinoLoggerConfig,
 } from './logger.ts';
 export { isAllowedWorkspaceHostHeader, isLoopbackAddress } from './loopback.ts';
+export { getMachineId } from './machine-id.ts';
 export {
   type RenameRewriteResult,
   rewriteMarkdownLinksForDocumentRename,
@@ -402,11 +403,13 @@ export { serializeError } from './serialize-error.ts';
 export { createServer, type ServerInstance, type ServerOptions } from './server-factory.ts';
 export {
   acquireServerLock,
+  markServerLockDraining,
   readServerLock,
   releaseServerLock,
   ServerLockCollisionError,
   type ServerLockMetadata,
   updateServerLockPort,
+  waitForServerLockDrain,
 } from './server-lock.ts';
 export {
   createServerObserverExtension,

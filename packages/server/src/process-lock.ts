@@ -21,6 +21,7 @@ import {
 } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
+import { getMachineId } from './machine-id.ts';
 import { isProcessAlive, isValidLockPid } from './process-alive.ts';
 import { PROTOCOL_VERSION, RUNTIME_VERSION } from './version-constants.ts';
 
@@ -36,11 +37,32 @@ export type LockKind = 'interactive' | 'mcp-spawned';
 
 export interface ProcessLockMetadata {
   pid: number;
+  /**
+   * Display/diagnostic only — NOT an identity signal. `os.hostname()` follows
+   * macOS network renames, so hostname comparison misclassifies same-machine
+   * locks as foreign after a rename. Identity checks use `machineId`;
+   * hostname comparison survives only as the legacy fallback for locks
+   * written by binaries that predate `machineId`.
+   */
   hostname: string;
   /** HTTP/WebSocket port. 0 means "starting — port not yet bound". */
   port: number;
   startedAt: string;
   worktreeRoot: string;
+  /**
+   * Stable machine identity from `~/.ok/machine-id` (see `machine-id.ts`).
+   * Absent on locks written by older binaries — readers fall back to the
+   * hostname comparison, and ambiguous cases resolve fail-closed on local
+   * pid liveness.
+   */
+  machineId?: string;
+  /**
+   * Set when the holder has begun teardown. The holder still OWNS the lock —
+   * the file is unlinked only when the process actually exits — but the
+   * advertised port is no longer safe to dial and supervisors should wait
+   * for pid death rather than lock disappearance. Absent means "serving".
+   */
+  draining?: boolean;
   /**
    * Optional — absent on locks written by older binaries. Readers MUST
    * tolerate `undefined` and fall through to conservative paths
@@ -152,6 +174,59 @@ function dropActiveLockRef(lockPath: string): boolean {
   return false;
 }
 
+/**
+ * Machine-identity test for lock ownership judgments. `machineId` is the
+ * primary signal; the hostname comparison survives only for locks written by
+ * binaries that predate `machineId`. Callers must treat a `false` result as
+ * "unknown provenance" and fall back to LOCAL pid liveness with fail-closed
+ * semantics (collision, not stale-replace) — a foreign-looking lock can be a
+ * same-machine lock written under a renamed hostname or another OS user
+ * account's `~/.ok/machine-id`.
+ */
+function isSameMachine(existing: ProcessLockMetadata): boolean {
+  if (typeof existing.machineId === 'string') return existing.machineId === getMachineId();
+  return existing.hostname === hostname();
+}
+
+/**
+ * Locks owned by this process that must be unlinked when the process
+ * actually exits. One shared `'exit'` listener over a registry — a listener
+ * per lockPath would trip Node's MaxListeners warning under the test runner,
+ * which acquires thousands of per-test lock paths in one process.
+ *
+ * The handler is ownership-guarded (pid + machine), so a path that was
+ * already released early, or re-acquired by another process, is left alone.
+ * SIGKILL bypasses `'exit'`; the dead-pid stale detection in
+ * `acquireProcessLock`/`readProcessLock` is the backstop for that case.
+ */
+const exitUnlinkPaths = new Set<string>();
+let exitUnlinkHandlerRegistered = false;
+
+function registerExitUnlink(lockPath: string): void {
+  exitUnlinkPaths.add(lockPath);
+  if (exitUnlinkHandlerRegistered) return;
+  exitUnlinkHandlerRegistered = true;
+  process.on('exit', () => {
+    for (const path of exitUnlinkPaths) {
+      try {
+        const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<ProcessLockMetadata>;
+        if (parsed?.pid !== process.pid) continue;
+        if (typeof parsed.machineId === 'string' && parsed.machineId !== getMachineId()) continue;
+        if (
+          parsed.machineId === undefined &&
+          typeof parsed.hostname === 'string' &&
+          parsed.hostname !== hostname()
+        ) {
+          continue;
+        }
+        unlinkSync(path);
+      } catch {
+        // Missing or corrupt — nothing of ours to clean.
+      }
+    }
+  });
+}
+
 function parseLock(lockPath: string, logPrefix: string): ProcessLockMetadata | null {
   try {
     const parsed = JSON.parse(readFileSync(lockPath, 'utf-8'));
@@ -170,9 +245,20 @@ function parseLock(lockPath: string, logPrefix: string): ProcessLockMetadata | n
  * Acquire an exclusive process lock.
  *
  * - No existing lock → write ours atomically via O_CREAT|O_EXCL.
- * - Stale lock (dead pid OR foreign host) → replace with warning.
- * - Our own pid → idempotent rewrite (refreshes port/startedAt).
- * - Live foreign pid on same host → throw ProcessLockCollisionError.
+ * - Our own pid (same machine) → idempotent rewrite (refreshes
+ *   port/startedAt, clears any draining flag).
+ * - Pid alive on THIS host → throw ProcessLockCollisionError — regardless of
+ *   the lock's recorded machineId/hostname. Fail closed: a "foreign-looking"
+ *   lock can be this very machine under a renamed hostname (macOS renames
+ *   follow the network) or another OS user account; replacing it would start
+ *   a duplicate server against a live one. The cost is a rare false
+ *   collision on a shared volume (another machine's lock whose pid number
+ *   coincides with a live local process) — a loud, self-explanatory error,
+ *   preferred over a silent split-brain.
+ * - Pid dead locally → stale → replace with warning. This preserves the
+ *   availability posture for shared volumes: a genuinely-remote holder's
+ *   lock (pid meaningless here, almost always dead-looking) never blocks a
+ *   local start.
  * - Corrupt lock file → treat as stale.
  *
  * Create uses `openSync(path, 'wx')` (O_CREAT|O_EXCL) rather than a
@@ -211,6 +297,7 @@ export function acquireProcessLock(opts: {
     port: init.port,
     startedAt: new Date().toISOString(),
     worktreeRoot: init.worktreeRoot,
+    machineId: getMachineId(),
     ...(init.kind !== undefined && { kind: init.kind }),
     ...(init.parentPid !== undefined && { parentPid: init.parentPid }),
     ...(init.capabilities !== undefined && { capabilities: init.capabilities }),
@@ -232,6 +319,7 @@ export function acquireProcessLock(opts: {
           closeSync(fd);
         }
         bumpActiveLockRef(lockPath);
+        registerExitUnlink(lockPath);
         return buildHandle({ lockName, lockDir, lockPath });
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
@@ -241,19 +329,24 @@ export function acquireProcessLock(opts: {
 
     const existing = parseLock(lockPath, logPrefix);
     if (existing) {
-      const sameHost = existing.hostname === hostname();
-      if (sameHost && existing.pid === process.pid) {
+      if (isSameMachine(existing) && existing.pid === process.pid) {
         // Idempotent rewrite — our own lock. Safe to overwrite in place;
         // O_EXCL is not needed here (we can't race ourselves). Bumps the
         // refcount so the corresponding releaseProcessLock decrement
         // doesn't unlink the file out from under the prior holder. See
         // `activeLockRefs` doc for the Vite-restart scenario this
-        // protects against.
+        // protects against. The fresh payload carries no `draining` flag, so
+        // a same-process re-acquire after a prior teardown (restartable test
+        // servers) returns the lock to the serving state.
         writeFileSync(lockPath, payload, { encoding: 'utf-8', mode: 0o600 });
         bumpActiveLockRef(lockPath);
+        registerExitUnlink(lockPath);
         return buildHandle({ lockName, lockDir, lockPath });
       }
-      if (sameHost && isProcessAlive(existing.pid)) {
+      // Fail closed on ANY live local pid — deliberately not gated on
+      // machineId/hostname. See the function docstring for why replacing a
+      // foreign-looking live lock is the duplicate-server bug, not a cleanup.
+      if (isProcessAlive(existing.pid)) {
         throw new ProcessLockCollisionError(existing, lockPath, lockName);
       }
       console.warn(
@@ -324,9 +417,9 @@ export function updateProcessLockPort(opts: {
     return;
   }
   if (existing.pid !== process.pid) return;
-  // Match the cross-host guard in releaseProcessLock — pid alone can collide
-  // across hosts on a shared content volume (NFS, etc.).
-  if (typeof existing.hostname === 'string' && existing.hostname !== hostname()) return;
+  // Match the cross-machine guard in releaseProcessLock — pid alone can
+  // collide across machines on a shared content volume (NFS, etc.).
+  if (!isSameMachine(existing)) return;
 
   existing.port = port;
   try {
@@ -344,9 +437,74 @@ export function updateProcessLockPort(opts: {
 }
 
 /**
+ * Mark our own lock as draining — teardown has begun, the advertised port is
+ * no longer safe to dial, but the process still owns the lock until it
+ * actually exits. No-op (with a warning) when the lock is missing, corrupt,
+ * or not ours — a supervisor may legitimately have replaced it already.
+ *
+ * Idempotent; preserves every other field.
+ */
+export function markProcessLockDraining(opts: { lockName: LockName; lockDir: string }): void {
+  const { lockName, lockDir } = opts;
+  const logPrefix = `[${lockName}-lock]`;
+  const lockPath = lockFilePath(lockDir, lockName);
+
+  // Refcount-aware: draining means "the LAST holder is tearing down". When
+  // another in-process acquire is still active (Vite restart: pass-2 serves
+  // while pass-1 destroys), the lock must keep advertising a live server —
+  // marking it draining here would make discovery refuse a healthy one.
+  if ((activeLockRefs.get(lockPath) ?? 0) > 1) return;
+
+  let existing: ProcessLockMetadata;
+  try {
+    const parsed = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !isValidLockPid((parsed as { pid?: unknown }).pid)
+    ) {
+      console.warn(`${logPrefix} Corrupt lock at ${lockPath} during draining mark — skipping`);
+      return;
+    }
+    existing = parsed as ProcessLockMetadata;
+  } catch (err) {
+    // Missing file is a normal double-release/error-path case — stay quiet.
+    // Anything else (unreadable, corrupt JSON) has the same consequence as a
+    // failed WRITE (server keeps looking live during teardown), so it must be
+    // as attributable as the write-failure warn below.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(
+        `${logPrefix} Unreadable lock at ${lockPath} during draining mark — skipping: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return;
+  }
+  if (existing.pid !== process.pid) return;
+  if (!isSameMachine(existing)) return;
+  if (existing.draining === true) return;
+
+  existing.draining = true;
+  try {
+    writeFileSync(lockPath, JSON.stringify(existing, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
+  } catch (err) {
+    console.warn(
+      `${logPrefix} Failed to mark ${lockPath} draining: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
  * Read the lock if it exists and the holder is alive on this host.
- * Returns null for missing, stale, cross-host, or corrupt locks. Cleans
- * up a stale lock as a side effect (same host, dead pid only).
+ * Returns null for missing, stale, cross-machine, or corrupt locks. Cleans
+ * up a stale lock as a side effect (same machine, dead pid only).
+ *
+ * A returned lock may carry `draining: true` — the holder is alive but
+ * tearing down. Callers that dial the port or treat the holder as
+ * attachable MUST check `draining`; callers that only need "is someone
+ * alive holding this" can ignore it.
  *
  * Locks missing the version fields (`protocolVersion` / `runtimeVersion`)
  * are returned as-is — the legacy callers (`tryAttachExistingServer` in the
@@ -372,7 +530,7 @@ export function readProcessLock(opts: {
     return null;
   }
 
-  if (existing.hostname !== hostname()) return null;
+  if (!isSameMachine(existing)) return null;
   if (!isProcessAlive(existing.pid)) {
     try {
       unlinkSync(lockPath);
@@ -443,11 +601,13 @@ export function readProcessLockDetailed(opts: {
     port: r.port,
     startedAt: r.startedAt,
     worktreeRoot: r.worktreeRoot,
+    machineId: typeof r.machineId === 'string' ? r.machineId : undefined,
+    draining: r.draining === true ? true : undefined,
     protocolVersion: typeof r.protocolVersion === 'number' ? r.protocolVersion : undefined,
     runtimeVersion: typeof r.runtimeVersion === 'string' ? r.runtimeVersion : undefined,
   };
 
-  if (lock.hostname !== hostname()) return { status: 'stale', lock };
+  if (!isSameMachine(lock)) return { status: 'stale', lock };
   if (!isProcessAlive(lock.pid)) {
     try {
       unlinkSync(lockPath);
@@ -465,21 +625,84 @@ export function readProcessLockDetailed(opts: {
 }
 
 /**
+ * Wait for a draining holder to finish exiting before proceeding.
+ *
+ * Spawners (CLI `ok start`, the MCP shim's auto-start, the desktop's
+ * detached spawn) call this before acquiring: a draining lock means the
+ * previous server is seconds from exit, and racing it either collides
+ * loudly or, worse, dials a dying port. Polls until the lock is gone or
+ * replaced by a non-draining one.
+ *
+ * Returns:
+ * - `'no-drain'`  — no lock, or a live non-draining holder. Proceed to the
+ *                   normal acquire/attach logic immediately.
+ * - `'released'`  — a draining holder was present and has since exited
+ *                   (lock gone or dead-pid-cleaned). Safe to acquire.
+ * - `'timeout'`   — the draining holder outlived `timeoutMs`. Proceed to
+ *                   the normal logic; acquire will collide loudly, which is
+ *                   the correct fail-closed outcome for a wedged teardown.
+ */
+export async function waitForProcessLockDrain(opts: {
+  lockName: LockName;
+  lockDir: string;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  /** Injectable for tests. */
+  readLock?: () => ProcessLockMetadata | null;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<'no-drain' | 'released' | 'timeout'> {
+  const { lockName, lockDir } = opts;
+  const timeoutMs = opts.timeoutMs ?? 10_000;
+  const pollIntervalMs = opts.pollIntervalMs ?? 100;
+  const readLock = opts.readLock ?? (() => readProcessLock({ lockName, lockDir }));
+  const sleep =
+    opts.sleep ??
+    ((ms: number) => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, ms)));
+
+  const initial = readLock();
+  if (initial === null || initial.draining !== true) return 'no-drain';
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(pollIntervalMs);
+    const lock = readLock();
+    if (lock === null) return 'released';
+    if (lock.draining !== true) return 'no-drain';
+  }
+  return 'timeout';
+}
+
+/**
  * Release the lock. Safe to call multiple times. Only removes the lock if
- * we own it (pid AND hostname match) — prevents a rogue process from
- * unlinking a real server's lock. The hostname check matters on shared
- * content directories (NFS-mounted home, remote content volumes) where two
- * hosts can legitimately run processes with the same pid — without the
- * check we'd unlink a peer's lock.
+ * we own it (pid AND machine match; hostname for legacy locks) — prevents a
+ * rogue process from unlinking a real server's lock. The machine check
+ * matters on shared content directories (NFS-mounted home, remote content
+ * volumes) where two machines can legitimately run processes with the same
+ * pid — without the check we'd unlink a peer's lock.
  *
  * Refcount-aware: when this process holds multiple active acquires for the
  * same lockPath (Vite plugin per-`configureServer` createServer lifecycle),
  * release decrements the in-process refcount; the file is only unlinked
  * when the LAST active acquire releases. See `activeLockRefs` for the bug
  * class this protects against.
+ *
+ * `deferUnlinkToExit` — the teardown-to-exit contract. When set and the
+ * refcount reaches zero, the file is NOT unlinked now: it stays on disk
+ * marked `draining` and the process-exit handler (registered at acquire)
+ * removes it when the process actually dies. This closes the window where
+ * a released lock made a still-alive server invisible, so supervisors and
+ * discovery spawned a duplicate alongside it. Callers whose process keeps
+ * living after the release (error-path cleanup, the Vite dev plugin's
+ * restart cycle) MUST leave this unset — deferring there would leave a
+ * live-pid draining lock that blocks every future start until the dev
+ * process dies.
  */
-export function releaseProcessLock(opts: { lockName: LockName; lockDir: string }): void {
-  const { lockName, lockDir } = opts;
+export function releaseProcessLock(opts: {
+  lockName: LockName;
+  lockDir: string;
+  deferUnlinkToExit?: boolean;
+}): void {
+  const { lockName, lockDir, deferUnlinkToExit = false } = opts;
   const logPrefix = `[${lockName}-lock]`;
   const lockPath = lockFilePath(lockDir, lockName);
   if (!dropActiveLockRef(lockPath)) {
@@ -487,13 +710,20 @@ export function releaseProcessLock(opts: { lockName: LockName; lockDir: string }
     // the file so cross-process collision detection keeps working.
     return;
   }
+  if (deferUnlinkToExit) {
+    // Ensure the draining flag is visible to readers between now and exit;
+    // the exit handler owns the actual unlink.
+    markProcessLockDraining({ lockName, lockDir });
+    return;
+  }
   if (!existsSync(lockPath)) return;
   try {
     const parsed = JSON.parse(readFileSync(lockPath, 'utf-8'));
     if (!parsed || typeof parsed !== 'object' || typeof parsed.pid !== 'number') return;
     if (parsed.pid !== process.pid) return;
-    if (typeof parsed.hostname === 'string' && parsed.hostname !== hostname()) return;
+    if (!isSameMachine(parsed as ProcessLockMetadata)) return;
     unlinkSync(lockPath);
+    exitUnlinkPaths.delete(lockPath);
   } catch (err) {
     console.warn(
       `${logPrefix} Failed to release ${lockPath}: ${err instanceof Error ? err.message : String(err)}`,

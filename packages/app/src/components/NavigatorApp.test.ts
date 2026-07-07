@@ -255,4 +255,14 @@ describe('NavigatorApp error-state helpers', () => {
     afterAwait = true;
     expect(afterAwait).toBe(true);
   });
+
+  test('displayNameForPath returns the last path segment for the Opening… overlay', async () => {
+    const { displayNameForPath } = await import('./NavigatorApp');
+    expect(displayNameForPath('/Users/me/Documents/oktest')).toBe('oktest');
+    expect(displayNameForPath('/Users/me/Documents/oktest/')).toBe('oktest');
+    expect(displayNameForPath('C:\\Users\\me\\oktest')).toBe('oktest');
+    // Separator-less / root inputs fall back to the whole string.
+    expect(displayNameForPath('oktest')).toBe('oktest');
+    expect(displayNameForPath('/')).toBe('/');
+  });
 });

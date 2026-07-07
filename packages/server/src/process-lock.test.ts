@@ -1,19 +1,22 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { LOCAL_DIR } from '@inkeep/open-knowledge-core';
+import { getMachineId } from './machine-id';
 import {
   acquireProcessLock,
   type LockName,
   lockFilePath,
+  markProcessLockDraining,
   ProcessLockCollisionError,
   type ProcessLockMetadata,
   readProcessLock,
   readProcessLockDetailed,
   releaseProcessLock,
   updateProcessLockPort,
+  waitForProcessLockDrain,
 } from './process-lock';
 import { PROTOCOL_VERSION, RUNTIME_VERSION } from './version-constants';
 
@@ -824,5 +827,338 @@ describe('lock-pid security validation', () => {
     // guard is the responsibility of the desktop kill site, not the parser.
     expect(isValidLockPid(process.pid)).toBe(true);
     expect(isValidLockPid(process.ppid > 1 ? process.ppid : 12345)).toBe(true);
+  });
+});
+
+describe('machine identity + fail-closed liveness (duplicate-server regression)', () => {
+  test('stamps machineId into the lock on acquire', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 3000, worktreeRoot: '/wt' },
+    });
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.machineId).toBe(getMachineId());
+  });
+
+  test('collides on a live local pid even when hostname AND machineId look foreign (hostname-flap regression)', () => {
+    // A macOS hostname rename (or another OS user account's machine-id file)
+    // makes a same-machine lock look foreign. Pre-fix, acquire classified it
+    // as stale and REPLACED it while its holder was alive and serving —
+    // producing two fully-live servers for one contentDir.
+    const livePid = aliveForeignPid();
+    mkdirSync(lockDir, { recursive: true });
+    const flapped: ProcessLockMetadata = {
+      pid: livePid,
+      hostname: `${hostname()}-before-rename`,
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/other',
+      machineId: 'some-other-machine-id',
+    };
+    writeFileSync(lockPath, JSON.stringify(flapped), 'utf-8');
+
+    expect(() =>
+      acquireProcessLock({
+        lockName: LOCK_NAME,
+        lockDir,
+        metadata: { port: 3000, worktreeRoot: '/me' },
+      }),
+    ).toThrow(ProcessLockCollisionError);
+    // The live holder's lock survives untouched.
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.pid).toBe(livePid);
+  });
+
+  test('replaces a foreign-machine lock whose pid is dead locally', () => {
+    mkdirSync(lockDir, { recursive: true });
+    const remote: ProcessLockMetadata = {
+      pid: 99999999,
+      hostname: 'some-other-host',
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/remote',
+      machineId: 'some-other-machine-id',
+    };
+    writeFileSync(lockPath, JSON.stringify(remote), 'utf-8');
+
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 3001, worktreeRoot: '/me' },
+    });
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.pid).toBe(process.pid);
+  });
+
+  test('readProcessLock returns null for a foreign-machine lock WITHOUT unlinking it', () => {
+    mkdirSync(lockDir, { recursive: true });
+    const livePid = aliveForeignPid();
+    const foreign: ProcessLockMetadata = {
+      pid: livePid,
+      hostname: hostname(),
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/other',
+      machineId: 'some-other-machine-id',
+    };
+    writeFileSync(lockPath, JSON.stringify(foreign), 'utf-8');
+
+    expect(readProcessLock({ lockName: LOCK_NAME, lockDir })).toBeNull();
+    expect(existsSync(lockPath)).toBe(true);
+  });
+
+  test('same-machine lock with a drifted hostname still reads as ours via machineId', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 4000, worktreeRoot: '/wt' },
+    });
+    // Simulate the hostname changing AFTER the lock was written.
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    md.hostname = `${hostname()}-renamed-since`;
+    writeFileSync(lockPath, JSON.stringify(md), 'utf-8');
+
+    const read = readProcessLock({ lockName: LOCK_NAME, lockDir });
+    expect(read?.pid).toBe(process.pid);
+    expect(read?.port).toBe(4000);
+  });
+});
+
+describe('draining lifecycle (lock held until process exit)', () => {
+  test('markProcessLockDraining sets the flag and preserves every other field', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 5000, worktreeRoot: '/wt' },
+    });
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.draining).toBe(true);
+    expect(md.pid).toBe(process.pid);
+    expect(md.port).toBe(5000);
+    expect(md.worktreeRoot).toBe('/wt');
+    expect(md.machineId).toBe(getMachineId());
+  });
+
+  test('markProcessLockDraining refuses locks we do not own', () => {
+    mkdirSync(lockDir, { recursive: true });
+    const livePid = aliveForeignPid();
+    const foreign: ProcessLockMetadata = {
+      pid: livePid,
+      hostname: hostname(),
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/other',
+    };
+    writeFileSync(lockPath, JSON.stringify(foreign), 'utf-8');
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.draining).toBeUndefined();
+  });
+
+  test('markProcessLockDraining no-ops while another in-process acquire is active (Vite restart)', () => {
+    acquireProcessLock({ lockName: LOCK_NAME, lockDir, metadata: { port: 1, worktreeRoot: '/a' } });
+    acquireProcessLock({ lockName: LOCK_NAME, lockDir, metadata: { port: 2, worktreeRoot: '/b' } });
+
+    // Two active acquires — pass-1's teardown must not mark pass-2's lock.
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+    let md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.draining).toBeUndefined();
+
+    releaseProcessLock({ lockName: LOCK_NAME, lockDir });
+    // Last active acquire — now the mark applies.
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+    md = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.draining).toBe(true);
+  });
+
+  test('release with deferUnlinkToExit keeps the file on disk, marked draining', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 5000, worktreeRoot: '/wt' },
+    });
+    releaseProcessLock({ lockName: LOCK_NAME, lockDir, deferUnlinkToExit: true });
+
+    expect(existsSync(lockPath)).toBe(true);
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.pid).toBe(process.pid);
+    expect(md.draining).toBe(true);
+  });
+
+  test('plain release still unlinks immediately (error-path contract)', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 5000, worktreeRoot: '/wt' },
+    });
+    releaseProcessLock({ lockName: LOCK_NAME, lockDir });
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  test('same-pid re-acquire after a deferred release clears the draining flag', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 5000, worktreeRoot: '/wt' },
+    });
+    releaseProcessLock({ lockName: LOCK_NAME, lockDir, deferUnlinkToExit: true });
+
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 6000, worktreeRoot: '/wt' },
+    });
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.draining).toBeUndefined();
+    expect(md.port).toBe(6000);
+    // Balance the re-acquire so later tests see a clean refcount.
+    releaseProcessLock({ lockName: LOCK_NAME, lockDir });
+  });
+
+  test('updateProcessLockPort preserves the draining flag', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 0, worktreeRoot: '/wt' },
+    });
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+    updateProcessLockPort({ lockName: LOCK_NAME, lockDir, port: 7777 });
+
+    const md: ProcessLockMetadata = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(md.port).toBe(7777);
+    expect(md.draining).toBe(true);
+  });
+
+  test('readProcessLockDetailed propagates draining and machineId (desktop attach guard depends on both)', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 8100, worktreeRoot: '/wt' },
+    });
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+
+    const result = readProcessLockDetailed({ lockName: LOCK_NAME, lockDir });
+    expect(result.status).toBe('live');
+    if (result.status === 'live') {
+      expect(result.lock.draining).toBe(true);
+      expect(result.lock.machineId).toBe(getMachineId());
+    }
+  });
+
+  test('readProcessLock surfaces the draining flag on a live same-machine holder', () => {
+    acquireProcessLock({
+      lockName: LOCK_NAME,
+      lockDir,
+      metadata: { port: 8000, worktreeRoot: '/wt' },
+    });
+    markProcessLockDraining({ lockName: LOCK_NAME, lockDir });
+
+    const read = readProcessLock({ lockName: LOCK_NAME, lockDir });
+    expect(read?.draining).toBe(true);
+    expect(read?.port).toBe(8000);
+  });
+});
+
+describe('waitForProcessLockDrain', () => {
+  const immediateSleep = async () => {};
+
+  test('returns no-drain when no lock exists', async () => {
+    const outcome = await waitForProcessLockDrain({
+      lockName: LOCK_NAME,
+      lockDir,
+      readLock: () => null,
+      sleep: immediateSleep,
+    });
+    expect(outcome).toBe('no-drain');
+  });
+
+  test('returns no-drain for a live non-draining holder', async () => {
+    const live: ProcessLockMetadata = {
+      pid: process.pid,
+      hostname: hostname(),
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/wt',
+    };
+    const outcome = await waitForProcessLockDrain({
+      lockName: LOCK_NAME,
+      lockDir,
+      readLock: () => live,
+      sleep: immediateSleep,
+    });
+    expect(outcome).toBe('no-drain');
+  });
+
+  test('returns released once the draining holder exits', async () => {
+    const draining: ProcessLockMetadata = {
+      pid: process.pid,
+      hostname: hostname(),
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/wt',
+      draining: true,
+    };
+    let reads = 0;
+    const outcome = await waitForProcessLockDrain({
+      lockName: LOCK_NAME,
+      lockDir,
+      readLock: () => {
+        reads += 1;
+        return reads >= 4 ? null : draining;
+      },
+      sleep: immediateSleep,
+    });
+    expect(outcome).toBe('released');
+  });
+
+  test('returns no-drain when a live non-draining successor replaces the draining holder mid-wait', async () => {
+    const draining: ProcessLockMetadata = {
+      pid: process.pid,
+      hostname: hostname(),
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/wt',
+      draining: true,
+    };
+    const successor: ProcessLockMetadata = {
+      ...draining,
+      pid: process.pid,
+      draining: undefined,
+      port: 9100,
+    };
+    let reads = 0;
+    const outcome = await waitForProcessLockDrain({
+      lockName: LOCK_NAME,
+      lockDir,
+      readLock: () => {
+        reads += 1;
+        return reads >= 3 ? successor : draining;
+      },
+      sleep: immediateSleep,
+    });
+    expect(outcome).toBe('no-drain');
+  });
+
+  test('returns timeout when the draining holder outlives the budget', async () => {
+    const draining: ProcessLockMetadata = {
+      pid: process.pid,
+      hostname: hostname(),
+      port: 9000,
+      startedAt: new Date().toISOString(),
+      worktreeRoot: '/wt',
+      draining: true,
+    };
+    const outcome = await waitForProcessLockDrain({
+      lockName: LOCK_NAME,
+      lockDir,
+      timeoutMs: 20,
+      pollIntervalMs: 1,
+      readLock: () => draining,
+    });
+    expect(outcome).toBe('timeout');
   });
 });

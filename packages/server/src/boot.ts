@@ -76,7 +76,13 @@ import {
 // Stale locks (dead pid) are pruned automatically by `acquireProcessLock`.
 // Only the writer releases on destroy — a desktop quit must not take down a
 // peer's advertisement. Ownership is tracked locally via `ownsUiLock` below.
-import { acquireUiLock, releaseUiLock, UiLockCollisionError, updateUiLockPort } from './ui-lock.ts';
+import {
+  acquireUiLock,
+  markUiLockDraining,
+  releaseUiLock,
+  UiLockCollisionError,
+  updateUiLockPort,
+} from './ui-lock.ts';
 
 /**
  * Names of per-machine runtime files that pre-date the `.ok/local/` move.
@@ -494,7 +500,9 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
   // environment for typechecking without pulling network deps at parse time.
   // `ws` (the WebSocket server) is loaded by `mountMcpAndApi` further down.
   const { createServer: createHttpServer } = await import('node:http');
-  const { updateServerLockPort } = await import('./server-lock.ts');
+  const { markServerLockDraining, releaseServerLock, updateServerLockPort } = await import(
+    './server-lock.ts'
+  );
 
   // Pre-createServer scaffold hook. CLI passes initContent; desktop omits.
   let didAutoInit = false;
@@ -727,6 +735,11 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
         await destroyHocuspocus().catch(() => {
           /* best-effort — surface the original error */
         });
+        // Boot failed but this process may keep living (Electron utility
+        // surfaces the error over IPC). destroyHocuspocus defers its unlink
+        // to process exit, which would strand a live-pid draining lock that
+        // blocks every future start — release it for real here.
+        releaseServerLock(lockDir);
         throw err;
       }
     }
@@ -851,6 +864,10 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
     await destroyHocuspocus().catch(() => {
       /* best-effort — surface the original listen error */
     });
+    // Same rationale as the ui.lock error path above: the process may keep
+    // living after a failed boot, so the deferred-to-exit unlink would strand
+    // a live-pid draining lock. Release immediately on this error path.
+    releaseServerLock(lockDir);
     throw err;
   }
 
@@ -911,6 +928,17 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
       }
     };
 
+    // Advertise teardown before the first close step so discovery and
+    // supervisors stop treating this server as dialable the moment shutdown
+    // begins — not seconds later when the Hocuspocus destroy reaches its own
+    // draining mark. Idempotent with the mark inside `destroyHocuspocus`.
+    try {
+      markServerLockDraining(lockDir);
+      if (ownsUiLock) markUiLockDraining(lockDir);
+    } catch (err) {
+      log.warn({ err, step: 'markLocksDraining' }, 'bootServer destroy step failed');
+    }
+
     try {
       idleHandle?.detach();
     } catch (err) {
@@ -948,8 +976,11 @@ async function bootServerInner(opts: BootServerOptions): Promise<BootedServer> {
       // Release ONLY if we own it. If we yielded at boot to a live holder,
       // that holder's advertisement must survive our destroy — taking down
       // ui.lock on quit-without-ownership would silently break their
-      // preview-URL discovery.
-      await runStep('releaseUiLock', async () => releaseUiLock(lockDir));
+      // preview-URL discovery. Unlink deferred to process exit for the same
+      // reason as server.lock: lock-gone must mean process-gone.
+      await runStep('releaseUiLock', async () =>
+        releaseUiLock(lockDir, { deferUnlinkToExit: true }),
+      );
     }
     // Flush pending spans/metrics so the teardown sequence itself is
     // observable. shutdownTelemetry is idempotent and has its own timeout.

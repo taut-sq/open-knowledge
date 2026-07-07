@@ -77,6 +77,12 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
   const [recentBranches, setRecentBranches] = useState<Map<string, string | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Non-null while a project open is in flight. `bridge.project.open` stays
+  // pending for the entire main-side flow — server spawn, the up-to-15s lock
+  // poll, and (on the collision path) the "Stop Server & Retry" kill +
+  // respawn — so one flag covers every silent wait with no extra IPC. Holds
+  // the display label for the overlay message.
+  const [openingLabel, setOpeningLabel] = useState<string | null>(null);
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -191,21 +197,35 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
   const runWithErrorState = (fn: () => Promise<void>, fallback: string) =>
     runWithErrorStatePure(fn, fallback, setError);
 
+  // Open a project with the full-window "Opening…" overlay held for the whole
+  // main-side flow. On success main closes this Navigator window (the overlay
+  // vanishes with it); on failure `openProjectOrFallbackToNavigator` shows its
+  // own dialog and resolves the invoke, so the `finally` restores the
+  // interactive Navigator. `label` is the human name shown in the overlay.
+  // `.finally()` (a method call), NOT try/finally — the React Compiler's
+  // Babel lowering can't handle a TryStatement without a catch clause and
+  // fails the production build (typecheck + bun test don't run the compiler,
+  // so this only surfaces at build time).
+  const openWithIndicator = (path: string, entryPoint: OkProjectEntryPoint, label: string) =>
+    runWithErrorState(() => {
+      setOpeningLabel(label);
+      return openProject(bridge, path, entryPoint).finally(() => setOpeningLabel(null));
+    }, t`Failed to open project.`);
+
   const onClone = () => setCloneDialogOpen(true);
 
   const onOpenFolder = () =>
     runWithErrorState(async () => {
       const path = await bridge.dialog.openFolder();
       if (!path) return;
-      await openProject(bridge, path, 'pick-existing');
+      setOpeningLabel(displayNameForPath(path));
+      await openProject(bridge, path, 'pick-existing').finally(() => setOpeningLabel(null));
     }, t`Failed to open folder.`);
 
   const onCreate = () => setCreateDialogOpen(true);
 
   const onOpenRecent = (path: string) =>
-    runWithErrorState(async () => {
-      await openProject(bridge, path, 'recents');
-    }, t`Failed to open project.`);
+    openWithIndicator(path, 'recents', displayNameForPath(path));
 
   const onRemoveRecent = (path: string) =>
     runWithErrorState(async () => {
@@ -254,6 +274,17 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
         data-electron-drag={isElectronHost ? '' : undefined}
         data-testid="nav-chrome-row"
       />
+      {openingLabel !== null ? (
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-primary-foreground/85 dark:bg-background/85 backdrop-blur-sm"
+          data-testid="nav-opening-overlay"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+          <p className="text-muted-foreground text-sm">{t`Opening ${openingLabel}…`}</p>
+        </div>
+      ) : null}
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden px-12 py-12">
         <div className="my-auto flex min-h-0 flex-col space-y-10">
           <header className="shrink-0 flex-wrap flex items-center gap-2.5">
@@ -410,10 +441,10 @@ export function NavigatorApp({ bridge }: { bridge: OkDesktopBridge }) {
           // lands like a freshly-picked existing folder, so the consent
           // dialog gate is the right surface for the user to review scope
           // before scaffolding.
-          void runWithErrorState(
-            () => openProject(bridge, dir, 'pick-existing'),
-            t`Failed to open cloned project.`,
-          );
+          void runWithErrorState(() => {
+            setOpeningLabel(displayNameForPath(dir));
+            return openProject(bridge, dir, 'pick-existing').finally(() => setOpeningLabel(null));
+          }, t`Failed to open cloned project.`);
         }}
       />
 
@@ -561,4 +592,14 @@ async function openProject(
   entryPoint: OkProjectEntryPoint,
 ): Promise<void> {
   await bridge.project.open({ path, target: 'new-window', entryPoint });
+}
+
+/**
+ * Human-readable project name for the "Opening…" overlay — the last path
+ * segment (works for both `/` and `\` separators), falling back to the full
+ * path for a root or separator-less input.
+ */
+export function displayNameForPath(path: string): string {
+  const segments = path.split(/[/\\]/).filter(Boolean);
+  return segments.length > 0 ? (segments[segments.length - 1] ?? path) : path;
 }

@@ -2,11 +2,20 @@
  * Server lifetime follows connected WebSocket clients, not the process that
  * launched the server. One remaining sibling client keeps the lock
  * alive past the idle window; after the last client disconnects, idle-shutdown
- * releases the lock.
+ * tears the server down and marks the lock draining (the unlink itself is
+ * deferred to process exit).
  */
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
@@ -102,23 +111,39 @@ test('closing spawning editor leaves sibling editor connected; idle-shutdown fir
   expect(providerB.isSynced).toBe(true);
 
   // Now editor B disconnects — counter goes to zero, idle-shutdown schedules,
-  // and the server tears down within the configured window.
+  // and the server tears down within the configured window. Teardown no
+  // longer unlinks the lock (that is deferred to actual process exit, which a
+  // same-process test can't observe); the observable teardown signal is the
+  // `draining` flag flipping on.
   providerB.destroy();
   yDocB.destroy();
 
+  const readDraining = (): boolean => {
+    try {
+      const parsed = JSON.parse(readFileSync(lockPath, 'utf-8')) as { draining?: boolean };
+      return parsed.draining === true;
+    } catch {
+      return false;
+    }
+  };
   const deadline = Date.now() + 5_000;
-  while (existsSync(lockPath) && Date.now() < deadline) {
+  while (!readDraining() && Date.now() < deadline) {
     await wait(25);
   }
-  expect(existsSync(lockPath)).toBe(false);
+  expect(readDraining()).toBe(true);
 
   // Regression guard: idle-shutdown must run the FULL destroy chain, not just
   // destroyHocuspocus(). Pre-fix, the lock file release above passed (Hocuspocus
   // releases it directly) while httpServer.listening stayed true, leaving a
   // zombie listener that survived for the lifetime of the parent process.
   // `boot.ts`'s destroy() runs httpServer.close() before destroyHocuspocus(),
-  // so by the time the lock is gone the listener is gone too — no extra wait
-  // needed. boot.test.ts has a faster spot-test for this but is skipped on CI
-  // (oven-sh/bun#11892); this assertion is the CI-side guard.
+  // so by the time the lock is draining the listener teardown is in the same
+  // chain — poll it to completion. boot.test.ts has a faster spot-test for
+  // this but is skipped on CI (oven-sh/bun#11892); this assertion is the
+  // CI-side guard.
+  const listenDeadline = Date.now() + 5_000;
+  while (server.httpServer.listening && Date.now() < listenDeadline) {
+    await wait(25);
+  }
   expect(server.httpServer.listening).toBe(false);
 });

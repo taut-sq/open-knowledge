@@ -100,8 +100,12 @@ function buildEphemeralEnv(): EphemeralEnv {
   const removedDirs: string[] = [];
   const effectLog: string[] = [];
   const killCalls: EphemeralEnv['killCalls'] = [];
-  // lockDir → live lock; the spawn stub publishes, killProbe(SIGTERM) releases.
+  // lockDir → live lock; the spawn stub publishes. killProbe(SIGTERM) kills
+  // the pid AND drops its lock — mirroring a real exit, where the unlink
+  // happens in the dying process's exit handler. The teardown poll watches
+  // pid death (not lock release), so liveness must track the kill.
   const locks = new Map<string, ServerLockMetadataLike>();
+  const killedPids = new Set<number>();
   let tempCounter = 0;
   let pidCounter = 42000;
 
@@ -141,12 +145,14 @@ function buildEphemeralEnv(): EphemeralEnv {
         killCalls.push({ pid, signal });
         if (signal === 'SIGTERM') {
           effectLog.push(`sigterm:${pid}`);
-          // Release every lock this pid holds (mirrors a graceful drain).
+          killedPids.add(pid);
+          // Release every lock this pid holds (mirrors process exit).
           for (const [dir, lock] of locks) {
             if (lock.pid === pid) locks.delete(dir);
           }
         }
       },
+      isProcessAlive: (pid) => !killedPids.has(pid),
       readServerLock: (lockDir) => locks.get(lockDir) ?? null,
       showGate,
       createEphemeralProjectDir: (contentDir) => {

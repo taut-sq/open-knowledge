@@ -271,8 +271,14 @@ describe('createServer().destroy() — graceful shutdown flush', () => {
     expect(captures[0]?.contentOnDisk).toBe(true);
     expect(captures[0]?.payload).toContain('order-marker');
 
-    // Post-destroy: lock is gone, content survived. The standard end-state.
-    expect(existsSync(lockPath)).toBe(false);
+    // Post-destroy: the lock file SURVIVES, marked draining, still owned by
+    // this pid — the unlink is deferred to actual process exit so no other
+    // server can acquire while a live predecessor is still winding down.
+    // Content survived. The standard end-state.
+    expect(existsSync(lockPath)).toBe(true);
+    const postDestroyLock = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(postDestroyLock.pid).toBe(process.pid);
+    expect(postDestroyLock.draining).toBe(true);
     expect(readFileSync(contentPath, 'utf-8')).toContain('order-marker');
   });
 
@@ -1263,7 +1269,7 @@ describe('createServer() server-lock integration (V0-1)', () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  test('acquires server.lock at createServer(), releases on destroy()', async () => {
+  test('acquires server.lock at createServer(), drains on destroy() (unlink deferred to exit)', async () => {
     const server = createServer({
       contentDir: tmpDir,
       projectDir: tmpDir,
@@ -1276,10 +1282,17 @@ describe('createServer() server-lock integration (V0-1)', () => {
     const md = JSON.parse(readFileSync(lockPath, 'utf-8'));
     expect(md.pid).toBe(process.pid);
     expect(md.worktreeRoot).toBe(tmpDir);
+    expect(md.draining).toBeUndefined();
 
     await server.destroy();
 
-    expect(existsSync(lockPath)).toBe(false);
+    // The file survives, marked draining, until the process actually exits —
+    // lock-gone must mean process-gone, so a successor can never overlap a
+    // still-alive predecessor.
+    expect(existsSync(lockPath)).toBe(true);
+    const drained = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(drained.pid).toBe(process.pid);
+    expect(drained.draining).toBe(true);
   });
 
   test('exposes lockDir on ServerInstance', async () => {
@@ -1364,7 +1377,7 @@ describe('createServer() server-lock integration (V0-1)', () => {
     await server.destroy();
   });
 
-  test('destroy() releases server.lock even when a shutdown phase throws (CC8)', async () => {
+  test('destroy() drains server.lock even when a shutdown phase throws (CC8)', async () => {
     const server = createServer({
       contentDir: tmpDir,
       projectDir: tmpDir,
@@ -1383,7 +1396,10 @@ describe('createServer() server-lock integration (V0-1)', () => {
     };
 
     await server.destroy();
-    expect(existsSync(lockPath)).toBe(false);
+    // Phase 6 still ran despite the phase-2 throw: our claim is released
+    // (draining flag set); the file itself survives until process exit.
+    const drained = JSON.parse(readFileSync(lockPath, 'utf-8'));
+    expect(drained.draining).toBe(true);
   });
 });
 

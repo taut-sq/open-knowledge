@@ -17,11 +17,13 @@
 import {
   acquireProcessLock,
   type LockKind,
+  markProcessLockDraining,
   ProcessLockCollisionError,
   type ProcessLockMetadata,
   readProcessLock,
   releaseProcessLock,
   updateProcessLockPort,
+  waitForProcessLockDrain,
 } from './process-lock.ts';
 
 export type ServerLockMetadata = ProcessLockMetadata;
@@ -63,6 +65,19 @@ export function readServerLock(lockDir: string): ServerLockMetadata | null {
   return readProcessLock({ lockName: 'server', lockDir });
 }
 
-export function releaseServerLock(lockDir: string): void {
-  releaseProcessLock({ lockName: 'server', lockDir });
+export function releaseServerLock(lockDir: string, opts?: { deferUnlinkToExit?: boolean }): void {
+  releaseProcessLock({ lockName: 'server', lockDir, ...opts });
+}
+
+/** Mark our server.lock draining — teardown began; unlink happens at exit. */
+export function markServerLockDraining(lockDir: string): void {
+  markProcessLockDraining({ lockName: 'server', lockDir });
+}
+
+/** Wait for a draining server holder to exit before acquiring/attaching. */
+export function waitForServerLockDrain(
+  lockDir: string,
+  opts?: { timeoutMs?: number; pollIntervalMs?: number },
+): Promise<'no-drain' | 'released' | 'timeout'> {
+  return waitForProcessLockDrain({ lockName: 'server', lockDir, ...opts });
 }

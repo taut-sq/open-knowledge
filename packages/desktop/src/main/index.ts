@@ -1791,6 +1791,61 @@ async function openProjectOrFallbackToNavigator(
       dialogTitle = 'OpenKnowledge is already running for this project';
       dialogBody = `${projectPath}\n\n${errorMessage}`;
     }
+    // A spawn that timed out because a holder is in the way (fail-closed
+    // collision — visible in the child's stderr tail), or a direct lock
+    // collision, has a one-click remedy: stop the conflicting holder and
+    // retry. Everything else keeps the plain error box.
+    const holderInTheWay =
+      kind === 'lock-collision' ||
+      (kind === 'spawn-lock-timeout' && errorMessage.includes('already running'));
+    if (holderInTheWay) {
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        title: dialogTitle,
+        message: dialogTitle,
+        detail:
+          `${dialogBody}\n\n` +
+          `OpenKnowledge can stop the conflicting server process and retry opening the project.`,
+        buttons: ['Stop Server & Retry', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (response === 0) {
+        ensureWindowManager();
+        const stop = await wm.forceStopConflictingServer(projectPath);
+        if (stop.ok) {
+          try {
+            // Single retry — a second failure falls through to the plain
+            // error box rather than looping the dialog.
+            await openProject(
+              projectPath,
+              entryPoint,
+              pendingDeepLinkTarget,
+              pendingBranch,
+              pendingMultiCandidate,
+              pendingShareBranchSwitch,
+              pendingTargetMissing,
+            );
+            return;
+          } catch (retryErr) {
+            dialog.showErrorBox(
+              'Unable to open project',
+              `${projectPath}\n\n${(retryErr as Error).message}`,
+            );
+          }
+        } else {
+          dialog.showErrorBox(
+            'Unable to open project',
+            `${projectPath}\n\n` +
+              (stop.reason === 'eperm'
+                ? 'The conflicting server belongs to another user account and cannot be stopped from here. Quit it from that account and try again.'
+                : 'Could not stop the conflicting server. Quit it manually (`ok stop`) and try again.'),
+          );
+        }
+      }
+      openNavigator();
+      return;
+    }
     dialog.showErrorBox(dialogTitle, dialogBody);
     openNavigator();
   }

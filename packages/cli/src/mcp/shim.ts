@@ -195,6 +195,9 @@ function livePortFromLock(
   isAlive: (pid: number) => boolean,
 ): number | undefined {
   if (!lock || lock.port <= 0) return undefined;
+  // A draining holder is tearing down: its HTTP surface closes before the
+  // lock disappears, so the advertised port must never be dialed.
+  if (lock.draining === true) return undefined;
   if (!isAlive(lock.pid)) return undefined;
   return lock.port;
 }
@@ -260,13 +263,43 @@ export async function resolveMcpHttpUrl(opts: ResolveMcpHttpUrlOptions): Promise
     return mcpUrlForPort(DEFAULT_SERVER_HOST, parsed);
   }
 
-  const existingPort = livePortFromLock(readLock(), isAlive);
+  const initialLock = readLock();
+  const existingPort = livePortFromLock(initialLock, isAlive);
   if (existingPort !== undefined) return mcpUrlForPort(DEFAULT_SERVER_HOST, existingPort);
 
   if (opts.envAutoStart === '0') {
     throw new AutoStartDisabledError(
       'OpenKnowledge server is not running and OK_MCP_AUTOSTART=0 disables auto-start.',
     );
+  }
+
+  // A draining holder still owns the lock while it finishes exiting. Spawning
+  // now would just collide with it; wait for the drain first (bounded to the
+  // same timeout DURATION as the post-spawn poll below — the two phases have
+  // independent deadlines, so the worst case is ≈2× timeoutMs total). If a
+  // fresh server appears meanwhile — another spawner won the restart race —
+  // use it directly.
+  if (initialLock !== null && initialLock.draining === true && isAlive(initialLock.pid)) {
+    const drainWaitStartedAt = Date.now();
+    const drainDeadline = drainWaitStartedAt + timeoutMs;
+    let drainTimedOut = true;
+    while (Date.now() < drainDeadline) {
+      const lock = readLock();
+      if (lock === null || lock.draining !== true || !isAlive(lock.pid)) {
+        drainTimedOut = false;
+        break;
+      }
+      await sleep(pollIntervalMs);
+    }
+    // stderr, not stdout — stdout carries the MCP stdio protocol. Same tuning
+    // signal as start.ts's start-waited-for-draining-predecessor event: waits
+    // creeping toward the timeout mean teardowns are outgrowing the budget.
+    console.error(
+      `[mcp-shim] waited ${Date.now() - drainWaitStartedAt}ms for a draining predecessor server` +
+        `${drainTimedOut ? ' (timed out — proceeding anyway)' : ''}`,
+    );
+    const portAfterDrain = livePortFromLock(readLock(), isAlive);
+    if (portAfterDrain !== undefined) return mcpUrlForPort(DEFAULT_SERVER_HOST, portAfterDrain);
   }
 
   if (!existsSync(opts.lockDir)) mkdirSync(opts.lockDir, { recursive: true });

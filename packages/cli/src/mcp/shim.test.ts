@@ -84,6 +84,61 @@ describe('MCP stdio shim server resolution', () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
+  test('draining lock waits for the predecessor to exit, then spawns', async () => {
+    const drainingLock: ServerLockMetadata = { ...liveLock, draining: true };
+    let reads = 0;
+    const calls: string[] = [];
+    // Read sequence: initial check (draining) → 2 drain polls (draining) →
+    // drain poll sees release (null) → post-drain re-check (null) → spawn →
+    // spawn poll picks up the fresh child lock.
+    const url = await resolveMcpHttpUrl({
+      lockDir,
+      contentDir: tmp,
+      readLock: () => {
+        reads += 1;
+        if (reads <= 3) return drainingLock;
+        if (reads <= 5) return null;
+        return liveLock;
+      },
+      isAlive: () => true,
+      sleep: async () => {},
+      openErrorLog: () => 123,
+      closeFd: () => {},
+      spawn: ((cmd: string) => {
+        calls.push(cmd);
+        return { on: () => {}, unref: () => {} };
+      }) as never,
+      timeoutMs: 1000,
+      pollIntervalMs: 1,
+    });
+
+    expect(url).toBe('http://127.0.0.1:4123/mcp');
+    expect(calls).toHaveLength(1);
+  });
+
+  test('draining lock replaced by a fresh live server resolves WITHOUT spawning', async () => {
+    const drainingLock: ServerLockMetadata = { ...liveLock, draining: true };
+    const freshLock: ServerLockMetadata = { ...liveLock, pid: 5678, port: 4999 };
+    let reads = 0;
+    const url = await resolveMcpHttpUrl({
+      lockDir,
+      contentDir: tmp,
+      readLock: () => {
+        reads += 1;
+        return reads <= 2 ? drainingLock : freshLock;
+      },
+      isAlive: () => true,
+      sleep: async () => {},
+      spawn: (() => {
+        throw new Error('should not spawn — a fresh server appeared during the drain wait');
+      }) as never,
+      timeoutMs: 1000,
+      pollIntervalMs: 1,
+    });
+
+    expect(url).toBe('http://127.0.0.1:4999/mcp');
+  });
+
   test('live lock resolves directly to the /mcp HTTP URL', async () => {
     const url = await resolveMcpHttpUrl({
       lockDir,

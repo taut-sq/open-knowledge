@@ -219,14 +219,22 @@ export function resolveCollabPort(
  * True only on the worktree-preview path (`--ui-port` set) when a live
  * `server.lock` exists for this folder — the main-checkout case, where booting
  * would collide and exit 1. Pure so this safety decision is unit-tested.
- * (`readServerLock` already filters dead/cross-host locks, so a non-null
- * `liveServer` with `port > 0` is a genuinely-live same-host server.)
+ * (`readServerLock` already filters dead/cross-machine locks, so a non-null
+ * `liveServer` with `port > 0` is a genuinely-live same-machine server —
+ * unless it is `draining`, i.e. seconds from exit. Connecting to a draining
+ * server would bind the preview to a dying backend, so fall through to the
+ * boot path, whose drain-wait handles the handoff.)
  */
 export function shouldConnectToExistingServer(
   requestedUiPort: number | undefined,
-  liveServer: { port: number } | null,
+  liveServer: { port: number; draining?: boolean } | null,
 ): boolean {
-  return requestedUiPort !== undefined && liveServer !== null && liveServer.port > 0;
+  return (
+    requestedUiPort !== undefined &&
+    liveServer !== null &&
+    liveServer.port > 0 &&
+    liveServer.draining !== true
+  );
 }
 
 /**
@@ -453,6 +461,84 @@ export function withEphemeralTempDirReap(
   };
 }
 
+/**
+ * Wrap the idle-shutdown handler so the process EXITS once teardown
+ * completes. Without this, exit relies on the event loop draining naturally —
+ * and any handle the destroy sequence doesn't cover (a native watcher
+ * subscription that didn't fully detach, a lingering pipe) leaves an
+ * immortal zombie: a process that released its lock and closed its port
+ * hours ago but still sits in memory holding the project's in-memory state.
+ * The signal path already exits explicitly after destroy; this gives the
+ * idle path the same discipline.
+ *
+ * Before exiting, log a bounded summary of still-open handles (constructor
+ * names + counts via the undocumented-but-stable `process._getActiveHandles`)
+ * so the leak class that WOULD have zombified gets named in the wild instead
+ * of silently absorbed by the exit.
+ *
+ * Exit runs in `finally` — a throwing destroy must still terminate the
+ * process (exit code 1), otherwise the zombie returns exactly when teardown
+ * is least healthy.
+ */
+export function withIdleShutdownProcessExit(
+  handler: () => Promise<void>,
+  deps: {
+    log?: { info: (obj: object, msg: string) => void; error: (obj: object, msg: string) => void };
+    exit?: (code: number) => void;
+    /** Return `null` when the runtime does not expose active handles (Bun). */
+    getActiveHandles?: () => unknown[] | null;
+  } = {},
+): () => Promise<void> {
+  const exit = deps.exit ?? ((code: number) => process.exit(code));
+  const getActiveHandles =
+    deps.getActiveHandles ??
+    (() => {
+      // Bun does not implement `_getActiveHandles` — report "unavailable"
+      // (null) rather than an empty list, so an empty summary in the logs
+      // is distinguishable from a runtime that simply can't see handles.
+      const probe = (process as unknown as { _getActiveHandles?: () => unknown[] })
+        ._getActiveHandles;
+      return probe ? probe.call(process) : null;
+    });
+  return async () => {
+    let failed = false;
+    try {
+      await handler();
+    } catch (err) {
+      failed = true;
+      // Pass the Error object itself — pino's std serializer keeps the stack;
+      // a pre-stringified message would drop it.
+      deps.log?.error({ err }, 'idle-shutdown: destroy failed — exiting anyway');
+    } finally {
+      let handleSummary: Record<string, number> | null = null;
+      try {
+        const handles = getActiveHandles();
+        if (handles !== null) {
+          handleSummary = {};
+          for (const handle of handles) {
+            const name =
+              (handle as { constructor?: { name?: string } } | null)?.constructor?.name ??
+              'unknown';
+            handleSummary[name] = (handleSummary[name] ?? 0) + 1;
+          }
+        }
+      } catch {
+        handleSummary = null;
+      }
+      deps.log?.info(
+        {
+          event: 'idle-shutdown-exit',
+          exitCode: failed ? 1 : 0,
+          openHandles: handleSummary ?? {},
+          handlesAvailable: handleSummary !== null,
+        },
+        'idle-shutdown: teardown finished — exiting process',
+      );
+      exit(failed ? 1 : 0);
+    }
+  };
+}
+
 export function buildIdleShutdownHandler(
   input: BuildIdleShutdownHandlerInput,
 ): () => Promise<void> {
@@ -547,6 +633,13 @@ interface BootStartServerOptions {
   spawn?: typeof NativeSpawn;
   /** Override idle-shutdown threshold; default 30 min. Tests use small values. */
   idleThresholdMs?: number;
+  /**
+   * Override the process-exit call fired after an idle-shutdown teardown
+   * completes (see `withIdleShutdownProcessExit`). Default `process.exit`.
+   * Tests that drive idle-shutdown through `bootStartServer` MUST inject
+   * this — the default would take down the test runner.
+   */
+  idleExit?: (code: number) => void;
   /**
    * Max wall-clock to wait for the auto-spawned `ok ui` to bind its port
    * (populated via `updateUiLockPort`). Default 3 000 ms — ample for a
@@ -692,9 +785,15 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
 
   const { existsSync, mkdirSync } = await import('node:fs');
   const { basename, dirname } = await import('node:path');
-  const { bootServer, getLogger, isProcessAlive, readUiLock, resolveContentDir } = await import(
-    '@inkeep/open-knowledge-server'
-  );
+  const {
+    bootServer,
+    getLogger,
+    isProcessAlive,
+    readUiLock,
+    resolveContentDir,
+    resolveLockDir,
+    waitForServerLockDrain,
+  } = await import('@inkeep/open-knowledge-server');
 
   const log = opts.log ?? getLogger('start');
 
@@ -859,6 +958,35 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
   // AND an agent opts a search into semantic.
   const embeddingsKeyStore = makeLazyEmbeddingsKeyStore();
 
+  // A predecessor server mid-teardown holds its lock (marked draining) until
+  // it actually exits. Racing it would collide loudly inside createServer, so
+  // wait for the drain to finish first — restart flows (desktop respawn, MCP
+  // auto-start, manual `ok start` right after closing a window) land here
+  // within the predecessor's last seconds. On timeout we proceed anyway and
+  // let the acquire collide: a wedged teardown should fail loud, not spawn a
+  // duplicate.
+  {
+    const drainLockDir = resolveLockDir(ephemeral ? ephemeralProjectDir : cwd);
+    const drainWaitStartedAt = Date.now();
+    const drainOutcome = await waitForServerLockDrain(drainLockDir);
+    if (drainOutcome !== 'no-drain') {
+      // `waitedMs` is the tuning signal for the 10s drain timeout: released
+      // durations creeping toward it mean real teardowns are outgrowing the
+      // budget and would start colliding under normal load.
+      log.info(
+        {
+          event: 'start-waited-for-draining-predecessor',
+          outcome: drainOutcome,
+          waitedMs: Date.now() - drainWaitStartedAt,
+          drainLockDir,
+        },
+        drainOutcome === 'released'
+          ? '[start] predecessor server finished draining — proceeding'
+          : '[start] predecessor server still draining after wait — proceeding to collide',
+      );
+    }
+  }
+
   const booted: BootedServer = await bootServer({
     config,
     contentDir,
@@ -906,7 +1034,10 @@ export async function bootStartServer(opts: BootStartServerOptions): Promise<Boo
         destroy: destroyServer,
         log,
       });
-      return ephemeral ? withEphemeralTempDirReap(handler, ephemeralProjectDir) : handler;
+      const reaped = ephemeral ? withEphemeralTempDirReap(handler, ephemeralProjectDir) : handler;
+      // Outermost: the exit fires only after destroy AND the ephemeral temp
+      // dir reap have both run.
+      return withIdleShutdownProcessExit(reaped, { log, exit: opts.idleExit });
     },
     log,
     // Single-origin opt-ins for desktop-spawned servers. Forwarded only

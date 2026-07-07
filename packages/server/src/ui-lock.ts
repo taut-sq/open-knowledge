@@ -16,6 +16,7 @@
 import {
   acquireProcessLock,
   type LockKind,
+  markProcessLockDraining,
   ProcessLockCollisionError,
   type ProcessLockMetadata,
   readProcessLock,
@@ -61,6 +62,11 @@ export function readUiLock(lockDir: string): UiLockMetadata | null {
   return readProcessLock({ lockName: 'ui', lockDir });
 }
 
-export function releaseUiLock(lockDir: string): void {
-  releaseProcessLock({ lockName: 'ui', lockDir });
+export function releaseUiLock(lockDir: string, opts?: { deferUnlinkToExit?: boolean }): void {
+  releaseProcessLock({ lockName: 'ui', lockDir, ...opts });
+}
+
+/** Mark our ui.lock draining — teardown began; unlink happens at exit. */
+export function markUiLockDraining(lockDir: string): void {
+  markProcessLockDraining({ lockName: 'ui', lockDir });
 }

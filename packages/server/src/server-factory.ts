@@ -138,7 +138,7 @@ import {
   setRenameLogIndex,
   sweepLazyPopOrphans,
 } from './rename-log.ts';
-import { acquireServerLock, releaseServerLock } from './server-lock.ts';
+import { acquireServerLock, markServerLockDraining, releaseServerLock } from './server-lock.ts';
 import { createServerObserverExtension } from './server-observer-extension.ts';
 import type { PairedWriteOrigin } from './server-observers.ts';
 import {
@@ -2166,6 +2166,19 @@ export function createServer(options: ServerOptions): ServerInstance {
       const phaseErrors: Array<{ phase: string; error: string }> = [];
       shutdownAllowsUnload = true;
 
+      // Advertise teardown FIRST — before any flush work. Readers (MCP
+      // discovery, desktop attach, spawners) see `draining: true` and stop
+      // dialing our port or treating lock-presence as "serving"; supervisors
+      // wait for pid death instead of lock disappearance. The lock file
+      // itself survives until the process actually exits (phase 6 defers the
+      // unlink to the process-exit handler), so no second server can slip in
+      // between "lock released" and "process gone".
+      try {
+        markServerLockDraining(lockDir);
+      } catch (err) {
+        log.warn({ err }, '[server] failed to mark server.lock draining');
+      }
+
       // Cancel any pending debounced backlink cache write so the timer doesn't
       // fire after resources are torn down.
       if (backlinkSaveTimer !== null) {
@@ -2378,11 +2391,15 @@ export function createServer(options: ServerOptions): ServerInstance {
         }
       } finally {
         // Phase 6: release server lock LAST — after shadow repo release,
-        // agent session drain, L1/L2 flush. If an earlier phase threw, we still
-        // release so a subsequent start can succeed. Invariant: no other process
-        // may acquire this lock until every prior phase has run.
+        // agent session drain, L1/L2 flush. If an earlier phase threw, we
+        // still release so a subsequent start can succeed. Deferred to exit:
+        // the refcount drops now, but the file stays on disk (marked
+        // draining) until the process actually dies — the exit handler in
+        // process-lock.ts owns the unlink. Invariant: no other process may
+        // acquire this lock until this process has exited, so a successor
+        // can never overlap a still-alive predecessor.
         try {
-          releaseServerLock(lockDir);
+          releaseServerLock(lockDir, { deferUnlinkToExit: true });
         } catch (err) {
           phaseErrors.push({
             phase: 'server-lock-release',
