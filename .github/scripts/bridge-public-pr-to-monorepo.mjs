@@ -310,6 +310,22 @@ function internalPullRequestTitle(publicPr) {
   return `Sync public PR #${publicPr.number}: ${publicPr.title}`;
 }
 
+function singleLineCommitSubject(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function bridgeCommitSubject({ publicRepo, publicPr, hasConflicts }) {
+  const title = singleLineCommitSubject(publicPr.title);
+  const suffix = hasConflicts ? ` (${CONFLICT_COMMIT_MARKER})` : '';
+  return [
+    `chore(sync): mirror ${publicRepo}#${publicPr.number}`,
+    title ? `: ${title}` : '',
+    suffix,
+  ].join('');
+}
+
 function buildBridgeMetadata(publicPr, mirrorPath) {
   return [
     '<!-- public-pr-sync',
@@ -362,27 +378,73 @@ function uniqueCommitAuthors(authors, fallbackAuthor) {
   return unique.size > 0 ? [...unique.values()] : [fallbackAuthor];
 }
 
-async function listPublicPrCommitAuthors({ token, repo, prNumber, request = githubRequest }) {
-  const commitAuthors = [];
+function normalizePublicPrCommit(commit) {
+  return {
+    sha: typeof commit?.sha === 'string' ? commit.sha : null,
+    author: normalizeGitHubUserAuthor(commit?.author) ?? commit?.commit?.author,
+    message: typeof commit?.commit?.message === 'string' ? commit.commit.message : '',
+  };
+}
+
+async function listPublicPrCommits({ token, repo, prNumber, request = githubRequest }) {
+  const publicCommits = [];
   let page = 1;
   while (true) {
     const commits = await request({
       token,
       path: `/repos/${repo}/pulls/${prNumber}/commits?per_page=100&page=${page}`,
     });
-    commitAuthors.push(
-      ...commits.map((commit) => normalizeGitHubUserAuthor(commit.author) ?? commit.commit?.author),
-    );
+    publicCommits.push(...commits.map((commit) => normalizePublicPrCommit(commit)));
     if (commits.length < 100) break;
     page++;
   }
-  return commitAuthors;
+  return publicCommits;
 }
 
-function buildCommitAttribution({ commitAuthors, fallbackAuthor }) {
+async function listPublicPrCommitAuthors({ token, repo, prNumber, request = githubRequest }) {
+  const commits = await listPublicPrCommits({ token, repo, prNumber, request });
+  return commits.map((commit) => commit.author);
+}
+
+function normalizeCommitMessage(message) {
+  if (typeof message !== 'string') return '';
+  return message.replace(/\r\n?/g, '\n').replace(/\0/g, '').trim();
+}
+
+function formatOriginalCommitMessages(commitMessages) {
+  const entries = commitMessages
+    .map((commit) => {
+      const message = normalizeCommitMessage(commit?.message);
+      if (!message) return null;
+      const shortSha =
+        typeof commit?.sha === 'string' && /^[0-9a-f]{7,40}$/i.test(commit.sha)
+          ? commit.sha.slice(0, 7)
+          : null;
+      return { shortSha, message };
+    })
+    .filter(Boolean);
+
+  if (entries.length === 0) return '';
+
+  const formatted = entries.map((entry, index) => {
+    const [subject, ...bodyLines] = entry.message.split('\n');
+    const prefix = entry.shortSha
+      ? `${index + 1}. ${entry.shortSha} ${subject}`
+      : `${index + 1}. ${subject}`;
+    const body =
+      bodyLines.length > 0 ? `\n\n${bodyLines.map((line) => `   ${line}`).join('\n')}` : '';
+    return `${prefix}${body}`;
+  });
+
+  return ['Original public commit messages:', '', ...formatted].join('\n');
+}
+
+function buildCommitAttribution({ commitAuthors, commitMessages = [], fallbackAuthor }) {
   const authors = uniqueCommitAuthors(commitAuthors, fallbackAuthor);
   const trailers = authors.map((author) => `Co-authored-by: ${author.name} <${author.email}>`);
-  return { trailers };
+  const originalCommitMessages = formatOriginalCommitMessages(commitMessages);
+  const body = [originalCommitMessages, trailers.join('\n')].filter(Boolean).join('\n\n');
+  return { trailers, originalCommitMessages, body };
 }
 
 // GitHub PR body hard limit. Exceeding returns 422 "body is too long".
@@ -576,7 +638,15 @@ async function checkOrgMembership({ token, org, login, request = githubRequest }
 
 // Post a commit status — used for the bridge's own `cla/verified` context on the
 // internal PR head, the signal the agents-private branch ruleset requires.
-async function postCommitStatus({ token, repo, sha, state, context, description, request = githubRequest }) {
+async function postCommitStatus({
+  token,
+  repo,
+  sha,
+  state,
+  context,
+  description,
+  request = githubRequest,
+}) {
   await request({
     token,
     method: 'POST',
@@ -886,33 +956,33 @@ async function syncPublicPr() {
             'public-pr-bridge@inkeep.com',
           ]);
 
-          let commitAuthors = [];
+          let publicCommits = [];
           try {
-            commitAuthors = await listPublicPrCommitAuthors({
+            publicCommits = await listPublicPrCommits({
               token: publicToken,
               repo: publicRepo,
               prNumber: publicPr.number,
             });
           } catch (error) {
             console.warn(
-              `Bridge: could not fetch public PR commit authors; falling back to PR opener attribution: ${error.message}`,
+              `Bridge: could not fetch public PR commits; falling back to PR opener attribution: ${error.message}`,
             );
           }
-          const { trailers } = buildCommitAttribution({
-            commitAuthors,
+          const { body: commitBody } = buildCommitAttribution({
+            commitAuthors: publicCommits.map((commit) => commit.author),
+            commitMessages: publicCommits,
             fallbackAuthor: fallbackPublicAuthor(publicPr),
           });
-          const commitMessage = hasConflicts
-            ? `chore(sync): mirror ${publicRepo}#${publicPr.number} (${CONFLICT_COMMIT_MARKER})`
-            : `chore(sync): mirror ${publicRepo}#${publicPr.number}`;
+          const commitMessage = bridgeCommitSubject({ publicRepo, publicPr, hasConflicts });
           run('git', [
             '-C',
             internalRepoDir,
             'commit',
+            '--cleanup=verbatim',
             '-m',
             commitMessage,
             '-m',
-            trailers.join('\n'),
+            commitBody,
           ]);
 
           run('git', [
@@ -1136,6 +1206,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 export {
   applyPatchWithConflictDetection,
+  bridgeCommitSubject,
   buildCommitAttribution,
   buildInternalPrBody,
   buildPublicComment,
@@ -1143,6 +1214,7 @@ export {
   commitIndicatesConflicts,
   createClaGateGh,
   listPublicPrCommitAuthors,
+  listPublicPrCommits,
   normalizeGitHubUserAuthor,
   postCommitStatus,
   prefixPatchPaths,
