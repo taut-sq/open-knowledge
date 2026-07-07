@@ -39,6 +39,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { fnv1aDigest } from './bridge/hash-util.ts';
 
 /**
  * Writer-ID taxonomy (precedent #25). Classified system writers are non-attributable
@@ -49,18 +50,37 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
  * Full writer-ID table:
  *   agent-<connectionId>       → 'agent'                           (MCP session)
  *   principal-<UUID>           → 'principal'                        (browser tab)
+ *   git-author-<hash>          → 'classified-git-author'            (upstream commit author)
  *   file-system                → 'classified-file-system'           (disk reconcile)
- *   git-upstream               → 'classified-git-upstream'          (HEAD-move import)
+ *   git-upstream               → 'classified-git-upstream'          (HEAD-move import boundary)
  *   openknowledge-service      → 'classified-openknowledge-service' (park / service)
  *   server, human-*, upstream  → 'unknown'                          (legacy, swept on GC)
+ *
+ * `git-author-<hash>` gives each distinct upstream commit author their own WIP
+ * ref so the per-doc Timeline query (which diffs each ref's chain) attributes a
+ * pulled change to the right author. The `<hash>` is `fnv1aDigest(email)` — one
+ * ref per author, not per pull. Display name / real email travel on the commit's
+ * `ok-actor` line, not in the id.
  */
 export type WriterClassification =
   | 'agent'
   | 'principal'
+  | 'classified-git-author'
   | 'classified-file-system'
   | 'classified-git-upstream'
   | 'classified-openknowledge-service'
   | 'unknown';
+
+/** Prefix for per-author upstream-import writer ids: `git-author-<fnv1a(email)>`. */
+export const GIT_AUTHOR_WRITER_PREFIX = 'git-author-';
+
+/**
+ * Stable writer id for an upstream commit author, keyed by email so the same
+ * person reuses one ref across pulls. Non-cryptographic digest — identity only.
+ */
+export function gitAuthorWriterId(email: string): string {
+  return `${GIT_AUTHOR_WRITER_PREFIX}${fnv1aDigest(email.trim().toLowerCase())}`;
+}
 
 export interface ParsedWriter {
   /** The full writer id as stored in the ref (e.g., "agent-<uuid>"). */
@@ -83,13 +103,13 @@ export interface ParsedWriter {
  * Single source of truth for the layout; any ref-parsing code in the repo
  * should flow through `parseWriterId`.
  *
- * Recognized ids — `agent-<uuid>`, `principal-<uuid>`,
+ * Recognized ids — `agent-<uuid>`, `principal-<uuid>`, `git-author-<hash>`,
  * `file-system`, `git-upstream`, `openknowledge-service`.
  * Legacy ids (`human-*`, `upstream`, `server`) do NOT match → 'unknown',
  * so they are eligible for GC by the allowlist sweep.
  */
 const WRITER_ID_RE =
-  /^(agent-[^/]+|principal-[^/]+|file-system|git-upstream|openknowledge-service)$/;
+  /^(agent-[^/]+|principal-[^/]+|git-author-[^/]+|file-system|git-upstream|openknowledge-service)$/;
 
 /**
  * Classification of `<projectRoot>/.git`. Centralizes the single
@@ -1092,6 +1112,8 @@ export function parseWriterId(id: string): ParsedWriter {
   }
   if (id.startsWith('agent-')) return { id, classification: 'agent', isAgent: true };
   if (id.startsWith('principal-')) return { id, classification: 'principal', isAgent: false };
+  if (id.startsWith(GIT_AUTHOR_WRITER_PREFIX))
+    return { id, classification: 'classified-git-author', isAgent: null };
   if (id === 'file-system') return { id, classification: 'classified-file-system', isAgent: null };
   if (id === 'git-upstream')
     return { id, classification: 'classified-git-upstream', isAgent: null };

@@ -137,11 +137,24 @@ export function applyExternalChange(
   const document = hocuspocus.documents.get(docName);
   if (!document) return;
 
+  // Byte-identical reconcile guard. When Y.Text already holds exactly the disk
+  // bytes there is nothing to ATTRIBUTE, so a trailing/duplicate file-watcher
+  // event (e.g. one arriving after an upstream import already applied the
+  // content) must not manufacture a spurious "File System" Timeline row — the
+  // `recordContributor` call below is gated on this flag.
+  //
+  // The apply itself must still run, though: embed resolution depends on branch
+  // context (basenameIndex), so a cross-branch reset re-applies byte-identical
+  // markdown whose `resolveEmbed` output changed (`![[photo.png]]` resolves to a
+  // new asset path on the switched-to branch).
+  const currentSource = document.getText('source').toString();
+  const bytesUnchanged = currentSource === content;
+
   // Capture prior FM region from Y.Text so the edit_surface counter only
   // fires when disk content actually changed FM (body-only edits shouldn't
   // count). The YAML region of `Y.Text('source')` IS the FM source of
   // truth — read it before applyDiskContentToDoc applies the disk content.
-  const priorFm = stripFrontmatter(document.getText('source').toString()).frontmatter;
+  const priorFm = stripFrontmatter(currentSource).frontmatter;
   const { frontmatter: nextFm } = stripFrontmatter(content);
 
   // Caller wraps for atomicity + paired-write FILE_WATCHER_ORIGIN identity
@@ -178,14 +191,23 @@ export function applyExternalChange(
   // Attribute this disk-originated write to the file-system classified writer.
   // FILE_WATCHER_ORIGIN has skipStoreHooks:true so persistence.ts:onStoreDocument
   // will not auto-record this origin. The explicit call here ensures the next L2
-  // drain produces a commit on refs/wip/<branch>/file-system.
-  recordContributor(
-    docName,
-    FILE_SYSTEM_WRITER.id,
-    FILE_SYSTEM_WRITER.name,
-    FILE_SYSTEM_WRITER.id,
-    formatReconcileSubject(docName),
-  );
+  // drain produces a commit on refs/wip/<branch>/file-system. When a HEAD move
+  // brought the change in, the server-factory HEAD-move drain re-attributes
+  // these docs to the upstream commit author (see resolveUpstreamChanges).
+  //
+  // Skip when the source bytes were unchanged: a byte-identical reconcile has
+  // nothing to attribute (the apply above still re-resolved embeds), and
+  // recording here would manufacture a spurious "File System" row for a
+  // trailing/duplicate event or a cross-branch reset.
+  if (!bytesUnchanged) {
+    recordContributor(
+      docName,
+      FILE_SYSTEM_WRITER.id,
+      FILE_SYSTEM_WRITER.name,
+      FILE_SYSTEM_WRITER.id,
+      formatReconcileSubject(docName),
+    );
+  }
 
   // Set the reconciled base so persistence does not re-serialize and re-write
   // the same content on next flush.

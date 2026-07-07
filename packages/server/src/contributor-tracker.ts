@@ -139,6 +139,22 @@ export function recordContributor(
 }
 
 /**
+ * Remove a set of docs from every pending writer entry, dropping any entry left
+ * with no docs. Used by the upstream-import path to strip a doc's provisional
+ * `file-system` attribution before re-recording it under the real commit author
+ * — without this, a doc reconciled by a sibling watcher batch would produce both
+ * a "File System" and an authored row for the same import.
+ */
+export function dropPendingDocs(docNames: Iterable<string>): void {
+  const names = docNames instanceof Set ? docNames : new Set(docNames);
+  if (names.size === 0) return;
+  for (const [writerId, entry] of pendingContributors) {
+    for (const name of names) entry.docs.delete(name);
+    if (entry.docs.size === 0) pendingContributors.delete(writerId);
+  }
+}
+
+/**
  * Atomically swap the live accumulator with a fresh empty map.
  * Returns the snapshot of in-flight contributors at the moment of the swap.
  * Callers (persistence.ts) hold the snapshot for commit; on failure they call

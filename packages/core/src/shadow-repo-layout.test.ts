@@ -18,6 +18,7 @@ import {
   GitDirAccessError,
   getShadowRepoPath,
   getWipRefPattern,
+  gitAuthorWriterId,
   MalformedGitPointerError,
   type OkActorEntry,
   parseCheckpoint,
@@ -205,6 +206,22 @@ describe('parseWriterId (D34 taxonomy)', () => {
     const p = parseWriterId('openknowledge-service');
     expect(p.classification).toBe('classified-openknowledge-service');
     expect(p.isAgent).toBe(null);
+  });
+
+  test('"git-author-<hash>" → classified-git-author, isAgent null', () => {
+    const p = parseWriterId('git-author-1a2b3c4d');
+    expect(p.classification).toBe('classified-git-author');
+    expect(p.isAgent).toBe(null);
+  });
+
+  test('gitAuthorWriterId is stable per email and case/space-insensitive', () => {
+    const a = gitAuthorWriterId('Ana@Example.com');
+    const b = gitAuthorWriterId('  ana@example.com  ');
+    expect(a).toBe(b);
+    expect(a.startsWith('git-author-')).toBe(true);
+    expect(parseWriterId(a).classification).toBe('classified-git-author');
+    // Distinct authors get distinct refs.
+    expect(gitAuthorWriterId('ben@example.com')).not.toBe(a);
   });
 
   // Legacy ids → unknown (eligible for GC by the allowlist sweep)

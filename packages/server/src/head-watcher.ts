@@ -282,7 +282,14 @@ export async function startHeadWatcher(
   async function handleGitEvent(trigger: string): Promise<void> {
     if (!inBatch) {
       inBatch = true;
-      oldHead = readHeadSha(gitDir);
+      // Do NOT re-read HEAD here. `oldHead` already holds the last-settled HEAD
+      // (seeded at watcher start, rolled over to `newHead` at each batch end).
+      // A fast `git merge`/`git pull` can advance the branch ref BEFORE the
+      // watcher delivers its first `.git` event, so re-reading now would capture
+      // the post-move SHA and report `headMoved: false` for a genuine move —
+      // silently defeating upstream-import detection + author attribution. Only
+      // seed when we have no baseline yet (first event in an empty repo).
+      if (oldHead === null) oldHead = readHeadSha(gitDir);
       const beginPromise = (async () => {
         try {
           await onBatchBegin({ trigger });

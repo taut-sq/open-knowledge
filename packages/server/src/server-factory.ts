@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { type SpawnSyncReturns, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -25,7 +25,12 @@ import {
   resolveConfigPath,
   writeConfigPatch,
 } from '@inkeep/open-knowledge-core/server';
-import { resolveGitDir, resolveShadowDir } from '@inkeep/open-knowledge-core/shadow-repo-layout';
+import {
+  formatReconcileSubject,
+  gitAuthorWriterId,
+  resolveGitDir,
+  resolveShadowDir,
+} from '@inkeep/open-knowledge-core/shadow-repo-layout';
 import simpleGit from 'simple-git';
 import { AgentFocusBroadcaster } from './agent-focus.ts';
 import { AgentPresenceBroadcaster } from './agent-presence.ts';
@@ -55,6 +60,7 @@ import { isDocInConflict } from './conflict-errors.ts';
 import { createConflictLifecycleSeedExtension } from './conflict-lifecycle-seed.ts';
 import { resolveProjectTemplates } from './content/templates-resolver.ts';
 import { type ContentFilter, createContentFilter } from './content-filter.ts';
+import { dropPendingDocs, recordContributor } from './contributor-tracker.ts';
 import { getDocExtension, stripDocExtension } from './doc-extensions.ts';
 import { runDocLineageGuard } from './doc-lineage-guard.ts';
 import {
@@ -78,6 +84,7 @@ import {
   assertNeverDiskEvent,
   contentHash,
   type DiskEvent,
+  pathToDocName,
   reconcileFileIndexAfterFilterRebuild,
   startWatcher,
   type WatcherHandle,
@@ -122,6 +129,7 @@ import {
   getActiveBranch,
   getReconciledBase,
   isBatchInProgress,
+  isWithinContentDir,
   type PersistenceOptions,
   safeContentPath,
   setBatchInProgress,
@@ -387,6 +395,110 @@ export function buildSyncCredentialArgs(localOpCliArgs?: string[]): string[] {
   const argv = localOpCliArgs && localOpCliArgs.length > 0 ? localOpCliArgs : ['open-knowledge'];
   const cliPrefix = argv.map(shellEscape).join(' ');
   return ['-c', `credential.helper=!${cliPrefix} auth git-credential`];
+}
+
+export interface UpstreamAuthor {
+  name: string;
+  email: string;
+}
+
+/**
+ * Recover, per changed markdown doc, the author to attribute a HEAD-move import
+ * to. Runs `git log <oldHead>..<newHead>` in the project repo and maps each
+ * changed `.md`/`.mdx` doc to the author of the newest in-range commit that
+ * touched it — the author whose bytes are now on disk. `git log` lists commits
+ * newest-first, so the first occurrence of a doc in the output is its newest
+ * commit; the first-occurrence-wins guard below therefore selects that author.
+ *
+ * Deterministic and complete: git authoritatively lists what the import
+ * changed, so attribution does not depend on which watcher batch happened to
+ * observe the file event. Merge commits are skipped (`--no-merges`) because
+ * their author is whoever ran the pull, not the content author. Returns an
+ * empty map on any ambiguity (missing `oldHead`, git failure) so the caller
+ * falls back to the `file-system` writer.
+ */
+export function resolveUpstreamChanges(
+  projectDir: string,
+  contentDir: string,
+  oldHead: string | null,
+  newHead: string,
+): Map<string, UpstreamAuthor> {
+  const changes = new Map<string, UpstreamAuthor>();
+  if (!oldHead) return changes;
+  // `C\0name\0email` header per commit, then one changed path per line. NUL
+  // delimiters keep names/emails with spaces unambiguous.
+  let result: SpawnSyncReturns<string>;
+  try {
+    result = spawnSync(
+      'git',
+      [
+        // `core.quotePath=false` emits non-ASCII pathnames as raw UTF-8 instead
+        // of git's default octal-escaped `"caf\303\251.md"` quoting — otherwise
+        // Unicode-named docs never match a real docName and silently fall back
+        // to file-system attribution.
+        '-c',
+        'core.quotePath=false',
+        'log',
+        `${oldHead}..${newHead}`,
+        '--no-merges',
+        '--name-only',
+        '--format=C%x00%an%x00%ae',
+      ],
+      { cwd: projectDir, encoding: 'utf-8', timeout: 5000 },
+    );
+  } catch (err) {
+    // spawnSync normally surfaces ENOENT/timeout via result.error rather than
+    // throwing, but guard the throw path too. On failure the caller sees an
+    // empty map and leaves the imported docs under `file-system` — log so that
+    // silent attribution degradation is diagnosable.
+    getLogger('upstream-attribution').warn(
+      { err, oldHead, newHead },
+      'git log spawn threw; upstream docs keep file-system attribution',
+    );
+    return changes;
+  }
+  // Distinguish a real failure (git missing, non-zero exit, or the 5s timeout —
+  // status is non-zero/null or result.error is set) from the legitimate empty
+  // result (git succeeded, no markdown changed). Only the former is logged.
+  if (result.error || result.status !== 0 || typeof result.stdout !== 'string') {
+    getLogger('upstream-attribution').warn(
+      {
+        err: result.error,
+        status: result.status,
+        signal: result.signal,
+        // git's actionable message (`fatal: bad object …`) is on stderr; bound
+        // it so the warning is self-diagnosable without reproducing the command.
+        stderr: typeof result.stderr === 'string' ? result.stderr.slice(0, 500) : undefined,
+        oldHead,
+        newHead,
+      },
+      'git log failed; upstream docs keep file-system attribution',
+    );
+    return changes;
+  }
+
+  let current: UpstreamAuthor | null = null;
+  for (const rawLine of result.stdout.split('\n')) {
+    const line = rawLine.trim();
+    if (line === '') continue;
+    if (line.startsWith('C\0')) {
+      const [, name, email] = line.split('\0');
+      current = name && email ? { name, email } : null;
+      continue;
+    }
+    if (!current) continue;
+    if (!line.endsWith('.md') && !line.endsWith('.mdx')) continue;
+    const abs = resolve(projectDir, line);
+    if (!isWithinContentDir(abs, contentDir)) continue;
+    const docName = pathToDocName(abs, contentDir);
+    // First occurrence wins. `git log` is newest-first, so the doc's first
+    // appearance is its newest in-range commit — keep it, discard older commits'
+    // claims. Reversing this regresses to oldest-author attribution.
+    if (changes.has(docName)) continue;
+    if (!existsSync(abs)) continue;
+    changes.set(docName, current);
+  }
+  return changes;
 }
 
 export function createServer(options: ServerOptions): ServerInstance {
@@ -3231,8 +3343,48 @@ export function createServer(options: ServerOptions): ServerInstance {
 
           if (info.batchKind === 'within-branch') {
             setBatchInProgress(false);
-            // Pull, merge, rebase on same branch — reconcile buffered events
+            // Pull, merge, rebase on same branch — reconcile buffered events.
+            // The buffered reconciles tag their docs as `file-system`.
             await drainEventBuffer();
+
+            // When HEAD actually moved, these bytes came from upstream commits.
+            // Ask git which docs the import changed and who authored them
+            // (deterministic — independent of which watcher batch observed each
+            // file event), strip the provisional `file-system` attribution, and
+            // re-record each under the real commit author. Then flush now: the
+            // reconcile records under FILE_WATCHER_ORIGIN (skipStoreHooks) so no
+            // L2 debounce is scheduled, and the commits must land before the
+            // commitUpstreamImport boundary below.
+            if (info.headMoved && info.newHead) {
+              const changes = resolveUpstreamChanges(
+                projectDir,
+                resolve(contentDir),
+                info.oldHead,
+                info.newHead,
+              );
+              if (changes.size > 0) {
+                dropPendingDocs(changes.keys());
+                // Record each changed doc under a per-author writer id
+                // (`git-author-<hash(email)>`), NOT the shared git-upstream id.
+                // The Timeline queries each writer ref's chain independently and
+                // diffs it; multiple authors on one ref produce identical trees,
+                // so the per-path diff collapses them onto the oldest commit and
+                // mis-attributes docs. A distinct ref per author makes each
+                // commit diff against its own base, so every doc surfaces under
+                // its real author. The per-writer persistence fan-out turns this
+                // single flush into one commit per author ref.
+                for (const [docName, author] of changes) {
+                  recordContributor(
+                    docName,
+                    gitAuthorWriterId(author.email),
+                    author.name,
+                    author.email,
+                    formatReconcileSubject(docName),
+                  );
+                }
+                await persistence.flushContributors();
+              }
+            }
             await persistence.flushDeferredStores('within-branch');
             // External git ops (`git merge --abort`, `git checkout --ours
             // && git add && git commit` mid-conflict, etc.) leave the

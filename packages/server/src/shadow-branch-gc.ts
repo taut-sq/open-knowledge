@@ -310,6 +310,7 @@ export async function gcShadowBranches(
       if (
         c.classification === 'classified-file-system' ||
         c.classification === 'classified-git-upstream' ||
+        c.classification === 'classified-git-author' ||
         c.classification === 'classified-openknowledge-service'
       ) {
         continue;
