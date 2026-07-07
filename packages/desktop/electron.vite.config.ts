@@ -47,6 +47,15 @@ export default defineConfig({
       externalizeDeps: true,
       sourcemap: 'hidden',
       rollupOptions: {
+        // node-pty lives in optionalDependencies (a failed native build must
+        // not fail `bun install` on toolchain-less machines), but electron-vite's
+        // `externalizeDeps: true` externalizes `dependencies` ONLY. Without this
+        // explicit external, rolldown bundles node-pty's JS into out/main/chunks/
+        // and its __dirname-relative native loader can no longer reach
+        // app.asar.unpacked/node_modules/node-pty/ — every packaged terminal
+        // spawn then fails ("The terminal stopped unexpectedly.", the v0.25.0
+        // stable regression). Pinned by electron-builder-node-pty-deps.test.ts.
+        external: ['node-pty'],
         // Two entries in the main bundle: the main-process entry itself AND
         // the utility-process entry that main.forks. electron-vite's config
         // only has `main`/`preload`/`renderer` sections — there is no native

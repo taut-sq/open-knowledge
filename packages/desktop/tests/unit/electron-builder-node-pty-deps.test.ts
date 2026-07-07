@@ -118,3 +118,32 @@ describe('node-pty desktop packaging config', () => {
     }
   });
 });
+
+describe('node-pty electron-vite externalization', () => {
+  /**
+   * electron-vite's `externalizeDeps: true` externalizes ONLY `dependencies` —
+   * optionalDependencies are never consulted. With node-pty pinned in
+   * optionalDependencies (load-bearing, see above), it MUST be named as an
+   * explicit rollup external in the main build, or rolldown bundles node-pty's
+   * JS into out/main/chunks/ and its __dirname-relative native loader can no
+   * longer reach app.asar.unpacked/node_modules/node-pty/ — every terminal
+   * create then fails with spawn-error ("The terminal stopped unexpectedly.",
+   * v0.25.0 stable regression).
+   */
+  test('node-pty is externalized in the main build despite optionalDependencies placement', async () => {
+    const config = (await import('../../electron.vite.config.ts')).default as {
+      main?: { build?: { rollupOptions?: { external?: unknown } } };
+    };
+    const external = config.main?.build?.rollupOptions?.external;
+    const externals = Array.isArray(external) ? external : [external];
+    const pkg = readPkg();
+    const autoExternalized = 'node-pty' in (pkg.dependencies ?? {});
+    expect(
+      autoExternalized || externals.includes('node-pty'),
+      'node-pty must be externalized in the electron-vite main build. It lives in optionalDependencies, ' +
+        "which externalizeDeps: true does NOT cover (it reads pkg.dependencies only) — add 'node-pty' to " +
+        'main.build.rollupOptions.external in electron.vite.config.ts, or the bundled loader breaks every ' +
+        'packaged terminal spawn.',
+    ).toBe(true);
+  });
+});
