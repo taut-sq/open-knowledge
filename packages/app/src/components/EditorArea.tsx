@@ -760,7 +760,22 @@ function EditorAreaInner({
     });
     viewContent = (
       <div className="relative flex h-full min-h-0 flex-col">
-        <FolderOverview folderPath={activeTarget.folderPath} />
+        {/* Wrap the folder list so the fade band can anchor to the bottom of the
+            list region (the top of the in-flow composer) rather than the bottom
+            of the whole column. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <FolderOverview folderPath={activeTarget.folderPath} />
+          {/* Same footer fade as EditorFooter's sliver (identical gradient
+              band): the list dissolves into the background above the composer
+              instead of meeting a hard edge. Only while the Ask AI composer is
+              shown. */}
+          {showFolderComposer ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-2 bg-linear-to-t from-background to-transparent"
+            />
+          ) : null}
+        </div>
         {showFolderComposer ? <BottomComposer folderPath={activeTarget.folderPath} /> : null}
       </div>
     );
