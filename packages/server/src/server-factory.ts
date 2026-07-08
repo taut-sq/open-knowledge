@@ -61,7 +61,7 @@ import { createConflictLifecycleSeedExtension } from './conflict-lifecycle-seed.
 import { resolveProjectTemplates } from './content/templates-resolver.ts';
 import { type ContentFilter, createContentFilter } from './content-filter.ts';
 import { dropPendingDocs, recordContributor } from './contributor-tracker.ts';
-import { docNameToRelativePath, stripDocExtension } from './doc-extensions.ts';
+import { docNameToRelativePath, getDocExtension, stripDocExtension } from './doc-extensions.ts';
 import { runDocLineageGuard } from './doc-lineage-guard.ts';
 import {
   DEFAULT_EMBEDDINGS_DIMENSIONS,
@@ -140,6 +140,7 @@ import { loadPrincipal } from './principal.ts';
 import { RecentlyRemovedDocs } from './recently-removed-docs.ts';
 import { reconcile } from './reconciliation.ts';
 import { runRemovalRedirectGuard } from './removal-redirect-guard.ts';
+import { loadRemovedDocsJournal, saveRemovedDocsJournal } from './removed-docs-journal.ts';
 import {
   gcRenameLog,
   loadRenameLogIndex,
@@ -865,19 +866,70 @@ export function createServer(options: ServerOptions): ServerInstance {
     }, BACKLINK_SAVE_DEBOUNCE_MS);
   }
 
-  // Per-process LRU cache of docNames renamed away or deleted since boot.
-  // Read by `removalRedirectGuard` (registered below) to reject WebSocket
+  // LRU cache of docNames renamed away or deleted, durable across restarts
+  // via the removal journal at `.ok/local/removed-docs.json`. Read by
+  // `removalRedirectGuard` (registered below) to reject WebSocket
   // connections to stale docNames before any Y.Doc work runs (the single
   // enforcement point that prevents IDB-resync from recreating the file at
-  // the OLD path). Populated by the rename spine + delete handler in
-  // `api-extension.ts` and by the watcher reconcile callbacks below;
-  // invalidated by `/api/create-page` and the watcher 'add' event.
-  // Declared at createServer scope so `handleDiskEvent` and the api
-  // extension factory both close over the same instance.
+  // the OLD path — including after a server restart, when the reconnecting
+  // client's cached Yjs state would otherwise be admitted as a legitimate
+  // first write). Populated by the rename spine + delete handler in
+  // `api-extension.ts`, the watcher reconcile callbacks below, and the
+  // boot-time deleted-while-down inference in `initAsync`; invalidated by
+  // `/api/create-page` and the watcher 'add' event. Declared at
+  // createServer scope so `handleDiskEvent` and the api extension factory
+  // both close over the same instance.
+  const REMOVED_DOCS_JOURNAL_SAVE_DEBOUNCE_MS = 2000;
+  let removedDocsJournalTimer: ReturnType<typeof setTimeout> | null = null;
+  // Suppresses journal echo-writes while the boot reload below re-populates
+  // the cache from the journal itself. The reload → `writable = true` flip
+  // must stay synchronous: an `await` in that gap would let a cache mutation
+  // fire `onMutate` while writes are still suppressed and be dropped from the
+  // next debounced save.
+  let removedDocsJournalWritable = false;
+  const writeRemovedDocsJournalNow = (): void => {
+    try {
+      saveRemovedDocsJournal(projectDir, recentlyRemovedDocs.entries());
+    } catch (err) {
+      log.warn({ err }, '[removed-docs-journal] failed to persist removal journal');
+    }
+  };
+  const scheduleRemovedDocsJournalSave = (): void => {
+    if (!removedDocsJournalWritable || removedDocsJournalTimer !== null) return;
+    removedDocsJournalTimer = setTimeout(() => {
+      removedDocsJournalTimer = null;
+      writeRemovedDocsJournalNow();
+    }, REMOVED_DOCS_JOURNAL_SAVE_DEBOUNCE_MS);
+  };
   const recentlyRemovedDocs = new RecentlyRemovedDocs(undefined, {
     onEviction: () => incrementRecentlyRemovedDocsEviction(),
     onSizeChange: (size) => setRecentlyRemovedDocsSize(size),
+    onMutate: scheduleRemovedDocsJournalSave,
   });
+  // Gate note: runtime populate sites filter `isSystemDoc || isConfigDoc`
+  // (managed-artifact docs can legitimately be renamed/deleted at runtime),
+  // while reload and boot-tombstoning use the broader `isReservedForUserTree`
+  // — managed artifacts are excluded here because their reconcile ownership
+  // (skill/template heal) re-creates files at boot, which would immediately
+  // fight a restored tombstone.
+  for (const [journaledDocName, entry] of loadRemovedDocsJournal(projectDir)) {
+    if (isReservedForUserTree(journaledDocName)) continue;
+    // Journal contents are disk input — refuse unsafe names outright.
+    if (!isSafeDocName(journaledDocName)) continue;
+    // Disk is truth at boot: a file re-created at the removed docName while
+    // the server was down makes the entry stale — restoring it would reject
+    // or misdirect connections to a doc that exists. The extension registry
+    // isn't seeded yet, so probe the supported source extensions literally;
+    // the post-seed-walk sweep in `initAsync` re-checks with real on-disk
+    // extensions as the authoritative pass.
+    const recreated = ['.md', '.mdx'].some((ext) => {
+      const candidate = resolve(contentDir, `${journaledDocName}${ext}`);
+      return isWithinDir(candidate, resolve(contentDir)) && existsSync(candidate);
+    });
+    if (recreated) continue;
+    recentlyRemovedDocs.restore(journaledDocName, entry);
+  }
+  removedDocsJournalWritable = true;
   // Lambda-callback shape mirrors `onDiskFlush` (`persistenceOpts`) — keeps
   // the watcher reconcile cases free of direct cache references and avoids
   // extending `signalChannel`'s union for a per-event side effect.
@@ -1082,6 +1134,10 @@ export function createServer(options: ServerOptions): ServerInstance {
       // Closure-deferred: `syncEngine`/`semanticSearch` resolve at call time,
       // always after their assignment.
       onConfigPersisted: applyPersistedConfigToConsumers,
+      // Diagnostic-only probe: surfaces any store that writes a doc the
+      // removal cache still records as removed (a resurrection would
+      // otherwise register as a benign self-write and be invisible).
+      isRecentlyRemoved: (docName) => recentlyRemovedDocs.has(docName),
       mdManager: options.mdManager,
     };
 
@@ -1128,13 +1184,17 @@ export function createServer(options: ServerOptions): ServerInstance {
       // name, but the editor shows the old content" because no fresh
       // `onLoadDocument` runs to read the new (empty) file from disk.
       //
-      // The pending-work check is also bypassed: the file is being unlinked,
-      // so any pending `onStoreDocument` debounce for this doc is operating
-      // on bytes that will never be reachable again. `captureAndCloseDocuments`
-      // unconditionally snapshots `liveContents` for both renames and deletes
-      // before closing; the rename path reapplies the snapshot via
-      // `syncRenamedDocsToDisk`, the delete path discards it because the file
-      // is unlinked.
+      // The pending-work check is also bypassed. Pending `onStoreDocument`
+      // work for this doc is not lost silently: `captureAndCloseDocuments`
+      // sets the lifecycle marker BEFORE closing connections, so the
+      // last-connection-close flush, any debounce timer that survives this
+      // unload, and deferred-store replays are all skipped by
+      // `storeDocumentNow`'s lifecycle guard rather than resurrecting the
+      // just-removed path. `captureAndCloseDocuments` also unconditionally
+      // snapshots `liveContents` for both renames and deletes before
+      // closing; the rename path reapplies the snapshot via
+      // `syncRenamedDocsToDisk`, the delete path discards it because the
+      // file is unlinked.
       if (forceUnloadSet.has(document)) {
         return true;
       }
@@ -2300,6 +2360,27 @@ export function createServer(options: ServerOptions): ServerInstance {
         backlinkSaveTimer = null;
       }
 
+      // Flush the removal journal synchronously — a tombstone recorded just
+      // before shutdown must survive the restart or a reconnecting stale
+      // client resurrects the doc. Failure feeds `phaseErrors`: this flush is
+      // the last chance to persist the tombstone, and the structured shutdown
+      // summary is what an operator inspects when a lone warn scrolls away.
+      if (removedDocsJournalTimer !== null) {
+        clearTimeout(removedDocsJournalTimer);
+        removedDocsJournalTimer = null;
+      }
+      if (removedDocsJournalWritable) {
+        try {
+          saveRemovedDocsJournal(projectDir, recentlyRemovedDocs.entries());
+        } catch (err) {
+          log.warn(
+            { err },
+            '[removed-docs-journal] failed to persist removal journal during shutdown',
+          );
+          phaseErrors.push({ phase: 'removed-docs-journal-flush', error: String(err) });
+        }
+      }
+
       // Wait for async init to complete before cleanup — prevents leaked watcher
       // subscriptions if destroy() is called during startup (e.g., Ctrl+C).
       // Bounded to 5s so destroy() doesn't hang indefinitely if init is stuck
@@ -3143,7 +3224,43 @@ export function createServer(options: ServerOptions): ServerInstance {
           if (cacheLoaded) {
             const diff = await backlinkIndex.reconcileWithDisk(branch);
             if (diff.added > 0 || diff.updated > 0 || diff.deleted > 0) {
-              log.info(diff, '[backlinks] startup reconcile: offline changes applied');
+              log.info(
+                { added: diff.added, updated: diff.updated, deleted: diff.deleted },
+                '[backlinks] startup reconcile: offline changes applied',
+              );
+            }
+            // Files deleted while the server was down leave no tombstone —
+            // the delete was never observed, so nothing stops a reconnecting
+            // client that still holds the doc's Yjs state from re-creating
+            // the file as a "legitimate first write". The reconcile's
+            // deleted set is exactly the last-known content docs whose file
+            // vanished during downtime; arm the removal guard for each (the
+            // journal hook makes the inference durable, and the guard's
+            // file-existence-first self-heal admits any legitimate
+            // re-creation).
+            let tombstonedOffline = 0;
+            for (const deletedDocName of diff.deletedDocNames) {
+              // Same doc-kind gate as every other populate site:
+              // `isReservedForUserTree` excludes synthetic, config, and
+              // managed-artifact docs — none may enter the removal cache.
+              // (Managed artifacts live under `.ok/` outside the content
+              // walk and have their own reconcile ownership.)
+              if (isReservedForUserTree(deletedDocName)) continue;
+              // A journaled rename-redirect is strictly more informative
+              // than an inferred flat delete — a rename inside the
+              // debounced backlink-save window leaves the persisted cache
+              // stale with the old name, so the inference sees it as
+              // deleted-while-down. Refuse the downgrade (mirrors the
+              // watcher unpaired-delete peek-guard above).
+              if (recentlyRemovedDocs.peek(deletedDocName)?.kind === 'renamed') continue;
+              recentlyRemovedDocs.setDeleted(deletedDocName);
+              tombstonedOffline++;
+            }
+            if (tombstonedOffline > 0) {
+              log.info(
+                { count: tombstonedOffline },
+                '[removal-guard] tombstoned docs deleted while the server was down',
+              );
             }
           } else {
             await backlinkIndex.rebuildFromDisk(branch);
@@ -3180,6 +3297,37 @@ export function createServer(options: ServerOptions): ServerInstance {
           startWatcher(contentDir, onDiskEvent, contentFilter),
         );
         recordBootPhase('seedWalkMs', Math.round(performance.now() - seedWalkStartMono));
+
+        // Origin-existence self-heal for journaled removal entries. Disk is
+        // truth at boot: a file re-created at a removed docName while the
+        // server was down means the durable tombstone (or rename redirect) is
+        // stale — keeping it would misdirect or reject connections to a doc
+        // that exists. The runtime guard self-heals `deleted` entries at auth
+        // time, but `renamed` chain-walks trust the cache (the git-mv syscall
+        // window makes runtime existence checks unsafe there); at boot no
+        // move is in flight, so existence is authoritative. Runs after the
+        // seed walk so `getDocExtension` resolves real on-disk extensions.
+        {
+          const sweepContentDir = resolve(contentDir);
+          let healedJournalEntries = 0;
+          for (const [removedDocName] of recentlyRemovedDocs.entries()) {
+            if (!isSafeDocName(removedDocName)) continue;
+            const filePath = resolve(
+              sweepContentDir,
+              `${removedDocName}${getDocExtension(removedDocName)}`,
+            );
+            if (isWithinDir(filePath, sweepContentDir) && existsSync(filePath)) {
+              recentlyRemovedDocs.delete(removedDocName);
+              healedJournalEntries++;
+            }
+          }
+          if (healedJournalEntries > 0) {
+            log.info(
+              { count: healedJournalEntries },
+              '[removal-guard] dropped journaled removal entries whose file re-appeared while the server was down',
+            );
+          }
+        }
         // Re-init tagIndex once the watcher has settled. The earlier `init()`
         // in the synchronous boot path covers the cold-start case; this second
         // pass picks up any disk content that landed between constructor time

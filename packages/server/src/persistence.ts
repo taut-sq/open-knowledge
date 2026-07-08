@@ -77,6 +77,7 @@ import {
   incrementPersistenceReconciliationFailures,
   incrementPersistenceSanityCheckSerializeFailures,
   incrementPersistenceSkipNonQuiescent,
+  incrementPersistenceStoreRemovedDoc,
 } from './metrics.ts';
 import { isWithinDir, toPosix } from './path-utils.ts';
 import { classifyDuplication } from './persistence-tripwire.ts';
@@ -365,6 +366,14 @@ export interface PersistenceOptions {
    * without coupling the test contract to the function's stack frame).
    */
   mdManager?: MarkdownManager;
+  /**
+   * Probe into the removal cache (`RecentlyRemovedDocs`). Diagnostic only:
+   * when a store is about to write a doc the cache still records as
+   * removed, the write is logged + counted so a resurrection is visible in
+   * logs instead of being silently re-adopted as a self-write. Enforcement
+   * stays with the lifecycle guard + the removal-redirect auth guard.
+   */
+  isRecentlyRemoved?: (docName: string) => boolean;
   /**
    * No-project ephemeral single-file mode (the `ok <file>` open). When `true`,
    * the `onStoreDocument` no-op gate ALSO suppresses a write whose normalized
@@ -1780,6 +1789,16 @@ export function createPersistenceExtension(options?: PersistenceOptions): Persis
             persistenceDeferCounts.delete(documentName);
             return;
           }
+        }
+
+        if (options?.isRecentlyRemoved?.(documentName)) {
+          incrementPersistenceStoreRemovedDoc();
+          console.warn(
+            JSON.stringify({
+              event: 'persistence-store-removed-doc',
+              'doc.name': documentName,
+            }),
+          );
         }
 
         const tmpPath = `${canonicalPath}.tmp.${crypto.randomUUID()}`;

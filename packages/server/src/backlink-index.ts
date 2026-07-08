@@ -1774,8 +1774,18 @@ export class BacklinkIndex {
     added: number;
     updated: number;
     deleted: number;
+    /**
+     * DocNames dropped because their file is gone from disk (global skill
+     * bundle nodes excluded — they live outside contentDir). Includes docs
+     * known only via graph keys, not just the mtime snapshot: docs created
+     * since the last full rebuild/reconcile have graph entries but no
+     * snapshot entry. Feeds the boot-time deleted-while-down tombstoning,
+     * which applies its own doc-kind filters at the populate site.
+     */
+    deletedDocNames: string[];
   }> {
-    if (!existsSync(this.contentDir)) return { added: 0, updated: 0, deleted: 0 };
+    if (!existsSync(this.contentDir))
+      return { added: 0, updated: 0, deleted: 0, deletedDocNames: [] };
 
     const storedMtimes = this.mtimesByBranch.get(branch) ?? new Map<string, number>();
     const rawDocs: Array<{ docName: string; filePath: string }> = [];
@@ -1846,6 +1856,7 @@ export class BacklinkIndex {
     // upgrade path where storedMtimes is empty but the loaded graph state may
     // still hold entries for since-deleted files.
     let deleted = 0;
+    const deletedDocNames: string[] = [];
     const allKnownDocs = new Set([...storedMtimes.keys(), ...this.getState(branch).forward.keys()]);
     for (const docName of allKnownDocs) {
       // Global skill bundle nodes live OUTSIDE contentDir and are owned by the
@@ -1855,11 +1866,12 @@ export class BacklinkIndex {
       if (!currentDocSet.has(docName)) {
         this.deleteDocument(docName, branch);
         deleted++;
+        deletedDocNames.push(docName);
       }
     }
 
     this.mtimesByBranch.set(branch, newMtimes);
-    return { added, updated, deleted };
+    return { added, updated, deleted, deletedDocNames };
   }
 
   /**

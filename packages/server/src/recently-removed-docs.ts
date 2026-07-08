@@ -36,6 +36,14 @@ export interface RecentlyRemovedDocsHooks {
   onEviction?: () => void;
   /** Called after every set / delete with the post-mutation `size`. */
   onSizeChange?: (size: number) => void;
+  /**
+   * Called after every mutation that changed the entry set (set, delete,
+   * eviction — never `get` promotion). Single wiring point for the durable
+   * removal journal: every populate/invalidate site (rename spine, delete
+   * handler, watcher reconcile, watcher-add invalidation, auth-guard
+   * self-heal) is covered here without scattering persistence calls.
+   */
+  onMutate?: () => void;
   /** Injected for tests; defaults to `Date.now`. */
   now?: () => number;
 }
@@ -45,12 +53,14 @@ export class RecentlyRemovedDocs {
   private readonly capacity: number;
   private readonly onEviction: (() => void) | undefined;
   private readonly onSizeChange: ((size: number) => void) | undefined;
+  private readonly onMutate: (() => void) | undefined;
   private readonly now: () => number;
 
   constructor(capacity: number = DEFAULT_CAPACITY, hooks: RecentlyRemovedDocsHooks = {}) {
     this.capacity = Math.max(0, Math.floor(capacity));
     this.onEviction = hooks.onEviction;
     this.onSizeChange = hooks.onSizeChange;
+    this.onMutate = hooks.onMutate;
     this.now = hooks.now ?? Date.now;
   }
 
@@ -97,11 +107,28 @@ export class RecentlyRemovedDocs {
   delete(docName: string): void {
     if (this.map.delete(docName)) {
       this.onSizeChange?.(this.map.size);
+      this.onMutate?.();
     }
   }
 
   get size(): number {
     return this.map.size;
+  }
+
+  /**
+   * Snapshot of all entries in insertion (LRU → MRU) order. Consumed by the
+   * removal-journal writer; does not promote.
+   */
+  entries(): Array<[string, RemovalEntry]> {
+    return [...this.map.entries()];
+  }
+
+  /**
+   * Re-insert a previously-recorded entry verbatim (journal reload) —
+   * unlike `setDeleted`/`setRenamed`, preserves the original `addedAt`.
+   */
+  restore(docName: string, entry: RemovalEntry): void {
+    this.put(docName, entry);
   }
 
   private put(docName: string, entry: RemovalEntry): void {
@@ -120,5 +147,6 @@ export class RecentlyRemovedDocs {
       this.onEviction?.();
     }
     this.onSizeChange?.(this.map.size);
+    this.onMutate?.();
   }
 }

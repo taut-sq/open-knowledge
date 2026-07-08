@@ -3462,7 +3462,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
     };
   }
 
-  async function captureAndCloseDocuments(docNames: string[]): Promise<Map<string, string>> {
+  async function captureAndCloseDocuments(
+    docNames: string[],
+    lifecycleStatus: 'deleted-upstream' | 'renamed',
+  ): Promise<Map<string, string>> {
     const liveContents = new Map<string, string>();
 
     for (const docName of docNames) {
@@ -3470,6 +3473,22 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
       if (document) {
         liveContents.set(docName, document.getText('source').toString());
       }
+    }
+
+    // Mark every loaded doc as no-longer-tracking-disk BEFORE any teardown.
+    // Ordering is load-bearing: closing a doc's last connection makes
+    // Hocuspocus force-flush a pending debounced store (and unload never
+    // cancels an armed debounce timer, nor does the delete purge
+    // deferred-store or straggler agent-session stores) — each of those
+    // late stores serializes the still-populated Y.Doc and rewrites the
+    // path this teardown is about to remove. `storeDocumentNow`'s
+    // lifecycle guard skips them all once the marker is set; the raw
+    // Y.Map set (no transact) mirrors the watcher reconcile's sibling
+    // convention in server-factory.ts.
+    for (const docName of docNames) {
+      const document = hocuspocus.documents.get(docName);
+      if (!document) continue;
+      document.getMap('lifecycle').set('status', lifecycleStatus);
     }
 
     for (const docName of docNames) {
@@ -4000,7 +4019,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           if (recentlyRemovedDocs && !isSystemDoc(sourceDocName) && !isConfigDoc(sourceDocName)) {
             recentlyRemovedDocs.setDeleted(sourceDocName);
           }
-          const liveContents = await captureAndCloseDocuments([sourceDocName]);
+          const liveContents = await captureAndCloseDocuments([sourceDocName], 'renamed');
           const liveContent = liveContents.get(sourceDocName);
           const sourceContent =
             typeof liveContent === 'string' ? liveContent : readFileSync(sourcePath, 'utf-8');
@@ -4398,7 +4417,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               renameFolderIndexEntries(fromPath, toPath);
             }
 
-            const liveContents = await captureAndCloseDocuments([...renameMap.keys()]);
+            const liveContents = await captureAndCloseDocuments([...renameMap.keys()], 'renamed');
 
             // Test-only crash-injection seam. Production builds with
             // NODE_ENV !== 'test' AND OK_TEST_RENAME_FAULT unset elide the
@@ -10268,7 +10287,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
           }
         }
 
-        await captureAndCloseDocuments(deletedDocNames);
+        await captureAndCloseDocuments(deletedDocNames, 'deleted-upstream');
 
         // Populate the per-process LRU cache BEFORE the disk delete so any
         // connection that observes the file gone via the watcher also sees the
@@ -10448,7 +10467,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
               return;
             }
 
-            await captureAndCloseDocuments(deletedDocNames);
+            await captureAndCloseDocuments(deletedDocNames, 'deleted-upstream');
 
             if (recentlyRemovedDocs) {
               for (const docName of deletedDocNames) {
@@ -13543,7 +13562,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         // file, so the managed-artifact persistence branch can't re-store
         // (resurrect) it on a later unload. Same spine doc-delete + skill-delete
         // use; no-op when the doc was never opened.
-        await captureAndCloseDocuments([templateDocNameFor(validated.folderRel, name)]);
+        await captureAndCloseDocuments(
+          [templateDocNameFor(validated.folderRel, name)],
+          'deleted-upstream',
+        );
 
         const deleteInput: Parameters<typeof applyTemplateDelete>[0] = {
           projectDir: validated.resolvedContentDir,
@@ -13629,9 +13651,10 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         // Tear down the live source `__template__` doc (if open) BEFORE the
         // git-mv relocates the file — otherwise its persistence branch would
         // re-store at the now-stale from-path, resurrecting the moved template.
-        await captureAndCloseDocuments([
-          templateDocNameFor(fromValidated.folderRel, body.fromName),
-        ]);
+        await captureAndCloseDocuments(
+          [templateDocNameFor(fromValidated.folderRel, body.fromName)],
+          'renamed',
+        );
 
         const result = await applyTemplateMove({
           projectDir: fromValidated.resolvedContentDir,
@@ -14309,7 +14332,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         // NOT `__skill__/project/<name>` — closing the wrong doc leaves the open
         // content doc to resurrect the just-deleted source, which is what made
         // the project↔global round-trip drop the skill. No-op when unopened.
-        await captureAndCloseDocuments([skillLiveDocName(scope, name)]);
+        await captureAndCloseDocuments([skillLiveDocName(scope, name)], 'deleted-upstream');
 
         const result = applySkillDelete({ skillsRoot, name });
         if (!result.ok) {
@@ -14388,7 +14411,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         // the now-stale fromName path, resurrecting the moved-away skill. Project
         // skills are content docs, not `__skill__/project/<name>`. The
         // destination doc loads fresh from disk on next open.
-        await captureAndCloseDocuments([skillLiveDocName(body.scope, body.fromName)]);
+        await captureAndCloseDocuments([skillLiveDocName(body.scope, body.fromName)], 'renamed');
 
         const result = await applySkillMove({
           skillsRoot,
@@ -14978,7 +15001,7 @@ export function createApiExtension(options: ApiExtensionOptions): Extension {
         // A project `.md` reference is a live content doc — tear it down BEFORE
         // removing the file so its persistence branch can't resurrect it.
         if (isProjectMdReference(scope, kind, rel)) {
-          await captureAndCloseDocuments([projectRefContentDocName(name, rel)]);
+          await captureAndCloseDocuments([projectRefContentDocName(name, rel)], 'deleted-upstream');
         }
 
         const result = applySkillBundleFileDelete({ skillsRoot, name, relPath: rel });

@@ -22,6 +22,8 @@ export interface ReconciliationMetrics {
   conflictCount: number;
   batchCount: number;
   upstreamImportCount: number;
+  /** Stores that wrote a doc the removal cache still records as removed. */
+  persistenceStoreRemovedDocCount: number;
   rescueBufferCount: number;
   branchSwitchCount: number;
   parkCount: number;
@@ -363,6 +365,7 @@ const counters: ReconciliationMetrics = {
   conflictCount: 0,
   batchCount: 0,
   upstreamImportCount: 0,
+  persistenceStoreRemovedDocCount: 0,
   rescueBufferCount: 0,
   branchSwitchCount: 0,
   parkCount: 0,
@@ -431,6 +434,10 @@ export function incrementBatch(): void {
 
 export function incrementUpstreamImport(): void {
   counters.upstreamImportCount++;
+}
+
+export function incrementPersistenceStoreRemovedDoc(): void {
+  counters.persistenceStoreRemovedDocCount++;
 }
 
 export function incrementRescueBuffer(): void {
@@ -710,6 +717,7 @@ export function resetMetrics(): void {
   counters.conflictCount = 0;
   counters.batchCount = 0;
   counters.upstreamImportCount = 0;
+  counters.persistenceStoreRemovedDocCount = 0;
   counters.rescueBufferCount = 0;
   counters.branchSwitchCount = 0;
   counters.parkCount = 0;

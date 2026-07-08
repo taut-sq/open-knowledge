@@ -1307,7 +1307,7 @@ describe('reconcileWithDisk', () => {
       const reloaded = new BacklinkIndex({ projectDir, contentDir });
       expect(await reloaded.loadFromDisk()).toBe(true);
       const diff = await reloaded.reconcileWithDisk();
-      expect(diff).toEqual({ added: 0, updated: 0, deleted: 0 });
+      expect(diff).toEqual({ added: 0, updated: 0, deleted: 0, deletedDocNames: [] });
 
       // Backlinks should still be intact after a no-op reconcile.
       expect(reloaded.getBacklinks('beta')).toEqual([
@@ -1377,6 +1377,9 @@ describe('reconcileWithDisk', () => {
       const diff = await reloaded.reconcileWithDisk();
       expect(diff.added).toBe(1);
       expect(diff.deleted).toBe(1);
+      // The deleted-while-down doc is surfaced by name so boot can arm the
+      // removal guard against stale-client resurrection.
+      expect(diff.deletedDocNames).toEqual(['beta']);
 
       // gamma was indexed and links to alpha
       expect(reloaded.getBacklinks('alpha')).toEqual([
