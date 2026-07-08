@@ -123,16 +123,7 @@ const buttonProps: ComponentProps<typeof Button> = {
 let mermaidPromise: Promise<typeof MermaidNS> | null = null;
 function loadMermaid() {
   mermaidPromise ||= import('mermaid')
-    .then((mod) => {
-      const m = mod.default;
-      m.initialize({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: 'default',
-        suppressErrorRendering: true,
-      });
-      return m;
-    })
+    .then((mod) => mod.default)
     .catch((err) => {
       // Clear the cached rejection so the next mount can retry. Without
       // this, a transient network failure during the first import would
@@ -142,6 +133,109 @@ function loadMermaid() {
       throw err;
     });
   return mermaidPromise;
+}
+
+/**
+ * Read the app's active color mode from the `<html>` class list — the
+ * theme provider sets `.dark` / `.light` on `documentElement`; that's
+ * also what `useApplyConfigTheme` writes and what `useThemeBridge`
+ * exposes. Falling back to `prefers-color-scheme` covers the pre-mount
+ * / SSR window, but the class is authoritative once the app is up.
+ */
+function readDocumentColorMode(): 'light' | 'dark' {
+  if (typeof document !== 'undefined') {
+    const cls = document.documentElement.classList;
+    if (cls.contains('dark')) return 'dark';
+    if (cls.contains('light')) return 'light';
+  }
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
+}
+
+/**
+ * Mermaid's built-in `dark` theme covers node fills and text but leaves
+ * sequence-diagram notes on a hardcoded pastel yellow (`#EDF2AE`) that
+ * clashes on a dark background, and its actor-box colors read as bright
+ * white. Override the load-bearing `themeVariables` so notes, actors,
+ * labels, and arrow signals track the OK dark palette. Values are
+ * intentionally plain hex — mermaid derives contrast colors from these
+ * strings and CSS variables don't survive its color-math step.
+ */
+const MERMAID_DARK_THEME_VARIABLES = {
+  // Match OK's mono-ish design language rather than mermaid's default
+  // Trebuchet MS. The stack tracks common OS monospace faces used by
+  // the surrounding editor UI.
+  fontFamily:
+    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+  // Nodes + primaries (flowchart cores, actor boxes).
+  background: '#0b0b0d',
+  primaryColor: '#1c1c1f',
+  primaryTextColor: '#f5f5f7',
+  primaryBorderColor: '#2a2a2e',
+  secondaryColor: '#242427',
+  secondaryTextColor: '#f5f5f7',
+  secondaryBorderColor: '#2a2a2e',
+  tertiaryColor: '#2c2c30',
+  tertiaryTextColor: '#f5f5f7',
+  tertiaryBorderColor: '#2a2a2e',
+  mainBkg: '#1c1c1f',
+  // Edges and connectors — muted grey. Mermaid's built-in `dark` theme
+  // pins these near-white, which reads as a set of harsh white lines
+  // stitched across a dark canvas; the reference styling uses a dim
+  // grey for every non-content stroke.
+  lineColor: '#5a5a63',
+  textColor: '#f5f5f7',
+  // Sequence-diagram actors + arrows.
+  actorBkg: '#1c1c1f',
+  actorBorder: '#2a2a2e',
+  actorTextColor: '#f5f5f7',
+  actorLineColor: '#4a4a52',
+  signalColor: '#8b8b93',
+  signalTextColor: '#a1a1a9',
+  // alt / opt / loop group chrome — dashed borders + label pill.
+  labelBoxBkgColor: '#1c1c1f',
+  labelBoxBorderColor: '#4a4a52',
+  labelTextColor: '#a1a1a9',
+  loopTextColor: '#a1a1a9',
+  // Flowchart-specific overrides. Mermaid's default `dark` theme paints
+  // `.node rect` with a near-white border via `nodeBorder`; the
+  // reference styling wants the node fill to read as a single dark
+  // shape with no visible outline. Cluster (subgraph) fills track the
+  // same tone so nested clusters read as tiers not colored boxes.
+  nodeBorder: '#1c1c1f',
+  clusterBkg: '#141416',
+  clusterBorder: '#2a2a2e',
+  defaultLinkColor: '#5a5a63',
+  edgeLabelBackground: '#0b0b0d',
+  titleColor: '#a1a1a9',
+  // Sequence-diagram Note over/left of/right of. A bold amber solid
+  // reads as an intentional callout on a dark canvas — matches the
+  // reference styling far better than the muted brown from the first
+  // pass here.
+  noteBkgColor: '#c88a1e',
+  noteTextColor: '#ffffff',
+  noteBorderColor: '#c88a1e',
+  // Activation (self-arrow) chrome.
+  activationBkgColor: '#2c2c30',
+  activationBorderColor: '#3a3a40',
+} as const;
+
+/**
+ * Mermaid's global `initialize` is the only place theme flows in — the
+ * `render` API doesn't take per-call config. Call this immediately
+ * before every `render()` so the SVG picks up the current app mode.
+ * Idempotent: re-initializing with the same options is cheap.
+ */
+function configureMermaid(m: typeof MermaidNS, colorMode: 'light' | 'dark'): void {
+  m.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: colorMode === 'dark' ? 'dark' : 'default',
+    themeVariables: colorMode === 'dark' ? MERMAID_DARK_THEME_VARIABLES : undefined,
+    suppressErrorRendering: true,
+  });
 }
 
 let panzoomPromise: Promise<typeof PanZoomNS> | null = null;
@@ -503,10 +597,149 @@ export function rewriteSequenceParticipant(
   return null;
 }
 
+/**
+ * Locate a bare-id flowchart node reference in `source`. Used when the
+ * DOM label equals the node id AND `findLabelInSource` returned null —
+ * that combination means the author wrote the node without a shape
+ * (`Shopper --> Storefront`) so the id renders as its own label.
+ *
+ * Returns the range of the id token to rewrite (the id stays, the label
+ * gets APPENDED as `[NewLabel]` in `spliceInsertBareIdLabel` — keeping
+ * the id preserves every `Shopper -->` arrow elsewhere in the chart).
+ */
+export function findFlowchartBareIdInSource(source: string, nodeId: string): LabelMatch | null {
+  const esc = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Bare id: not preceded by a word char (so `AB` doesn't match id
+  // `B`), and NOT followed by any character that starts a mermaid
+  // shape or id extension. The negative lookahead rejects the shape
+  // openers `[`, `(`, `{`, `<`, `>` (all valid mermaid shape starts),
+  // any word char (would extend the id), and `@`/`:` (namespaced ids).
+  // What CAN follow: whitespace, arrow heads (`-`, `=`, `.`, `~`,
+  // `x`, `o`, `|`), semicolon, comma, or line end — none of those are
+  // in the negative lookahead.
+  const re = new RegExp(`(?<![\\w])${esc}(?![\\w[({<>@:])`, 'gd');
+  const m = re.exec(source);
+  if (!m) return null;
+  const range = m.indices?.[0];
+  if (!range) return null;
+  return { start: range[0], end: range[1], wasQuoted: false, open: '', close: '' };
+}
+
+/**
+ * Rewrite a bare-id flowchart reference to `<id>[NewLabel]`. Preserves
+ * the id token verbatim; only inserts the shape+label after it, so
+ * arrows referencing the id keep resolving.
+ *
+ * Auto-quotes `NewLabel` when it contains mermaid-syntactic chars
+ * (matches `spliceNewLabel`'s policy). Encodes double-quotes as the
+ * mermaid entity ref `#quot;`.
+ */
+export function spliceInsertBareIdLabel(
+  source: string,
+  match: LabelMatch,
+  newLabel: string,
+): string {
+  const escaped = newLabel.replace(/"/g, '#quot;');
+  const shouldQuote = labelNeedsQuoting(newLabel);
+  const shape = shouldQuote ? `["${escaped}"]` : `[${newLabel}]`;
+  // `match` is the id token itself; append the shape directly after it.
+  return source.slice(0, match.end) + shape + source.slice(match.end);
+}
+
+/**
+ * Locate a sequence-diagram `Note over|left of|right of <actors>: <text>`
+ * line in `source`. Returns the range of the note body (the text after
+ * the colon-space), or null if no unambiguous match is found.
+ *
+ * The DOM `.noteText` only exposes the body — actor participation and
+ * position (`over`/`left of`/`right of`) live in the source line only,
+ * so the search matches on the note body across all three note kinds
+ * and disambiguates identical bodies via `occurrence`.
+ */
+export function findSequenceNoteInSource(
+  source: string,
+  currentNote: string,
+  occurrence = 0,
+): LabelMatch | null {
+  const esc = currentNote.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // `Note (over|left of|right of) <actors>: <body>` — actors segment
+  // stops at the first `:` (mermaid syntax; actor names can't contain
+  // colons). The body captures up to end-of-line, trimmed. `d` flag
+  // exposes the capture-group offset.
+  const re = new RegExp(
+    `^[ \\t]*Note[ \\t]+(?:over|left of|right of)[ \\t]+[^:\\n]+:[ \\t]+(${esc})[ \\t]*(?=\\r?\\n|$)`,
+    'gmd',
+  );
+  let seen = 0;
+  let m: RegExpExecArray | null = re.exec(source);
+  while (m) {
+    if (seen === occurrence) {
+      const groupRange = m.indices?.[1];
+      if (!groupRange) return null;
+      return { start: groupRange[0], end: groupRange[1], wasQuoted: false, open: '', close: '' };
+    }
+    seen += 1;
+    m = re.exec(source);
+  }
+  return null;
+}
+
+/**
+ * Locate a sequence-diagram block-condition line (`alt <cond>`,
+ * `else <cond>`, `opt <cond>`, `loop <cond>`, `par <cond>`,
+ * `critical <cond>`, `break <cond>`) in `source`. Returns the range of
+ * the condition token so the caller can rewrite it in place.
+ *
+ * The mermaid renderer wraps the condition in visible brackets
+ * (`[credentials valid]`) inside `.loopText`; the DOM click yields
+ * `[credentials valid]`, but the source form is unbracketed. Callers
+ * strip the DOM brackets before invoking this locator.
+ */
+export function findSequenceBlockConditionInSource(
+  source: string,
+  currentCondition: string,
+  occurrence = 0,
+): LabelMatch | null {
+  const esc = currentCondition.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const kw = '(?:alt|else|opt|loop|par|par_and|critical|option|and|break|rect)';
+  const re = new RegExp(`^([ \\t]*${kw}[ \\t]+)(${esc})[ \\t]*(?=\\r?\\n|$)`, 'gmd');
+  let seen = 0;
+  let m: RegExpExecArray | null = re.exec(source);
+  while (m) {
+    if (seen === occurrence) {
+      const groupRange = m.indices?.[2];
+      if (!groupRange) return null;
+      return { start: groupRange[0], end: groupRange[1], wasQuoted: false, open: '', close: '' };
+    }
+    seen += 1;
+    m = re.exec(source);
+  }
+  return null;
+}
+
 export function MermaidView({ chart = '', className }: MermaidProps) {
   const reactId = useId();
   const renderId = `mermaid-${reactId.replaceAll(':', '_')}`;
   const [state, setState] = useState<RenderState>({ status: 'idle', svg: '', error: '' });
+  // Track the app's color mode so mermaid's palette can flip with the
+  // theme provider — reading it once at mount + observing the `<html>`
+  // class list keeps SVG contrast aligned even when the user toggles
+  // themes with a diagram already on screen. Ties into the `chart`
+  // render effect below via the dependency array so a theme flip
+  // schedules the same re-render path as a chart edit.
+  const [colorMode, setColorMode] = useState<'light' | 'dark'>(() => readDocumentColorMode());
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const doc = document.documentElement;
+    const sync = () => {
+      const next = readDocumentColorMode();
+      setColorMode((prev) => (prev === next ? prev : next));
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(doc, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
   const host = useJsxComponentHost();
   const canEdit = host?.editor.isEditable ?? false;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -538,6 +771,10 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
     void loadPanzoom().catch(() => undefined);
     loadMermaid()
       .then(async (m) => {
+        // Re-initialize per render so a color-mode flip picks up the
+        // right palette. Config writes are cheap; the render itself is
+        // the expensive step.
+        configureMermaid(m, colorMode);
         // Mermaid's `render` builds a hidden `<div id={renderId}>`
         // off-screen, computes layout, and returns the inert SVG
         // string. The DOM scratchpad is cleaned up by Mermaid itself.
@@ -555,7 +792,7 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
     return () => {
       cancelled = true;
     };
-  }, [chart, renderId]);
+  }, [chart, renderId, colorMode]);
 
   useEffect(() => {
     if (state.status !== 'ready') return;
@@ -570,20 +807,11 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
     for (const label of container.querySelectorAll<HTMLElement>('.nodeLabel, .edgeLabel')) {
       label.style.cursor = 'text';
     }
-    // SVG `<text>` elements (sequence-diagram messages) also want the
-    // typing affordance. `cursor: text` works inline on SVG text.
-    // `pointer-events: all` is essential: default SVG-text hit-testing
-    // is `visiblePainted`, which only reports clicks on the actual
-    // glyph strokes — clicks between letters / on trailing whitespace
-    // land on nothing and never fire our handler. Widening to `all`
-    // makes the whole `<text>` bounding box clickable, matching what
-    // users expect when they click "the message text".
-    for (const label of container.querySelectorAll<SVGTextElement>(
-      'text.messageText, text.actor',
-    )) {
-      label.style.cursor = 'text';
-      label.style.pointerEvents = 'all';
-    }
+    // The full pointer-events + cursor treatment for the SVG-text
+    // surfaces (`text.actor`, `text.messageText`, `text.noteText`,
+    // `text.loopText`, `rect.note`) is applied inside the click-
+    // handler effect below so the same helper owns both the widened
+    // hit-testing and the delegated click routing.
 
     function commitLabelChangeGeneric(target: EditTarget, newLabel: string): void {
       const h = hostRef.current;
@@ -648,6 +876,14 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
       // for node/edge/message labels where the edit is a pure span
       // replacement. Ignored when `applyRewrite` is set.
       locate?: (chartNow: string) => LabelMatch | null;
+      // Optional override for the string the input opens with (and the
+      // no-op comparison at commit). Defaults to the DOM label text.
+      // Provide when the DOM renders decoration around the source token
+      // — e.g. mermaid wraps `alt <cond>` conditions in visible brackets
+      // `[cond]`, but the source form is unbracketed, so the input
+      // should open with the source form and the rewrite should replace
+      // the source range with what the user typed.
+      sourceLabel?: string;
     }
 
     function tryEnterEditWithTarget(target: EditTarget, event: MouseEvent): boolean {
@@ -659,7 +895,7 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
       const pmNode = h.editor.state.doc.nodeAt(pos);
       if (!pmNode || pmNode.type.name !== 'jsxComponent') return false;
       const currentChart = ((pmNode.attrs.props as Record<string, unknown>)?.chart as string) ?? '';
-      const currentLabel = (labelSpan.textContent ?? '').trim();
+      const currentLabel = target.sourceLabel ?? (labelSpan.textContent ?? '').trim();
       if (!currentLabel) return false;
       const rewriteHit = target.applyRewrite?.(currentChart, currentLabel);
       const locateHit = target.locate?.(currentChart);
@@ -688,19 +924,21 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
       // mermaid re-renders the SVG normally.
       const labelP = (labelSpan.querySelector('p') ?? labelSpan) as HTMLElement;
       const labelStyles = window.getComputedStyle(labelP);
-      // SVG `<text>` colors its glyphs via `fill`, not CSS `color` —
-      // and mermaid often puts the visible paint on an inner `<tspan>`
-      // (the outer text carries a background-matching fill so any
-      // theme override cascades cleanly). Copy that paint into the
-      // HTML input's `color`; without this the input inherits the
-      // browser's dark-mode default (near-white) and reads as
-      // invisible against the actor's light box.
+      // Mermaid often paints the visible glyph color on an inner
+      // `<tspan>` while the outer `<text>` carries a background-
+      // matching fill so theme overrides cascade cleanly. Resolve the
+      // innermost paint carrier once so both the input color and the
+      // font metrics below read from the same source.
+      const paintCarrier: Element =
+        labelP instanceof SVGGraphicsElement ? (labelP.querySelector('tspan') ?? labelP) : labelP;
+      const paintStyles = window.getComputedStyle(paintCarrier);
+      // SVG `<text>` colors its glyphs via `fill`, not CSS `color`.
+      // Copy that paint into the HTML input's `color`; without this
+      // the input inherits the browser's dark-mode default (near-
+      // white) and reads as invisible against the actor's light box.
       const svgTextColor = ((): string | null => {
         if (!(labelP instanceof SVGGraphicsElement)) return null;
-        const tspan = labelP.querySelector('tspan');
-        const fill = tspan
-          ? window.getComputedStyle(tspan).fill
-          : window.getComputedStyle(labelP).fill;
+        const fill = paintStyles.fill;
         return fill && fill !== 'none' ? fill : null;
       })();
       const inputColor = svgTextColor ?? labelStyles.color;
@@ -724,13 +962,22 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
       // caret is the only editing signal on the label itself; the node
       // outline (widened via `nodeShape` below) confirms which shape is
       // being edited without slapping a modal chrome over the diagram.
+      // SVG `<text>` elements don't reliably populate the `font`
+      // shorthand in `getComputedStyle` — Chrome fills it, WebKit
+      // often doesn't, and either can drop the SVG-declared font-family
+      // in favor of the UA default. Read the font primitives directly
+      // from the same paint carrier resolved above so the overlay
+      // input renders with the SVG-declared face + size.
       Object.assign(input.style, {
         position: 'fixed',
         margin: '0',
         padding: '0',
-        font: labelStyles.font,
-        fontFeatureSettings: labelStyles.fontFeatureSettings,
-        letterSpacing: labelStyles.letterSpacing,
+        fontFamily: paintStyles.fontFamily,
+        fontSize: paintStyles.fontSize,
+        fontWeight: paintStyles.fontWeight,
+        fontStyle: paintStyles.fontStyle,
+        fontFeatureSettings: paintStyles.fontFeatureSettings,
+        letterSpacing: paintStyles.letterSpacing,
         color: inputColor,
         textAlign: 'center',
         border: 'none',
@@ -775,13 +1022,87 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
       // sequence actors, edge labels wrapped in a bg rect); otherwise
       // fall back to the label element itself.
       const anchor: Element = target.positionAnchor ?? labelP;
+      // Minimum comfortable typing space. Short bare-id actors like
+      // `User` render into a rect that's ~14px wide — enough for the
+      // static glyphs but not enough to type past the current label
+      // without immediate clipping. `ch` is Chrome-accurate for
+      // monospace glyphs; for the proportional fonts mermaid uses it
+      // rounds up conservatively (roughly one em of headroom either
+      // side of the current text).
+      const inputMinCh = Math.max(currentLabel.length + 4, 8);
+      // Declared font size on the SVG (or the foreignObject HTML label)
+      // lives in the SVG user coordinate space. Mermaid's SVG uses a
+      // `viewBox` so the on-screen glyph size is the declared size
+      // multiplied by the viewBox-to-screen scale — the input mounts
+      // outside the SVG at absolute screen coordinates and would
+      // otherwise render at the raw declared size (~16 px screen)
+      // while the underlying label renders at ~9-10 px screen, blowing
+      // the size mismatch that reads as "not WYSIWYG". Capture the
+      // declared size once and compute the effective scale per
+      // reposition so the input tracks the label even after resizes
+      // or zoom changes.
+      const declaredFontSizePx = parseFloat(paintStyles.fontSize) || 16;
+      function computeSvgRenderScale(): number {
+        // For SVG shapes we own directly (rect.actor, rect.note, node
+        // outlines) the anchor's own bbox-vs-screen ratio is the tightest
+        // measurement — no assumption about `preserveAspectRatio`.
+        if (anchor instanceof SVGGraphicsElement) {
+          try {
+            const bbox = anchor.getBBox();
+            if (bbox.height > 0) {
+              return anchor.getBoundingClientRect().height / bbox.height;
+            }
+          } catch {
+            // getBBox throws on detached nodes / mid-transition SVGs.
+          }
+        }
+        // Flowchart node labels live inside a `<foreignObject>` — the
+        // HTML `<p>` isn't an SVGGraphicsElement, so anchor to the
+        // owning SVG's overall viewBox scale instead. Mermaid emits
+        // SVGs with `preserveAspectRatio="xMinYMin meet"` (default),
+        // so the content scale is uniform and equals
+        // `min(rectWidth / vbWidth, rectHeight / vbHeight)`. The
+        // rendered box can be wider or taller than the viewBox needs
+        // (letterboxing / pillarboxing outside the diagram area), so
+        // picking the smaller axis matches the actual glyph scale.
+        const svg =
+          (labelP instanceof SVGElement ? labelP.ownerSVGElement : null) ??
+          (labelP instanceof Element ? labelP.closest('svg') : null);
+        if (svg instanceof SVGSVGElement) {
+          const vb = svg.viewBox.baseVal;
+          if (vb.width > 0 && vb.height > 0) {
+            const rect = svg.getBoundingClientRect();
+            return Math.min(rect.width / vb.width, rect.height / vb.height);
+          }
+        }
+        return 1;
+      }
       function positionInput(): void {
         const r = anchor.getBoundingClientRect();
-        input.style.left = `${r.left}px`;
+        // Pin the input's CENTER to the anchor's center rather than
+        // its left edge. Without this, the min-width widens the input
+        // past the anchor's natural width and the (text-align: center)
+        // text ends up offset from where the SVG glyphs were sitting —
+        // which reads as the label "jumping" the moment you click it.
+        // Centering keeps the glyphs pinned regardless of how wide we
+        // grow the typing surface.
         input.style.top = `${r.top}px`;
         input.style.width = `${r.width}px`;
+        input.style.minWidth = `${inputMinCh}ch`;
         input.style.height = `${r.height}px`;
         input.style.lineHeight = `${r.height}px`;
+        const scale = computeSvgRenderScale();
+        input.style.fontSize = `${declaredFontSizePx * scale}px`;
+        // Read the effective width after `min-width` clamps so we can
+        // offset the input left to keep its horizontal center matched
+        // to the anchor's. `getBoundingClientRect` after the width
+        // writes above gives us the actually-rendered width, which is
+        // what `text-align: center` will use to place the glyphs.
+        input.style.left = `${r.left}px`;
+        const effective = input.getBoundingClientRect();
+        const anchorCenter = r.left + r.width / 2;
+        const inputLeft = anchorCenter - effective.width / 2;
+        input.style.left = `${inputLeft}px`;
       }
       positionInput();
       // Focus + select-all after the next paint. Sync focus() sometimes
@@ -883,13 +1204,36 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
         const nodeId: string = nodeIdRaw;
         const currentLabel = (nodeLabelSpan.textContent ?? '').trim();
         if (!currentLabel) return;
+        // Bare-id nodes (`Shopper --> Storefront` — no `Shopper[…]`
+        // shape) render the id itself as the visible label. When the
+        // shape-splice locator misses AND the DOM label equals the node
+        // id, fall through to appending `[NewLabel]` after the first
+        // bare id occurrence. Preserving the id keeps every
+        // `Shopper -->` arrow elsewhere in the chart resolving. Both
+        // `locate` and `applyRewrite` route through this resolver so
+        // the editability probe and the commit path can never disagree.
+        function resolveFlowchartNodeHit(chartNow: string): {
+          match: LabelMatch;
+          splice: (source: string, m: LabelMatch, next: string) => string;
+        } | null {
+          const shapeHit = findLabelInSource(chartNow, nodeId, currentLabel);
+          if (shapeHit) return { match: shapeHit, splice: spliceNewLabel };
+          if (currentLabel !== nodeId) return null;
+          const bareHit = findFlowchartBareIdInSource(chartNow, nodeId);
+          if (!bareHit) return null;
+          return { match: bareHit, splice: spliceInsertBareIdLabel };
+        }
         tryEnterEditWithTarget(
           {
             labelSpan: nodeLabelSpan,
             outlineShape: nodeGroup.querySelector<SVGElement>(
               'rect, polygon, path, circle, ellipse',
             ),
-            locate: (chartNow) => findLabelInSource(chartNow, nodeId, currentLabel),
+            locate: (chartNow) => resolveFlowchartNodeHit(chartNow)?.match ?? null,
+            applyRewrite: (chartNow, newLabel) => {
+              const hit = resolveFlowchartNodeHit(chartNow);
+              return hit ? hit.splice(chartNow, hit.match, newLabel) : null;
+            },
           },
           event,
         );
@@ -918,17 +1262,21 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
           }
         }
         // Positioning anchor: the actor's own `<rect>` sibling (the
-        // visible actor box). Fall back to the parent group if not
-        // present so we at least fill something bigger than the glyph
-        // bbox.
+        // visible actor box). Not every actor kind renders one — the
+        // `actor` keyword produces the stick-figure `actor-man` group
+        // whose bounding rect extends from head to the label below.
+        // Using the group's rect there mounts the input at the group
+        // top with lineHeight = group height, so the input's centered
+        // text lands ~20 px above the SVG label. Leave `positionAnchor`
+        // undefined in that case and fall back to the text glyph's own
+        // bbox, which sits exactly where the user clicked.
         const actorGroup = actorText.parentElement;
-        const rectSibling =
-          actorGroup?.querySelector<SVGGraphicsElement>('rect.actor') ?? actorGroup;
+        const actorRectSibling = actorGroup?.querySelector<SVGGraphicsElement>('rect.actor');
         tryEnterEditWithTarget(
           {
             labelSpan: actorText as unknown as HTMLElement,
             outlineShape: null,
-            positionAnchor: rectSibling ?? undefined,
+            positionAnchor: actorRectSibling ?? undefined,
             applyRewrite: (chartNow, newLabel) =>
               rewriteSequenceParticipant(chartNow, currentDisplay, newLabel, occurrence),
           },
@@ -990,6 +1338,92 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
           },
           event,
         );
+        return;
+      }
+
+      // Sequence-diagram Note over|left of|right of. Same locate-then-
+      // splice shape as messageText. The DOM only exposes the body, so
+      // duplicate bodies tie-break via `occurrence` (DOM order among
+      // same-body notes before this one). Clicks in the note box's
+      // padding (between text glyphs, or on the left/right of the
+      // label inside the yellow rect) land on `rect.note` — walk to
+      // the sibling `text.noteText` so the padding is treated as part
+      // of the note surface.
+      const noteRectHit = target.closest<SVGRectElement>('rect.note');
+      const noteText =
+        target.closest<SVGTextElement>('text.noteText') ??
+        noteRectHit?.parentElement?.querySelector<SVGTextElement>('text.noteText') ??
+        null;
+      if (noteText) {
+        const currentNote = (noteText.textContent ?? '').trim();
+        if (!currentNote) return;
+        const svg = noteText.ownerSVGElement;
+        let occurrence = 0;
+        if (svg) {
+          const all = Array.from(svg.querySelectorAll<SVGTextElement>('text.noteText'));
+          for (const el of all) {
+            if (el === noteText) break;
+            if ((el.textContent ?? '').trim() === currentNote) occurrence += 1;
+          }
+        }
+        // Position anchor: the yellow note `<rect>` sibling — always
+        // wider than the glyph bbox so the input covers the visible box
+        // rather than tightly around the text.
+        const noteGroup = noteText.parentElement;
+        const noteRect =
+          noteGroup?.querySelector<SVGGraphicsElement>('rect.note') ??
+          (noteText.previousElementSibling instanceof SVGGraphicsElement
+            ? noteText.previousElementSibling
+            : null);
+        tryEnterEditWithTarget(
+          {
+            labelSpan: noteText as unknown as HTMLElement,
+            outlineShape: null,
+            positionAnchor: noteRect ?? undefined,
+            locate: (chartNow) => findSequenceNoteInSource(chartNow, currentNote, occurrence),
+          },
+          event,
+        );
+        return;
+      }
+
+      // Sequence-diagram alt/else/opt/loop/par/critical block header.
+      // The DOM `text.loopText` renders the condition wrapped in visible
+      // brackets (`[credentials valid]`); the source form is
+      // unbracketed. Strip brackets before locating.
+      const loopText = target.closest<SVGTextElement>('text.loopText');
+      if (loopText) {
+        const displayed = (loopText.textContent ?? '').trim();
+        // Strip surrounding brackets (`[…]`) that mermaid renders around
+        // the condition. Fall through untouched if the author didn't use
+        // brackets (rare / non-standard mermaid).
+        const currentCondition =
+          displayed.startsWith('[') && displayed.endsWith(']')
+            ? displayed.slice(1, -1).trim()
+            : displayed;
+        if (!currentCondition) return;
+        const svg = loopText.ownerSVGElement;
+        let occurrence = 0;
+        if (svg) {
+          const all = Array.from(svg.querySelectorAll<SVGTextElement>('text.loopText'));
+          for (const el of all) {
+            if (el === loopText) break;
+            const other = (el.textContent ?? '').trim();
+            const otherCondition =
+              other.startsWith('[') && other.endsWith(']') ? other.slice(1, -1).trim() : other;
+            if (otherCondition === currentCondition) occurrence += 1;
+          }
+        }
+        tryEnterEditWithTarget(
+          {
+            labelSpan: loopText as unknown as HTMLElement,
+            outlineShape: null,
+            sourceLabel: currentCondition,
+            locate: (chartNow) =>
+              findSequenceBlockConditionInSource(chartNow, currentCondition, occurrence),
+          },
+          event,
+        );
       }
     }
 
@@ -1009,17 +1443,44 @@ export function MermaidView({ chart = '', className }: MermaidProps) {
     function onLabelMouseDown(event: MouseEvent): void {
       const t = event.target;
       if (!(t instanceof Element)) return;
-      if (!t.closest('.nodeLabel, .edgeLabel, text.messageText, text.actor')) return;
+      if (
+        !t.closest(
+          '.nodeLabel, .edgeLabel, text.messageText, text.actor, text.noteText, text.loopText, rect.note',
+        )
+      )
+        return;
       event.stopPropagation();
     }
     function onLabelClickCapture(event: MouseEvent): void {
       const t = event.target;
       if (!(t instanceof Element)) return;
-      if (!t.closest('.nodeLabel, .edgeLabel, text.messageText, text.actor')) return;
+      if (
+        !t.closest(
+          '.nodeLabel, .edgeLabel, text.messageText, text.actor, text.noteText, text.loopText, rect.note',
+        )
+      )
+        return;
       event.stopPropagation();
       onLabelClick(event);
     }
 
+    // SVG `<text>` defaults to `pointer-events: painted`, which sends
+    // clicks BETWEEN glyphs (the ~2 px gaps that are unpainted) through
+    // to whatever is behind. For flowchart node labels + edge labels
+    // that's fine because the outline shape catches those clicks and
+    // the closest-selector walk handles them. For sequence-diagram
+    // actors, messages, notes, and loop-condition labels there IS no
+    // downstream catcher inside the group — the click would fall
+    // through to the SVG background. Force `pointer-events: all` on
+    // every editable text surface + the note rect so the whole visible
+    // bbox is clickable. The cursor hint reinforces that the text is
+    // editable on hover.
+    for (const el of container.querySelectorAll<SVGElement>(
+      'text.actor, text.messageText, text.noteText, text.loopText, rect.note',
+    )) {
+      el.style.pointerEvents = 'all';
+      el.style.cursor = 'text';
+    }
     container.addEventListener('mousedown', onLabelMouseDown, { capture: true });
     container.addEventListener('click', onLabelClickCapture, { capture: true });
     return () => {

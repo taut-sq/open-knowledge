@@ -24,10 +24,14 @@ const {
   extractEdgeInfo,
   extractSourceNodeId,
   findEdgeLabelInSource,
+  findFlowchartBareIdInSource,
   findLabelInSource,
+  findSequenceBlockConditionInSource,
   findSequenceMessageInSource,
+  findSequenceNoteInSource,
   MermaidView,
   rewriteSequenceParticipant,
+  spliceInsertBareIdLabel,
   spliceNewLabel,
 } = await import('./Mermaid.tsx');
 
@@ -369,5 +373,145 @@ describe('rewriteSequenceParticipant', () => {
   test('returns null when no participant matches', () => {
     const src = 'sequenceDiagram\n  participant Author\n';
     expect(rewriteSequenceParticipant(src, 'NotThere', 'Alice')).toBeNull();
+  });
+});
+
+describe('findFlowchartBareIdInSource', () => {
+  // Bare-id nodes render the id itself as the visible label. Locator must
+  // find the FIRST occurrence and reject anything already carrying a shape.
+  test('locates the first bare id occurrence', () => {
+    const src = 'flowchart LR\n  Shopper --> Storefront\n';
+    const hit = findFlowchartBareIdInSource(src, 'Shopper');
+    expect(hit).not.toBeNull();
+    expect(src.slice(hit.start, hit.end)).toBe('Shopper');
+  });
+
+  test('does not match when id already has a shape', () => {
+    const src = 'flowchart LR\n  Shopper[Buyer] --> Storefront\n';
+    expect(findFlowchartBareIdInSource(src, 'Shopper')).toBeNull();
+  });
+
+  test('does not steal a longer id prefix match', () => {
+    const src = 'flowchart LR\n  Shopper --> Storefront\n';
+    expect(findFlowchartBareIdInSource(src, 'Shop')).toBeNull();
+  });
+
+  test('splices `[NewLabel]` after the id, preserving the id and later references', () => {
+    const src = 'flowchart LR\n  Shopper --> Storefront\n  Shopper --> Cart\n';
+    const hit = findFlowchartBareIdInSource(src, 'Shopper');
+    if (!hit) throw new Error('no hit');
+    const out = spliceInsertBareIdLabel(src, hit, 'Buyer');
+    expect(out).toBe('flowchart LR\n  Shopper[Buyer] --> Storefront\n  Shopper --> Cart\n');
+  });
+
+  test('quotes labels that need quoting (mermaid-syntactic chars)', () => {
+    const src = 'flowchart LR\n  Shopper --> Storefront\n';
+    const hit = findFlowchartBareIdInSource(src, 'Shopper');
+    if (!hit) throw new Error('no hit');
+    const out = spliceInsertBareIdLabel(src, hit, 'Buyer (v2)');
+    expect(out).toContain('Shopper["Buyer (v2)"]');
+  });
+});
+
+describe('findSequenceNoteInSource', () => {
+  test('locates a `Note over` line body', () => {
+    const src = 'sequenceDiagram\n  A->>B: hi\n  Note over A,B: JWT lives in cookie\n';
+    const hit = findSequenceNoteInSource(src, 'JWT lives in cookie');
+    if (!hit) throw new Error('no hit');
+    expect(hit).not.toBeNull();
+    expect(src.slice(hit.start, hit.end)).toBe('JWT lives in cookie');
+  });
+
+  test('locates a `Note left of` line body', () => {
+    const src = 'sequenceDiagram\n  Note left of A: heads-up\n';
+    const hit = findSequenceNoteInSource(src, 'heads-up');
+    if (!hit) throw new Error('no hit');
+    expect(hit).not.toBeNull();
+    expect(src.slice(hit.start, hit.end)).toBe('heads-up');
+  });
+
+  test('locates a `Note right of` line body', () => {
+    const src = 'sequenceDiagram\n  Note right of B: sidebar\n';
+    const hit = findSequenceNoteInSource(src, 'sidebar');
+    if (!hit) throw new Error('no hit');
+    expect(hit).not.toBeNull();
+    expect(src.slice(hit.start, hit.end)).toBe('sidebar');
+  });
+
+  test('disambiguates identical bodies via occurrence', () => {
+    const src = 'sequenceDiagram\n  Note over A: same\n  Note over B: same\n';
+    const first = findSequenceNoteInSource(src, 'same', 0);
+    if (!first) throw new Error('no first');
+    const second = findSequenceNoteInSource(src, 'same', 1);
+    if (!second) throw new Error('no second');
+    expect(first.start).toBeLessThan(second.start);
+  });
+
+  test('returns null for a non-existent note body', () => {
+    const src = 'sequenceDiagram\n  Note over A: hi\n';
+    expect(findSequenceNoteInSource(src, 'nope')).toBeNull();
+  });
+});
+
+describe('findSequenceBlockConditionInSource', () => {
+  test('locates an `alt <cond>` condition token', () => {
+    const src = 'sequenceDiagram\n  alt credentials valid\n    A->>B: ok\n  end\n';
+    const hit = findSequenceBlockConditionInSource(src, 'credentials valid');
+    if (!hit) throw new Error('no hit');
+    expect(hit).not.toBeNull();
+    expect(src.slice(hit.start, hit.end)).toBe('credentials valid');
+  });
+
+  test('locates an `else <cond>` condition token', () => {
+    const src = 'sequenceDiagram\n  alt ok\n    A->>B: hi\n  else nope\n    A->>B: bye\n  end\n';
+    const hit = findSequenceBlockConditionInSource(src, 'nope');
+    if (!hit) throw new Error('no hit');
+    expect(hit).not.toBeNull();
+    expect(src.slice(hit.start, hit.end)).toBe('nope');
+  });
+
+  test('supports opt/loop/par/critical/break as block keywords', () => {
+    for (const kw of ['opt', 'loop', 'par', 'critical', 'break']) {
+      const src = `sequenceDiagram\n  ${kw} X\n    A->>B: hi\n  end\n`;
+      const hit = findSequenceBlockConditionInSource(src, 'X');
+      if (!hit) throw new Error('no hit');
+      expect(hit).not.toBeNull();
+      expect(src.slice(hit.start, hit.end)).toBe('X');
+    }
+  });
+
+  test('returns null when no block matches', () => {
+    const src = 'sequenceDiagram\n  alt ok\n    A->>B: hi\n  end\n';
+    expect(findSequenceBlockConditionInSource(src, 'nope')).toBeNull();
+  });
+
+  test('disambiguates duplicate condition text via occurrence', () => {
+    const src =
+      'sequenceDiagram\n  loop retry\n    A->>B: hi\n  end\n  loop retry\n    C->>D: bye\n  end\n';
+    const first = findSequenceBlockConditionInSource(src, 'retry', 0);
+    const second = findSequenceBlockConditionInSource(src, 'retry', 1);
+    if (!first || !second) throw new Error('expected both hits');
+    expect(first.start).toBeLessThan(second.start);
+  });
+});
+
+describe('spliceNewLabel round-trip via findSequenceNoteInSource', () => {
+  test('located range is safe to feed straight into `spliceNewLabel`', () => {
+    const src = 'sequenceDiagram\n  A->>B: hi\n  Note over A,B: token stored\n';
+    const hit = findSequenceNoteInSource(src, 'token stored');
+    if (!hit) throw new Error('expected note hit');
+    const out = spliceNewLabel(src, hit, 'JWT stored in cookie');
+    expect(out).toContain('Note over A,B: JWT stored in cookie');
+  });
+});
+
+describe('spliceInsertBareIdLabel encoding', () => {
+  test('encodes bare double-quotes in the new label as the mermaid entity ref', () => {
+    const src = 'flowchart LR\n  Shopper --> Storefront\n';
+    const hit = findFlowchartBareIdInSource(src, 'Shopper');
+    if (!hit) throw new Error('expected bare hit');
+    // Contains a syntactic `"` — needs quoting; the inner `"` becomes `#quot;`
+    const out = spliceInsertBareIdLabel(src, hit, 'The "Shopper" role');
+    expect(out).toContain('Shopper["The #quot;Shopper#quot; role"]');
   });
 });
